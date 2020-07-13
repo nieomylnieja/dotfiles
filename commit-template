@@ -1,0 +1,11 @@
+
+
+# 1. Separate subject from body with a blank line
+# 2. Limit the subject line to 50 characters
+# 3. Capitalize the subject line
+# 4. Start subject line with prefix: impl, test, chore, doc, deploy
+# 5. Do not end the subject line with a period
+# 6. Use the imperative mood in the subject line
+# 7. Wrap the body at 72 characters
+# 8. Use the body to explain what and why vs. how
+© 2020 GitHub, Inc.
