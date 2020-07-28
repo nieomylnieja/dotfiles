@@ -14,12 +14,14 @@ set -o pipefail
 INFRA_PATH=~/lerta/infrastructure
 
 d_flag='false'
+u_flag='false'
 
 while getopts 'hd' flag; do
   case "${flag}" in
     h | --help) display_help 
       exit ;;
     d | --decode) d_flag='true' ;;
+    u | --username) d_flag='true' ;;
     *) 
       exit ;;
   esac
@@ -42,13 +44,17 @@ lpass() {
       then echo "" ;
       else sops -d "$path" ;
       fi)'`
-      idx="$((`echo "$selected" | awk '{print $1}'` - 1))"
+  idx="$((`echo "$selected" | awk '{print $1}'` - 1))"
   typ=`echo "$selected" | awk '{print $2}'`
   entry=`echo "$selected" | tr -s ' ' | cut -d ' ' -f3-`
   pass=''
   # Handle different custom files here. Typ is used to determine with wich one we're dealing.
   if [ "$typ" = "p" ]; then
-    pass=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .password" | tr -d '\n' | xclip -sel clip`
+    if $u_flag; then
+      pass=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .user" | tr -d "\n"`
+    else
+      pass=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .password" | tr -d "\n"`
+    fi
   else
     sopsed=`echo "$entry" | xargs sops -d`
     count=`echo "$sopsed" | rg -ci 'pass(word)?'`
@@ -65,9 +71,10 @@ lpass() {
     if $d_flag && isBase64Encoded $pass ; then
       pass=`echo "$pass" | base64 -d`
     fi
-    # for some results that include | sign (I thnik that's the reason) xlip will copy an empty string.
-    echo "$pass" | tr -d '\n' | xclip -sel clip
   fi
+
+  echo "$pass" | tr -d '\n' | xclip -sel clip
+
   cd - >/dev/null
 }
 
