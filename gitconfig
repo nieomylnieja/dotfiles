@@ -1,0 +1,28 @@
+[credential]
+	helper = cache
+[user]
+	email = mateusz.hawrus@lerta.energy
+	name = Mateusz Hawrus
+[url "git@gitlab.com:"]
+	insteadOf = https://gitlab.com/
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+[commit]
+    	template = ~/.dotfiles/commit-template
+[core]
+	excludesfile = /home/nieomylnieja/.gitignore_global
+	editor = vim
+  autocrlf = input
+[alias]
+  pushf = push --force-with-lease
+  kdiff = difftool --no-symlinks --dir-diff
+[diff]
+    tool = kitty
+    guitool = kitty.gui
+[difftool]
+    prompt = false
+    trustExitCode = true
+[difftool "kitty"]
+    cmd = kitty +kitten diff $LOCAL $REMOTE
+[difftool "kitty.gui"]
+    cmd = kitty kitty +kitten diff $LOCAL $REMOTE

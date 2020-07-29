@@ -61,19 +61,19 @@ main() {
     userDataObject=$(setUserDataObject "$@")
     http "$@" x-user-data:"$userDataObject"
   elif $x_user_data ; then
-    tenantId=$(setTenantId "$@")
-    http "$@" x-tenant:"$tenantId"
+    http "$@" x-tenant:"$DEFAULT_TENANT_ID"
   else
-    tenantId=$(setTenantId "$@")
     userDataObject=$(setUserDataObject "$@")
-    http "$@" x-user-data:"$userDataObject" x-tenant:"$tenantId"
+    http "$@" x-user-data:"$userDataObject" x-tenant:"$DEFAULT_TENANT_ID"
   fi
 }
 
-setTenantId() {
+getTenantId() {
   tenantKey=`echo "$@" | tr " " "\n" | rg "x-tenant" | cut -d ':' -f2- | tr -d "\n"`
   if $u_flag && [[ $(echo "$tenantKey" | rg '^[a-z]+-[a-z]+$') ]]; then
     echo `mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval 'db.tenant.find({$or: [{name:"'"$tenantKey"'"}, {shortName:"'"$tenantKey"'"}, {_id:"'"$tenantKey"'"}]})' | jq -r '._id'`
+  elif $x_tenant ; then
+    echo "$tenantKey"
   else 
     echo "$DEFAULT_TENANT_ID"
   fi
@@ -83,8 +83,9 @@ setUserDataObject() {
   userDataObject=`echo "$@" | tr " " "\n" | rg "x-user-data" | cut -d ':' -f2-`
   if [[ -z "$userDataObject" ]]; then
     if $u_flag ; then 
+      tenantId=$(getTenantId "$@")
       users=`mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | yq r - -j | jq`
-      selected=`echo "$users" | jq -r '.[] | .email' | fzf`
+      selected=`echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}'`
       mapfile -t data < <(echo "$users" | jq -r ".[] | select(.email == \"$selected\") | ._id, .externalId, .role" | cut -d '"' -f2)
       echo "{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
     else
