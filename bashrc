@@ -10,6 +10,11 @@ source /usr/share/autojump/autojump.sh
 
 shopt -s expand_aliases
 
+# kubernetes prompt
+source ~/.dotfiles/kube-ps1/kube-ps1.sh
+
+# GIT PROMPT CONFIGURATION
+
 # Set config variables first
 GIT_PROMPT_ONLY_IN_REPO=0
 # GIT_PROMPT_FETCH_REMOTE_STATUS=0                  # uncomment to avoid fetching remote status
@@ -18,7 +23,7 @@ GIT_PROMPT_ONLY_IN_REPO=0
 # GIT_PROMPT_SHOW_UPSTREAM=1                        # uncomment to show upstream tracking branch
 # GIT_PROMPT_SHOW_UNTRACKED_FILES=normal            # can be no, normal or all; determines counting of untracked files
 # GIT_PROMPT_SHOW_CHANGED_FILES_COUNT=0             # uncomment to avoid printing the number of changed files
-# GIT_PROMPT_START=...                              # uncomment for custom prompt start sequence
+GIT_PROMPT_START='$(kube_ps1)] \[\033[33;1m\]\w\[\033[0m\]'                              # uncomment for custom prompt start sequence
 # GIT_PROMPT_END=...                                # uncomment for custom prompt end sequence
  
 # as last entry source the gitprompt script
@@ -99,7 +104,7 @@ export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 
 # scripts path
-export PATH="$HOME/bin:$PATH"
+export PATH="$HOME/.dotfiles/scripts:$PATH"
 
 # haskell
 eval "$(stack --bash-completion-script stack)"
@@ -176,4 +181,4 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 --color info:#83a598,prompt:#bdae93,spinner:#fabd2f,pointer:#83a598,marker:#fe8019,header:#665c54'
 
 # lerta utils
-alias lhttp=$HOME/.dotfiles/scripts/lerta-httpie.sh
+alias lhttp=lerta-httpie.sh
