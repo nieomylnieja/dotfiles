@@ -16,19 +16,24 @@ INFRA_PATH=~/lerta/infrastructure
 d_flag='false'
 u_flag='false'
 
-while getopts 'hd' flag; do
+while getopts 'hdu' flag; do
   case "${flag}" in
     h | --help) display_help 
       exit ;;
     d | --decode) d_flag='true' ;;
-    u | --username) d_flag='true' ;;
+    u | --username) u_flag='true' ;;
     *) 
       exit ;;
   esac
 done
 
 main() {
- lpass
+  secret='pass(word)?'
+  if $u_flag; then 
+    secret='user(name)?'
+  fi
+
+  lpass "$secret"
 }
 
 lpass() {
@@ -47,33 +52,33 @@ lpass() {
   idx="$((`echo "$selected" | awk '{print $1}'` - 1))"
   typ=`echo "$selected" | awk '{print $2}'`
   entry=`echo "$selected" | tr -s ' ' | cut -d ' ' -f3-`
-  pass=''
+  secret=''
   # Handle different custom files here. Typ is used to determine with wich one we're dealing.
   if [ "$typ" = "p" ]; then
     if $u_flag; then
-      pass=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .user" | tr -d "\n"`
+      secret=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .user" | tr -d "\n"`
     else
-      pass=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .password" | tr -d "\n"`
+      secret=`echo "$sopsed_passwd" | jq -r ".passwords[$idx] | .password" | tr -d "\n"`
     fi
   else
     sopsed=`echo "$entry" | xargs sops -d`
-    count=`echo "$sopsed" | rg -ci 'pass(word)?'`
+    count=`echo "$sopsed" | rg -ci $1`
     if [[ "$count" -eq 1 ]]; then 
-      pass=`echo "$sopsed" | rg -i '^.*pass(word)?:\s(\S+)$' -r '$2' --trim | xargs`
+      secret=`echo "$sopsed" | rg -i '^.*'$1':\s(\S+)$' -r '$2' --trim | xargs`
     elif [[ "$count" -gt 1 ]]; then
-      pass=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}'  | xargs`
+      secret=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}'  | xargs`
     else 
       echo "$sopsed"
     fi
   fi
   
-  if [ -n "$pass" ] ; then
-    if $d_flag && isBase64Encoded $pass ; then
-      pass=`echo "$pass" | base64 -d`
+  if [ -n "$secret" ] ; then
+    if $d_flag && isBase64Encoded $secret ; then
+      secret=`echo "$secret" | base64 -d`
     fi
   fi
 
-  echo "$pass" | tr -d '\n' | xclip -sel clip
+  echo "$secret" | tr -d '\n' | xclip -sel clip
 
   cd - >/dev/null
 }
