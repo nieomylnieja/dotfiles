@@ -4,3 +4,6 @@
 [submodule "kube-ps1"]
 	path = kube-ps1
 	url = git@github.com:jonmosco/kube-ps1.git
+[submodule "pfetch"]
+	path = pfetch
+	url = git@github.com:dylanaraps/pfetch.git

@@ -15,6 +15,7 @@ source ~/.dotfiles/prompt.sh
 
 # Set VIM prompt
 set -o vi
+export EDITOR="vim"
 
 # If not running interactively, don't do anything
 case $- in
@@ -50,8 +51,15 @@ export PATH="$HOME/.local/bin:$PATH"
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
 
+# those fancy rust speeders
+alias ls='lsd'
+alias du='dust'
+
 # Alias definitions.
 alias cd..='cd ..'
+alias l='ls -l'
+alias la='ls -a'
+alias lt='ls --tree'
 alias ll='ls -lah'
 alias lls='ls -lah | sort -h -k5'
 alias cp="rsync --archive --human-readable --progress --verbose --whole-file"
@@ -165,3 +173,6 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 
 # lerta utils
 alias lhttp=lerta-httpie.sh
+
+# pfetch configuration
+export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"

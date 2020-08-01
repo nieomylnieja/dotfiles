@@ -1,5 +1,6 @@
 # KUBERNETES PROMPT CONFIGURATION
 
+KUBE_PS1_CTX_COLOR=magenta
 KUBE_PS1_PREFIX='['
 KUBE_PS1_SUFFIX=']'
 source ~/.dotfiles/kube-ps1/kube-ps1.sh
