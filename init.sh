@@ -3,6 +3,7 @@
 rm ~/.alacritty.yml
 ln alacritty.yml ~/.alacritty.yml
 ln bashrc ~/.bashrc
-ln -s gitconfig ~/.gitconfig
+ln gitconfig ~/.gitconfig
+ln xmonad.hs ~/.xmonad/xmonad.hs
 
 make local-secrets

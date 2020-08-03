@@ -12,33 +12,33 @@
   # available, otherwise `xterm-256color` is used.
   #TERM: alacritty
 
-#window:
+window:
   # Window dimensions (changes require restart)
   #
   # Specified in number of columns/lines, not pixels.
   # If both are `0`, this setting is ignored.
-  #dimensions:
-  #  columns: 0
-  #  lines: 0
+  dimensions:
+    columns: 0
+    lines: 0
 
   # Window position (changes require restart)
   #
   # Specified in number of pixels.
   # If the position is not set, the window manager will handle the placement.
-  #position:
-  #  x: 0
-  #  y: 0
+  position:
+    x: 0
+    y: 0
 
   # Window padding (changes require restart)
   #
   # Blank space added around the window in pixels. This padding is scaled
   # by DPI and the specified value is always added at both opposing sides.
-  #padding:
-  #  x: 0
-  #  y: 0
+  padding:
+    x: 0
+    y: 0
 
   # Spread additional padding evenly around the terminal content.
-  #dynamic_padding: false
+  dynamic_padding: false
 
   # Window decorations
   #
@@ -49,7 +49,7 @@
   # Values for `decorations` (macOS only):
   #     - transparent: Title bar, transparent background and title bar buttons
   #     - buttonless: Title bar, transparent background, but no title bar buttons
-  #decorations: full
+  decorations: full
 
   # Startup Mode (changes require restart)
   #
@@ -60,31 +60,31 @@
   #
   # Values for `startup_mode` (macOS only):
   #   - SimpleFullscreen
-  #startup_mode: Windowed
+  startup_mode: Windowed
 
   # Window title
-  #title: Alacritty
+  title: Alacritty
 
   # Window class (Linux/BSD only):
-  #class:
+  class:
     # Application instance name
-    #instance: Alacritty
+    instance: Alacritty
     # General application class
-    #general: Alacritty
+    general: Alacritty
 
   # GTK theme variant (Linux/BSD only)
   #
   # Override the variant of the GTK theme. Commonly supported values are `dark` and `light`.
   # Set this to `None` to use the default theme variant.
-  #gtk_theme_variant: None
+  gtk_theme_variant: None
 
-#scrolling:
+scrolling:
   # Maximum number of lines in the scrollback buffer.
   # Specifying '0' will disable scrolling.
-  #history: 10000
+  history: 20000
 
   # Scrolling distance multiplier.
-  #multiplier: 3
+  multiplier: 3
 
 # Font configuration
 font:
@@ -190,6 +190,12 @@ schemes:
     primary:
       background: '#282a36'
       foreground: '#f8f8f2'
+    cursor:
+      text: '0x44475a'
+      cursor: '0xf8f8f2'
+    selection:
+      text: '0xf8f8f2'
+      background: '0x44475a'
     normal:
       black:   '#000000'
       red:     '#ff5555'
@@ -208,9 +214,43 @@ schemes:
       magenta: '#ff92d0'
       cyan:    '#9aedfe'
       white:   '#e6e6e6'
+    dim:
+      black:   '0x14151b'
+      red:     '0xff2222'
+      green:   '0x1ef956'
+      yellow:  '0xebf85b'
+      blue:    '0x4d5b86'
+      magenta: '0xff46b0'
+      cyan:    '0x59dffc'
+      white:   '0xe6e6d1'
+  nord: &nord
+    primary:
+      background: '0x2E3440'
+      foreground: '0xD8DEE9'
+    cursor:
+      text: '0x2E3440'
+      cursor: '0xD8DEE9'
+    normal:
+      black: '0x3B4252'
+      red: '0xBF616A'
+      green: '0xA3BE8C'
+      yellow: '0xEBCB8B'
+      blue: '0x81A1C1'
+      magenta: '0xB48EAD'
+      cyan: '0x88C0D0'
+      white: '0xE5E9F0'
+    bright:
+      black: '0x4C566A'
+      red: '0xBF616A'
+      green: '0xA3BE8C'
+      yellow: '0xEBCB8B'
+      blue: '0x81A1C1'
+      magenta: '0xB48EAD'
+      cyan: '0x8FBCBB'
+      white: '0xECEFF4'
 
 # Colors (Tomorrow Night)
-colors: *dracula
+colors: *nord
   # Default colors
   #primary:
   #  background: '#1d1f21'
@@ -397,7 +437,7 @@ colors: *dracula
   #thickness: 0.15
 
 # Live config reload (changes require restart)
-#live_config_reload: true
+live_config_reload: true
 
 # Shell
 #
@@ -408,10 +448,11 @@ colors: *dracula
 #   - (macOS) /bin/bash --login
 #   - (Linux/BSD) user login shell
 #   - (Windows) powershell
-#shell:
-#  program: /bin/bash
-#  args:
-#    - --login
+shell:
+   program: /bin/bash
+   args:
+    - -c
+    - 'pfetch ; bash'
 
 # Startup directory
 #

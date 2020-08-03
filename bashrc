@@ -78,6 +78,7 @@ alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" |
 alias klog='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000'
 alias prodCtx='kubectl config use-context lerta-production'
 alias devCtx='kubectl config use-context lerta-dev'
+alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
 
 # lerta aliases
 alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production/passwd.json | grep "admin" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
@@ -112,17 +113,12 @@ cover () {
 }
 
 ## Completion
-if ! shopt -oq posix; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
-    . /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
-    . /etc/bash_completion
-  fi
-fi
+source /usr/share/bash-completion/bash_completion
 
 # kubectl autocomplete
 source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
 alias k=kubectl
+# extend completion to work with the alias
 complete -F __start_kubectl k
 
 
