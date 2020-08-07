@@ -1,10 +1,3 @@
-# ~/.bashrc: executed by bash(1) for non-login shells.
-# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
-# for examples
-
-# powerline bash with added kubernetes support
-# source ~/.bash-powerl first
-
 # autojump
 source /usr/share/autojump/autojump.sh
 
@@ -47,6 +40,10 @@ fi
 
 export PATH="$HOME/.local/bin:$PATH"
 
+# java gui doesn't seet xmonad as a nonparenting app, this is a clean way to inform it about that
+# apparently it doesn't solve the problem with newer jdk versions
+export _JAVA_AWT_WM_NONREPARENTING=1
+
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
@@ -79,6 +76,7 @@ alias klog='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" |
 alias prodCtx='kubectl config use-context lerta-production'
 alias devCtx='kubectl config use-context lerta-dev'
 alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
+alias kexec='kubectl exec -it'
 
 # lerta aliases
 alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production/passwd.json | grep "admin" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
@@ -169,6 +167,10 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 
 # lerta utils
 alias lhttp=lerta-httpie.sh
+export $(cat ~/.dotfiles/secrets.local)
 
 # pfetch configuration
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"
+
+# nord dircolors
+test -r "~/.dotfiles/nord-dircolors/src/dir_colors" && eval $(dircolors ~/.dotfiles/nord-dircolors/src/dir_colors)

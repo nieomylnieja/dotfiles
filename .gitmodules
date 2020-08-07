@@ -7,3 +7,6 @@
 [submodule "pfetch"]
 	path = pfetch
 	url = git@github.com:dylanaraps/pfetch.git
+[submodule "nord-dircolors"]
+	path = nord-dircolors
+	url = git@github.com:arcticicestudio/nord-dircolors.git

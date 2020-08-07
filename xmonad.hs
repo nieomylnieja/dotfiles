@@ -4,6 +4,7 @@ import XMonad
 import Data.Monoid
 import System.Exit
 import XMonad.Hooks.ManageDocks
+import XMonad.Hooks.SetWMName
 import XMonad.Util.Run
 import XMonad.Util.SpawnOnce
 
@@ -240,6 +241,7 @@ myLogHook = return ()
 --
 -- By default, do nothing.
 myStartupHook = do
+	setWMName "LG3D"
         spawnOnce "nitrogen --restore &"
         spawnOnce "compton &"
 

@@ -6,7 +6,7 @@ display_help() {
   echo "   -d,              base64 decode the password"
   echo "   -h, --help       display this view"
   echo
-  echo "Requires: fdfind, ripgrep, yq, jq, fzf"
+  echo "Requires: fdfind, ripgrep, yq (based on jq), jq, fzf"
 }
 
 set -o pipefail
@@ -42,7 +42,7 @@ lpass() {
   list=`gpg -k | rg -B1 ultimate | head -n 1 | ( xargs rg --files-with-matches --sort path | awk '$0="s "$0' | cat -n ; echo "$(passwd_handler $sopsed_passwd)"  | awk '$0="p "$0' | cat -n ; )`
   selected=`echo "$list" | fzf --with-nth 3.. --preview 'echo {} | (read path; path=$(echo "$path" | awk '"'"'{print $3}'"'"') ; ext="${path##*.}" ;
       if [ "$ext" = "yaml" ] || [ "$ext" = "yml" ] ;
-      then sops -d "$path" | yq r - -C ;
+      then sops -d "$path" | yq . -C ;
       elif [ "$ext" = "json" ] ;
       then sops -d "$path" | jq -C ;
       elif [ -n "$ext" ] ;
@@ -64,7 +64,7 @@ lpass() {
     sopsed=`echo "$entry" | xargs sops -d`
     count=`echo "$sopsed" | rg -ci $1`
     if [[ "$count" -eq 1 ]]; then 
-      secret=`echo "$sopsed" | rg -i '^.*'$1':\s(\S+)$' -r '$2' --trim | xargs`
+      secret=`echo "$sopsed" | rg -i '^.*'$1'"?:\s?"?(\S+)"?$' -r '$2' --trim | tr -d \"`
     elif [[ "$count" -gt 1 ]]; then
       secret=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}'  | xargs`
     else 

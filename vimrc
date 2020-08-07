@@ -12,4 +12,11 @@ noremap <Right> <Nop>
 set clipboard=unnamed,unnamedplus
 vnoremap y "+y
 
+" Relative line numbers
 set rnu
+
+" make backspace work like most other programs
+set backspace=2 
+
+" prevent vim from clearing clipboard on exit
+autocmd VimLeave * call system("xsel -ib", getreg('+'))
