@@ -1,3 +1,5 @@
+export DOTFILES=~/.dotfiles
+
 # autojump
 source /usr/share/autojump/autojump.sh
 
@@ -36,18 +38,7 @@ case "$TERM" in
     xterm-color|*-256color) color_prompt=yes;;
 esac
 
-# enable color support of ls and also add handy aliases
-if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    alias ls='ls --color=auto'
-    #alias dir='dir --color=auto'
-    #alias vdir='vdir --color=auto'
-
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
-fi
-
+# local user bins
 export PATH="$HOME/.local/bin:$PATH"
 
 # java gui doesn't seet xmonad as a nonparenting app, this is a clean way to inform it about that
@@ -177,10 +168,16 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 
 # lerta utils
 alias lhttp=lerta-httpie.sh
-export $(cat ~/.dotfiles/secrets.local)
+export $(cat "$DOTFILES/secrets.local")
 
 # pfetch configuration
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"
 
 # nord dircolors
 test -r "~/.dotfiles/nord-dircolors/src/dir_colors" && eval $(dircolors ~/.dotfiles/nord-dircolors/src/dir_colors)
+if [ ! -f ~/.dir_colors ]; then
+  ln -s "$DOTFILES/nord_dircolors/src/dir_colors" "~/.dir_colors"
+fi
+
+# bat colors
+export BAT_THEME="Nord"

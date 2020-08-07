@@ -1,6 +1,9 @@
+#!/usr/bin/env bash
+
 # KUBERNETES PROMPT CONFIGURATION
 
-KUBE_PS1_CTX_COLOR=magenta
+KUBE_PS1_CTX_COLOR=cyan
+KUBE_PS1_NS_COLOR=blue
 KUBE_PS1_PREFIX='['
 KUBE_PS1_SUFFIX=']'
 source ~/.dotfiles/kube-ps1/kube-ps1.sh
@@ -22,5 +25,4 @@ GIT_PROMPT_START='$(kube_ps1) \[\033[33;1m\]\w\[\033[0m\]'                      
 # as last entry source the gitprompt script
 # GIT_PROMPT_THEME=Custom                           # use custom theme specified in file GIT_PROMPT_THEME_FILE (default ~/.git-prompt-colors.sh)
 # GIT_PROMPT_THEME_FILE=~/.git-prompt-colors.sh
-# GIT_PROMPT_THEME=Solarized                        # use theme optimized for solarized color scheme
 source ~/.dotfiles/bash-git-prompt/gitprompt.sh
