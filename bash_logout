@@ -5,9 +5,3 @@
 if [ "$SHLVL" = 1 ]; then
     [ -x /usr/bin/clear_console ] && /usr/bin/clear_console -q
 fi
-
-# when leaving the console kill ssh-agent attached to the session
-
-if [ -n "$SSH_AUTH_SOCK" ] ; then
-  eval `/usr/bin/ssh-agent -k`
-fi

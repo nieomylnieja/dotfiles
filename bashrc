@@ -1,6 +1,16 @@
 # autojump
 source /usr/share/autojump/autojump.sh
 
+# run ssh-agent on every tmux or terminal login
+# if this won't be enaugh for managing multiple 
+if [ ! -S ~/.ssh/ssh_auth_sock ]; then
+  eval `ssh-agent`
+  ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock
+fi
+export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock
+ssh-add -l > /dev/null || ssh-add
+
+# allow aliases
 shopt -s expand_aliases
 
 # prompt config
@@ -160,10 +170,10 @@ export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
-# fzf
+# fzf colors
 export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
---color fg:#ebdbb2,bg:#282828,hl:#fabd2f,fg+:#ebdbb2,bg+:#3c3836,hl+:#fabd2f
---color info:#83a598,prompt:#bdae93,spinner:#fabd2f,pointer:#83a598,marker:#fe8019,header:#665c54'
+--color fg:#88C0D0,bg:#2E3440,hl:#EBCB8B,fg+:#88C0D0,bg+:#434C5E,hl+:#EBCB8B
+--color pointer:#BF616A,info:#4C566A,spinner:#4C566A,header:#4C566A,prompt:#B48EAD,marker:#EBCB8B'
 
 # lerta utils
 alias lhttp=lerta-httpie.sh
