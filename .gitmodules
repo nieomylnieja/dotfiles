@@ -10,3 +10,6 @@
 [submodule "nord-dircolors"]
 	path = nord-dircolors
 	url = git@github.com:arcticicestudio/nord-dircolors.git
+[submodule "delta"]
+	path = delta
+	url = git@github.com:dandavison/delta.git

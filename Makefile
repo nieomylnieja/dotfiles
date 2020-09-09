@@ -1,2 +1,2 @@
 local-secrets:
-	@grep -ve "^#.*" secrets  > secrets.local
+	@grep -ve "^#.*" secrets.env  > secrets.local.env

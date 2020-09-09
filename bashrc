@@ -1,4 +1,4 @@
-export DOTFILES=~/.dotfiles
+export DOTFILES="$HOME/.dotfiles"
 
 # autojump
 source /usr/share/autojump/autojump.sh
@@ -33,11 +33,6 @@ esac
 
 export GIT_TERMINAL_PROMPT=1
 
-# set a fancy prompt (non-color, unless we know we "want" color)
-case "$TERM" in
-    xterm-color|*-256color) color_prompt=yes;;
-esac
-
 # local user bins
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -45,9 +40,8 @@ export PATH="$HOME/.local/bin:$PATH"
 # apparently it doesn't solve the problem with newer jdk versions
 export _JAVA_AWT_WM_NONREPARENTING=1
 
-# Add an "alert" alias for long running commands.  Use like so:
-#   sleep 10; alert
-alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+# so tmux can use 256 colors
+alias tmux='TERM=xterm-256color tmux'
 
 # those fancy rust speeders
 alias ls='lsd'
@@ -74,6 +68,7 @@ alias kstarts='kubectl get pod --sort-by=.status.startTime'
 alias kstarted='kubectl get pod --sort-by=.status.containerStatuses[0].state.running.startedAt'
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
 alias klog='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000'
+alias klog-kafka='kubectl get pod -n measurements-kafka | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000 -n measurements-kafka'
 alias prodCtx='kubectl config use-context lerta-production'
 alias devCtx='kubectl config use-context lerta-dev'
 alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
@@ -161,14 +156,15 @@ export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
-# fzf colors
+# fzf config
+export FZF_DEFAULT_COMMAND='fd --type f'
 export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
---color fg:#88C0D0,bg:#2E3440,hl:#EBCB8B,fg+:#88C0D0,bg+:#434C5E,hl+:#EBCB8B
+--color fg:#88C0D0,hl:#EBCB8B,fg+:#88C0D0,hl+:#EBCB8B,bg+:#434C5E
 --color pointer:#BF616A,info:#4C566A,spinner:#4C566A,header:#4C566A,prompt:#B48EAD,marker:#EBCB8B'
 
 # lerta utils
 alias lhttp=lerta-httpie.sh
-export $(cat "$DOTFILES/secrets.local")
+export $(cat "$DOTFILES/secrets.local.env")
 
 # pfetch configuration
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"
@@ -181,3 +177,11 @@ fi
 
 # bat colors
 export BAT_THEME="Nord"
+
+# delta diff tool, since we're building it using cargo...
+export PATH="$DOTFILES/delta/target/release:$PATH"
+
+# node version manager
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

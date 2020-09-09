@@ -11,6 +11,7 @@ main() {
   user=$(getSecret username $selected $env)
   db=`echo $selected | sed -e "s/db$//"`
 
+  echo "$db $user $pass"
   mlerta $db $user $pass
 }
 
