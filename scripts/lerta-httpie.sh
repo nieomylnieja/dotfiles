@@ -84,16 +84,15 @@ setUserDataObject() {
   if [[ -z "$userDataObject" ]]; then
     if $u_flag ; then 
       tenantId=$(getTenantId "$@")
-      users=`mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | yq r - -j | jq`
+      users=`mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/' | jq`
       selected=`echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}'`
       mapfile -t data < <(echo "$users" | jq -r ".[] | select(.email == \"$selected\") | ._id, .externalId, .role" | cut -d '"' -f2)
-      echo "{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
+      userDataObject="{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
     else
-      echo "$DEFAULT_USERDATA_OBJECT"
+      userDataObject="$DEFAULT_USERDATA_OBJECT"
     fi
-  else
-    echo "$userDataObject"
   fi
+  echo "$userDataObject"
 }
 
 main $@

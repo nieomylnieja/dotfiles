@@ -62,9 +62,10 @@ lpass() {
     fi
   else
     sopsed=`echo "$entry" | xargs sops -d`
-    count=`echo "$sopsed" | rg -ci $1`
+    regex='^.*'$1'"?:\s?"?(\S+)"?$'
+    count=`echo "$sopsed" | rg -ci $regex`
     if [[ "$count" -eq 1 ]]; then 
-      secret=`echo "$sopsed" | rg -i '^.*'$1'"?:\s?"?(\S+)"?$' -r '$2' --trim | tr -d \"`
+      secret=`echo "$sopsed" | rg -i $regex -r '$2' --trim | tr -d \"`
     elif [[ "$count" -gt 1 ]]; then
       secret=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}'  | xargs`
     else 
