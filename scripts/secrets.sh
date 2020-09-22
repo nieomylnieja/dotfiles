@@ -67,7 +67,7 @@ lpass() {
     if [[ "$count" -eq 1 ]]; then 
       secret=`echo "$sopsed" | rg -i $regex -r '$2' --trim | tr -d \"`
     else 
-      secret=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}'  | xargs`
+      secret=`echo "$sopsed" | fzf --tac --no-sort --phony | awk '{print $2}' | xargs`
     fi
   fi
   

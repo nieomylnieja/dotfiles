@@ -1,25 +1,25 @@
 #!/bin/bash
 
-MONGO_SECRETS_PATH=~/lerta/infrastructure/k8s/mongodb/
+MONGO_SECRETS_PATH="$HOME"/lerta/infrastructure/k8s/mongodb
 
 main() {
-  env=$(getEnvironment)
+  ctx=$(getKubeCtx)
 
   ext='.enc.json'
   regex='"password":'
-  if [ $env = 'production' ]; then
-    regex-'"admin":'
+  if [[ $env = 'production' ]]; then
+    regex='"admin":'
     ext='.json'
   fi
 	  
-  pass=$(getSecret "$regex" "$env" "$ext")
+  pass=$(getSecret "$regex" "$ctx" "$ext")
 
   export tenantListJSON=$(getTenantInfo "$pass")
   shortName=`echo "$tenantListJSON" | jq -r '.[] | .shortName' | sed 's/[ \t]*$//' | fzf --preview 'echo "$tenantListJSON" | jq --arg short {} -C ".[] | select(.shortName == \\\$short)"'`
   echo "$tenantListJSON" | jq --arg short "$shortName" -r '.[] | select(.shortName == $short) | ._id' | tr -d '\n' | xclip -sel c
 }
 
-getEnvironment() {
+getKubeCtx() {
   env=`kubectl config current-context | awk -F "-" '{print $2}'`
   if [ $env == "dev" ]; then
     env="staging"

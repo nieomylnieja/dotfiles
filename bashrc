@@ -79,6 +79,9 @@ alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production
 alias lertaStagingPass='sops -d ~/lerta/infrastructure/k8s/mongodb/staging/passwd.enc.json | grep "password" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
 
+# scripts aliases
+alias projects='. projects.sh'
+
 # studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
 
