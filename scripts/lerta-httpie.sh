@@ -1,7 +1,7 @@
 #!/bin/bash
 
 help() {
-cat << EOF
+  cat <<EOF
 
 This script serves as a wrapper around httpie.
 It sets both X-Tenant and X-User-Data settings.
@@ -47,20 +47,20 @@ if [[ $(echo "$@" | rg "\s-h\s*") ]]; then
   exit 1
 fi
 
-for arg do
+for arg; do
   shift
   [ "$arg" = "-u" ] || [ "$arg" = "-h" ] && continue
   set -- "$@" "$arg"
 done
 
 main() {
-  pass=`sops -d $INFRA_PATH/k8s/mongodb/staging/lertadb.secret.enc.yaml | rg "password" | awk '{print $2}' | base64 -d`
-  if $x_tenant && $x_user_data ; then 
+  pass=$(sops -d $INFRA_PATH/k8s/mongodb/staging/lertadb.secret.enc.yaml | rg "password" | awk '{print $2}' | base64 -d)
+  if $x_tenant && $x_user_data; then
     http "$@"
-  elif $x_tenant ; then 
+  elif $x_tenant; then
     userDataObject=$(setUserDataObject "$@")
     http "$@" x-user-data:"$userDataObject"
-  elif $x_user_data ; then
+  elif $x_user_data; then
     http "$@" x-tenant:"$DEFAULT_TENANT_ID"
   else
     userDataObject=$(setUserDataObject "$@")
@@ -69,23 +69,23 @@ main() {
 }
 
 getTenantId() {
-  tenantKey=`echo "$@" | tr " " "\n" | rg "x-tenant" | cut -d ':' -f2- | tr -d "\n"`
+  tenantKey=$(echo "$@" | tr " " "\n" | rg "x-tenant" | cut -d ':' -f2- | tr -d "\n")
   if $u_flag && [[ $(echo "$tenantKey" | rg '^[a-z]+-[a-z]+$') ]]; then
-    echo `mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval 'db.tenant.find({$or: [{name:"'"$tenantKey"'"}, {shortName:"'"$tenantKey"'"}, {_id:"'"$tenantKey"'"}]})' | jq -r '._id'`
-  elif $x_tenant ; then
+    mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval 'db.tenant.find({$or: [{name:"'"$tenantKey"'"}, {shortName:"'"$tenantKey"'"}, {_id:"'"$tenantKey"'"}]})' | jq -r '._id'
+  elif $x_tenant; then
     echo "$tenantKey"
-  else 
+  else
     echo "$DEFAULT_TENANT_ID"
   fi
 }
 
 setUserDataObject() {
-  userDataObject=`echo "$@" | tr " " "\n" | rg "x-user-data" | cut -d ':' -f2-`
+  userDataObject=$(echo "$@" | tr " " "\n" | rg "x-user-data" | cut -d ':' -f2-)
   if [[ -z "$userDataObject" ]]; then
-    if $u_flag ; then 
+    if $u_flag; then
       tenantId=$(getTenantId "$@")
-      users=`mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/' | jq`
-      selected=`echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}'`
+      users=$(mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/' | jq)
+      selected=$(echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}')
       mapfile -t data < <(echo "$users" | jq -r ".[] | select(.email == \"$selected\") | ._id, .externalId, .role" | cut -d '"' -f2)
       userDataObject="{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
     else
@@ -95,4 +95,4 @@ setUserDataObject() {
   echo "$userDataObject"
 }
 
-main $@
+main "$@"

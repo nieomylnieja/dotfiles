@@ -67,20 +67,22 @@ alias krestarts='kubectl get pod --sort-by=.status.containerStatuses[0].restartC
 alias kstarts='kubectl get pod --sort-by=.status.startTime'
 alias kstarted='kubectl get pod --sort-by=.status.containerStatuses[0].state.running.startedAt'
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
-alias klog='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000'
 alias klog-kafka='kubectl get pod -n measurements-kafka | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000 -n measurements-kafka'
 alias prodCtx='kubectl config use-context lerta-production'
 alias devCtx='kubectl config use-context lerta-dev'
 alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
 alias kexec='kubectl exec -it'
+alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 
 # lerta aliases
 alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production/passwd.json | grep "admin" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias lertaStagingPass='sops -d ~/lerta/infrastructure/k8s/mongodb/staging/passwd.enc.json | grep "password" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
+alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
 
 # scripts aliases
 alias projects='. projects.sh'
+alias klog='klog.sh'
 
 # studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
@@ -157,6 +159,7 @@ export GO111MODULE=on
 export GOPATH=$HOME/go
 export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
+# yarn
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
 # fzf config
@@ -191,3 +194,13 @@ export NVM_DIR="$HOME/.nvm"
 
 # vcpkg completion -- this is temprorary and only for that project
 source /home/nieomylnieja/myProjects/graphic-design/lib/vcpkg/scripts/vcpkg_completion.bash
+
+# python gitlab cli
+export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
+
+# golang version manager
+[[ -s "/home/nieomylnieja/.gvm/scripts/gvm" ]] && source "/home/nieomylnieja/.gvm/scripts/gvm"
+
+# local kafka development aliases
+export KAFKA_DIR="$HOME/kafka_2.12-2.5.0"
+alias kafkac='bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic cm-physicalUnits-PT1QH --property print.key=true | jq'

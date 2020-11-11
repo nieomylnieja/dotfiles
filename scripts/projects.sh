@@ -1,32 +1,24 @@
 #!/bin/bash
 
-LERTA_PROJECTS_PATH="$HOME"/lerta
-PERSONAL_PROJECTS_PATH="$HOME/"myProjects
+path=''
 
-l_flag='false'
-p_flag='false'
-
-while getopts 'lp' flag; do
+while getopts 'lpk' flag; do
   case "${flag}" in
-    l | --lerta) l_flag='true' ;;
-    p | --personal) p_flag='true' ;;
-    *) 
-      exit ;;
+  l) path="$HOME/lerta" ;;
+  p) path="$HOME/myProjects" ;;
+  k) path="$HOME/lerta/infrastructure/k8s" ;;
+  *)
+    exit
+    ;;
   esac
 done
 
 main() {
-  projectPath=''
-  if "$p_flag"; then
-    projectPath=$(fuzzy "$PERSONAL_PROJECTS_PATH")
-  else
-    projectPath=$(fuzzy "$LERTA_PROJECTS_PATH")
-  fi
-  cd "$projectPath"
+  cd "$(fuzzy "$path")" || exit
 }
 
 fuzzy() {
-  echo "$1"/`ls "$1" | fzf --preview "ls $1/{}"`
+  echo "$1"/"$(ls "$1" | fzf --preview "ls $1/{}")"
 }
 
-main $@
+main "$@"
