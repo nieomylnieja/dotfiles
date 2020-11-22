@@ -12,7 +12,7 @@
 	insteadOf = https://github.com/
 
 [commit]
-    	template = ~/.dotfiles/commit-template
+    	template = /home/nieomylnieja/.dotfiles/commit-template
 
 [core]
 	excludesfile = /home/nieomylnieja/.gitignore_global

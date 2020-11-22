@@ -15,7 +15,7 @@ main() {
   pass=$(getSecret "$regex" "$ctx" "$ext")
 
   export tenantListJSON=$(getTenantInfo "$pass")
-  shortName=$(echo "$tenantListJSON" | jq -r '.[] | .shortName' | sed 's/[ \t]*$//' | fzf --preview 'echo "$tenantListJSON" | jq --arg short {} -C ".[] | select(.shortName == \\\$short)"')
+  shortName=$(echo "$tenantListJSON" | jq -r '.[] | .shortName' | sed 's/[ \t]*$//' | fzf --preview 'echo "$tenantListJSON" | jq --arg short {} -C '"'"'.[] | select(.shortName == $short)'"'"'')
   echo "$tenantListJSON" | jq --arg short "$shortName" -r '.[] | select(.shortName == $short) | ._id' | tr -d '\n' | xclip -sel c
 }
 

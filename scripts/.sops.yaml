@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: .*\.enc\.json
+    pgp: '40B795D76E02C8BBACE4799E1BBBBA42484D0163'

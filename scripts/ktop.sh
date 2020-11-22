@@ -13,9 +13,9 @@ main() {
   top=$(kubectl get pod -o wide --all-namespaces | ag $node | awk '{print $2}' | tr '\n' '|')
 
   if [[ -z $sortBy ]]; then
-    kubectl top pod --containers=true --all-namespaces | ag --nocolor "$top"
+    kubectl top pod --containers=true --all-namespaces | ag --nocolor "$top" | rg -v NAME
   else
-    kubectl top pod --containers=true --all-namespaces | ag --nocolor "$top" | sort -h -k"$sortBy"
+    kubectl top pod --containers=true --all-namespaces | ag --nocolor "$top" | sort -h -k"$sortBy" | rg -v NAME
   fi
 }
 

@@ -68,17 +68,18 @@ alias kstarts='kubectl get pod --sort-by=.status.startTime'
 alias kstarted='kubectl get pod --sort-by=.status.containerStatuses[0].state.running.startedAt'
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
 alias klog-kafka='kubectl get pod -n measurements-kafka | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000 -n measurements-kafka'
-alias prodCtx='kubectl config use-context lerta-production'
-alias devCtx='kubectl config use-context lerta-dev'
 alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
+alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
+alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
 
 # lerta aliases
 alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production/passwd.json | grep "admin" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias lertaStagingPass='sops -d ~/lerta/infrastructure/k8s/mongodb/staging/passwd.enc.json | grep "password" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
 alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
+alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
 
 # scripts aliases
 alias projects='. projects.sh'
@@ -203,4 +204,3 @@ export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
 
 # local kafka development aliases
 export KAFKA_DIR="$HOME/kafka_2.12-2.5.0"
-alias kafkac='bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic cm-physicalUnits-PT1QH --property print.key=true | jq'

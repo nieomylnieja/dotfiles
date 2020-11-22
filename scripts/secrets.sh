@@ -1,12 +1,16 @@
 #!/bin/bash
 
-display_help() {
-  echo "Usage: $0 [option...]"
-  echo
-  echo "   -d,              base64 decode the password"
-  echo "   -h, --help       display this view"
-  echo
-  echo "Requires: fdfind, ripgrep, yq (based on jq), jq, fzf"
+help() {
+  cat <<EOF
+
+Usage: $0 [option...]
+
+   -d,              base64 decode the password
+   -h, --help       display this view
+
+Requires: fdfind, ripgrep, yq (based on jq), jq, fzf
+
+EOF
 }
 
 set -o pipefail
@@ -19,7 +23,7 @@ u_flag='false'
 while getopts 'hdu' flag; do
   case "${flag}" in
   h)
-    display_help
+    help
     exit
     ;;
   d) d_flag='true' ;;
@@ -35,7 +39,6 @@ main() {
   if $u_flag; then
     secret='user(name)?'
   fi
-
   lpass "$secret"
 }
 
@@ -44,8 +47,9 @@ lpass() {
   cd $INFRA_PATH/k8s || exit
   list=$(gpg -k | rg -B1 ultimate | head -n 1 | (
     xargs rg --files-with-matches --sort path | awk '$0="s "$0' | cat -n
-    echo "$(passwd_handler $sopsed_passwd)" | awk '$0="p "$0' | cat -n
+    passwd_handler "$sopsed_passwd" | awk '$0="p "$0' | cat -n
   ))
+  # shellcheck disable=SC2016
   selected=$(echo "$list" | fzf --with-nth 3.. --preview 'echo {} | (read path; path=$(echo "$path" | awk '"'"'{print $3}'"'"') ; ext="${path##*.}" ;
       if [ "$ext" = "yaml" ] || [ "$ext" = "yml" ] ;
       then sops -d "$path" | yq . -C ;

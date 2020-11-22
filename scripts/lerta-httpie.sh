@@ -10,7 +10,7 @@ If the header is not provided, then it defaults using envs:
   - X-Tenant --> DEFAULT_TENANT_ID
   - X-User-Data --> DEFAULT_USERDATA_OBJECT
 Note that default user should belong to default tenant!
-If -u flag is provided It will present you with a fuzzyfind list of users
+If -u flag is provided It will present you with a fuzzy-find list of users
 for a given tenant. Here you can provide it with any valid tenant identifier:
   - name
   - shortName
