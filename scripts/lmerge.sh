@@ -17,7 +17,7 @@ If you're running this script for the first time use '-g' flag:
 This will generate 'lmerge.secret.enc.json' and '.sops.yaml' if none already exists.
 Otherwise existing files will be appended with new content, in which case you will need to resolve it by hand.
 
-After generating the secret, you should fill it with the required data:
+After generating the secret, you should fill it with required data:
 
   - trelloToken:  follow steps described in https://trello.com/app-key
   - trelloKey:    your key displayed at the top of app-key page
@@ -28,8 +28,8 @@ After generating the secret, you should fill it with the required data:
 
 Target branch is determined as such:
 
-  - if -b flag is provided with <branchName> then use it
-  - else if development is present in the tree, then use it, else use master
+  - -b flag is provided with <branchName> then use it
+  - development is present in the tree, then use it, otherwise use master
 
 Flags:
 
