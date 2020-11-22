@@ -9,7 +9,7 @@ set -o pipefail
 help() {
   cat <<EOF
 
-This script provides an automated way of merge requests creation both on gitlab and trello.
+This script provides an automated way of merge requests creation both on gitlab and trello for lerta.
 If you're running this script for the first time use '-g' flag:
 
   lmerge.sh -g
@@ -22,8 +22,8 @@ After generating the secret, you should fill it with the required data:
   - trelloToken:  follow steps described in https://trello.com/app-key
   - trelloKey:    your key displayed at the top of app-key page
   - gitlabToken:  obtained from https://gitlab.com/-/profile/personal_access_tokens
-  - trelloListId: this can be omitted and auto generated together with gitlabUserId
-  - gitlabUserId: this can be omitted and auto generated with:
+  - trelloListId: "In progress" card id, this can be fetched together with gitlabUserId
+  - gitlabUserId: your gitlab user id, this can fetched with:
     lmerge.sh -f <boarId> <username>
 
 Target branch is determined as such:
@@ -84,7 +84,15 @@ fi
 main() {
   # read secrets and parse the git branch literal to extract git tag and task type
   read -r -d "\n" gitTag taskType _ <<<"$(git branch --show-current | sed 's/\//\n/g')"
+  if [ -z "$gitTag" ] || [ -z "$taskType" ]; then
+    echo "not a valid lerta git repo, expected structure: <id>/<task_type>/<description>"
+    exit
+  fi
   read -r -d "\n" trelloToken trelloKey trelloListId gitlabToken gitlabUserId <<<"$(sops -d "$SCRIPT_PATH"/lmerge.secret.enc.json | jq -r '.trelloToken, .trelloKey, .trelloListId, .gitlabToken, .gitlabUserId')"
+  if [ -z "$trelloToken" ] || [ -z "$trelloKey" ] || [ -z "$trelloListId" ] || [ -z "$gitlabToken" ] || [ -z "$gitlabUserId" ]; then
+    echo "please fill all the secrets in lmerge.secret.enc.json"
+    exit
+  fi
   trelloBaseUrl="https://api.trello.com/1"
   trelloAuthPostfix="?key=$trelloKey&token=$trelloToken"
 
@@ -101,7 +109,7 @@ main() {
   # fetch trello card in order to create proper initial commit and push to origin
   trelloCard=$(curl -s "$trelloBaseUrl/lists/$trelloListId/cards$trelloAuthPostfix" | jq ".[] | select(.idShort == $gitTag)")
   if [ -z "$trelloCard" ]; then
-    echo "failed to fetch trello card"
+    echo "failed to fetch trello card, make sure your card is placed in 'In progress' list and corresponds with branch the number in the branch name (first segment)"
     exit
   fi
   title="$taskType: $(echo "$trelloCard" | jq -r .name)"
