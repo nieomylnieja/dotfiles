@@ -139,6 +139,9 @@ main() {
     exit
   fi
 
+  # extract title from lmerge.tmp since it could've been changed
+  read -r title <lmerge.tmp
+
   # fetch url encoded path of the project
   gitlabProjectPath=$(git config --get remote.origin.url | sed 's/\(.*:\|.git\)//g')
   gitlabProjectUrl=$(echo "$gitlabProjectPath" | sed 's/\//%2F/g')
