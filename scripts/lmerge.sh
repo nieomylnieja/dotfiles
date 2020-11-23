@@ -89,10 +89,6 @@ main() {
     exit
   fi
   read -r -d "\n" trelloToken trelloKey trelloListId gitlabToken gitlabUserId <<<"$(sops -d "$SCRIPT_PATH"/lmerge.secret.enc.json | jq -r '.trelloToken, .trelloKey, .trelloListId, .gitlabToken, .gitlabUserId')"
-  if [ -z "$trelloToken" ] || [ -z "$trelloKey" ] || [ -z "$trelloListId" ] || [ -z "$gitlabToken" ] || [ -z "$gitlabUserId" ]; then
-    echo "please fill all the secrets in lmerge.secret.enc.json"
-    exit
-  fi
   trelloBaseUrl="https://api.trello.com/1"
   trelloAuthPostfix="?key=$trelloKey&token=$trelloToken"
 
@@ -103,6 +99,12 @@ main() {
     else
       fetchListIdAndGitlabUserId "$trelloBaseUrl" "$trelloAuthPostfix" "$2" "$gitlabToken" "$3"
     fi
+    exit
+  fi
+
+  # verification of the extracted secrets
+  if [ -z "$trelloToken" ] || [ -z "$trelloKey" ] || [ -z "$trelloListId" ] || [ -z "$gitlabToken" ] || [ -z "$gitlabUserId" ]; then
+    echo "please fill all the secrets in lmerge.secret.enc.json"
     exit
   fi
 
