@@ -30,7 +30,14 @@ topics() {
 }
 
 start() {
-  echo "start"
+  case "$(printf "kafka\nzookeeper" | fzf)" in
+  kafka)
+    "$KAFKA_PATH"/bin/kafka-server-start.sh "$KAFKA_PATH"/config/server.properties
+    ;;
+  zookeeper)
+    "$KAFKA_PATH"/bin/zookeeper-server-start.sh "$KAFKA_PATH"/config/zookeeper.properties
+    ;;
+  esac
 }
 
 main "$@"

@@ -114,7 +114,11 @@ main() {
     echo "failed to fetch trello card, make sure your card is placed in 'In progress' list and corresponds with branch the number in the branch name (first segment)"
     exit
   fi
-  title="$taskType: $(echo "$trelloCard" | jq -r .name)"
+  titleDescription=$(echo "$trelloCard" | jq -r .name | sed 's/|[0-9]*|//g' | xargs)
+  if echo "$titleDescription" | grep -qe '::'; then
+    titleDescription=$(echo "$titleDescription" | awk -F:: '{print $2}' | xargs)
+  fi
+  title="$taskType: $titleDescription"
   trelloCardUrl=$(echo "$trelloCard" | jq -r .url)
 
   # create initial commit and push to origin
