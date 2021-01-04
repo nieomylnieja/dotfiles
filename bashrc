@@ -157,8 +157,7 @@ get_errors(){
 
 # golang
 export GO111MODULE=on
-export GOPATH=$HOME/go
-export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+export PATH=$PATH:/usr/local/go/bin
 
 # yarn
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"

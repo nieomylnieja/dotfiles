@@ -13,6 +13,7 @@ Requires: fdfind, ripgrep, yq (based on jq), jq, fzf
 EOF
 }
 
+set -o errtrace
 set -o pipefail
 
 INFRA_PATH=~/lerta/infrastructure
