@@ -88,7 +88,7 @@ main() {
     echo "not a valid lerta git repo, expected structure: <id>/<task_type>/<description>"
     exit
   fi
-  read -r -d "\n" trelloToken trelloKey trelloListId gitlabToken gitlabUserId <<<"$(sops -d "$SCRIPT_PATH"/lmerge.secret.enc.json | jq -r '.trelloToken, .trelloKey, .trelloListId, .gitlabToken, .gitlabUserId')"
+  read -r -d "\n" trelloToken trelloKey trelloListId gitlabToken gitlabUserId <<<"$(sops --config "$SCRIPT_PATH"/.sops.yaml -d "$SCRIPT_PATH"/lmerge.secret.enc.json | jq -r '.trelloToken, .trelloKey, .trelloListId, .gitlabToken, .gitlabUserId')"
   trelloBaseUrl="https://api.trello.com/1"
   trelloAuthPostfix="?key=$trelloKey&token=$trelloToken"
 
