@@ -1,11 +1,11 @@
 #!/bin/bash
 
-MONGO_SECRETS_PATH=~/lerta/infrastructure/k8s/mongodb/
+MONGO_SECRETS_PATH=/home/nieomylnieja/lerta/infrastructure/k8s/mongodb
 EXT=.secret.enc.yaml
 
 main() {
   env=$(getEnvironment)
-  selected=$(ls "$MONGO_SECRETS_PATH$env" | awk -F. '{ st = index($0,":"); if (substr($2,st+1)=="secret") {print $1}}' | fzf)
+  selected=$(ls "$MONGO_SECRETS_PATH/$env" | awk -F. '{ st = index($0,":"); if (substr($2,st+1)=="secret") {print $1}}' | fzf)
 
   pass=$(getSecret password "$selected" "$env")
   user=$(getSecret username "$selected" "$env")
@@ -23,7 +23,7 @@ getEnvironment() {
 }
 
 getSecret() {
-  sops -d "$MONGO_SECRETS_PATH$3/$2$EXT" | grep "$1" | awk -F " " '{print $2}' | base64 -d
+  sops --config "$MONGO_SECRETS_PATH/$3/.sops.yaml" -d "$MONGO_SECRETS_PATH/$3/$2$EXT" | grep "$1" | awk -F " " '{print $2}' | base64 -d
 }
 
 mlerta() {

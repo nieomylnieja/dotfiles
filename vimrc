@@ -27,6 +27,10 @@ Plug 'neoclide/coc.nvim', {'branch': 'release'}
 " Initialize plugin system
 call plug#end()
 
+" syntax
+syntax on
+filetype plugin on
+
 " Disable those filthy arrows
 noremap <Up> <Nop>
 noremap <Down> <Nop>
@@ -36,9 +40,6 @@ noremap <Right> <Nop>
 " System clipboard
 set clipboard=unnamed,unnamedplus
 vnoremap y "+y
-
-" Relative line numbers
-set rnu
 
 " make backspace work like most other programs
 set backspace=2 

@@ -42,7 +42,7 @@ consume() {
 produce() {
   topic=$(topics)
   ls "$KAFKA_PAYLOADS_PATH" | fzf --preview "cat $KAFKA_PAYLOADS_PATH/{} | tr -d '#' | jq -C" | xargs -I {} cat "$KAFKA_PAYLOADS_PATH"/{} |
-    "$KAFKA_PATH"/bin/kafka-console-producer.sh --zookeeper localhost:2181 --topic "$topic" --property "parse.key=true" --property "key.separator=#"
+    "$KAFKA_PATH"/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic "$topic" --property "parse.key=true" --property "key.separator=#"
 }
 
 create() {

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+set -o errtrace
+set -eo pipefail
+
 help() {
   cat <<EOF
 
@@ -54,18 +57,34 @@ for arg; do
 done
 
 main() {
-  pass=$(sops -d $INFRA_PATH/k8s/mongodb/staging/lertadb.secret.enc.yaml | rg "password" | awk '{print $2}' | base64 -d)
-  if $x_tenant && $x_user_data; then
-    http "$@"
-  elif $x_tenant; then
-    userDataObject=$(setUserDataObject "$@")
-    http "$@" x-user-data:"$userDataObject"
-  elif $x_user_data; then
-    http "$@" x-tenant:"$DEFAULT_TENANT_ID"
-  else
-    userDataObject=$(setUserDataObject "$@")
-    http "$@" x-user-data:"$userDataObject" x-tenant:"$DEFAULT_TENANT_ID"
+  args=("$@")
+  # set X-Tenant default header if not present
+  if ! $x_tenant; then
+    args+=("x-tenant:$DEFAULT_TENANT_ID")
   fi
+  # set X-User-Data and corresponding X-User header
+  # if not present use the default
+  # choose one from the list if u_flag was provided
+  if ! $x_user_data && ! $u_flag; then
+    args+=("x-user-data:$DEFAULT_USERDATA_OBJECT")
+    args+=("x-user:$(echo "$DEFAULT_USERDATA_OBJECT" | jq -j .id)")
+  elif $u_flag; then
+    x_user_data_header=$(setUserDataObject "$@")
+    args+=("x-user-data:$x_user_data_header")
+    args+=("x-user:$(echo "$x_user_data_header" | jq -rj .id)")
+  fi
+  # run http with all of the provided arguments
+  http "${args[@]}"
+}
+
+setUserDataObject() {
+  pass=$(sops -d $INFRA_PATH/k8s/mongodb/staging/lertadb.secret.enc.yaml | rg "password" | awk '{print $2}' | base64 -d)
+  tenantId=$(getTenantId "$@")
+  users=$(kubectl exec lei-mongodb-0 -- mongo lerta -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/' | jq)
+  selected=$(echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}')
+  mapfile -t data < <(echo "$users" | jq -r ".[] | select(.email == \"$selected\") | ._id, .externalId, .role" | cut -d '"' -f2)
+  userDataObject="{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
+  echo "$userDataObject"
 }
 
 getTenantId() {
@@ -77,22 +96,6 @@ getTenantId() {
   else
     echo "$DEFAULT_TENANT_ID"
   fi
-}
-
-setUserDataObject() {
-  userDataObject=$(echo "$@" | tr " " "\n" | rg "x-user-data" | cut -d ':' -f2-)
-  if [[ -z "$userDataObject" ]]; then
-    if $u_flag; then
-      tenantId=$(getTenantId "$@")
-      users=$(mongo lerta --host="127.0.0.1:8102" -u lerta -p "$pass" --quiet --eval "printjson(db.user.find({\"tenantId\":\"$tenantId\"}).toArray())" | sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/' | jq)
-      selected=$(echo "$users" | jq -r '.[] | .email + " (" + .role + ")"' | fzf | awk '{print $1}')
-      mapfile -t data < <(echo "$users" | jq -r ".[] | select(.email == \"$selected\") | ._id, .externalId, .role" | cut -d '"' -f2)
-      userDataObject="{\"id\":\"${data[0]}\", \"externalId\":\"${data[1]}\", \"role\":\"${data[2]}\"}"
-    else
-      userDataObject="$DEFAULT_USERDATA_OBJECT"
-    fi
-  fi
-  echo "$userDataObject"
 }
 
 main "$@"

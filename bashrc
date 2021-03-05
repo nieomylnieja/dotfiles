@@ -5,12 +5,13 @@ source /usr/share/autojump/autojump.sh
 
 # run ssh-agent on every tmux or terminal login
 # if this won't be enaugh for managing multiple 
-if [ ! -S ~/.ssh/ssh_auth_sock ]; then
-  eval `ssh-agent`
-  ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock
-fi
-export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock
-ssh-add -l > /dev/null || ssh-add
+# this is only needed for xmonad right now..
+# if [ ! -S ~/.ssh/ssh_auth_sock ]; then
+#   eval `ssh-agent`
+#   ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock
+# fi
+# export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock
+# ssh-add -l > /dev/null || ssh-add
 
 # allow aliases
 shopt -s expand_aliases
@@ -36,7 +37,7 @@ export GIT_TERMINAL_PROMPT=1
 # local user bins
 export PATH="$HOME/.local/bin:$PATH"
 
-# java gui doesn't seet xmonad as a nonparenting app, this is a clean way to inform it about that
+# java gui doesn't see xmonad as a nonparenting app, this is a clean way to inform it about that
 # apparently it doesn't solve the problem with newer jdk versions
 export _JAVA_AWT_WM_NONREPARENTING=1
 
@@ -44,14 +45,15 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 alias tmux='TERM=xterm-256color tmux'
 
 # those fancy rust speeders
-alias ls='lsd'
+alias ls='exa --group-directories-first'
 alias du='dust'
+alias find='fd'
 
 # Alias definitions.
 alias cd..='cd ..'
-alias l='ls -l'
+alias l='ls -l --icons'
 alias la='ls -a'
-alias lt='ls --tree'
+alias lt='ls --tree --icons'
 alias ll='ls -lah'
 alias lls='ls -lah | sort -h -k5'
 alias cp="rsync --archive --human-readable --progress --verbose --whole-file"
@@ -68,7 +70,7 @@ alias kstarts='kubectl get pod --sort-by=.status.startTime'
 alias kstarted='kubectl get pod --sort-by=.status.containerStatuses[0].state.running.startedAt'
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
 alias klog-kafka='kubectl get pod -n measurements-kafka | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000 -n measurements-kafka'
-alias kpf='python ~/lerta/developer-tools/port-forwarder/forwarder.py'
+alias kpf="$HOME/lerta/developer-tools/port-forwarder/forwarder.sh"
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
@@ -88,7 +90,7 @@ alias klog='klog.sh'
 # studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
 
-# rust
+# rust binaries
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # pyenv path
