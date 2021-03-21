@@ -1,0 +1,51 @@
+# Don't print a new line at the start of the prompt
+add_newline = false
+
+# Wait 10 milliseconds for starship to check files under the current directory.
+scan_timeout = 10
+
+# Use custom format
+format = """
+ $username$kubernetes\
+$directory\
+$git_branch\
+$git_status\
+$git_commit\
+$git_state\
+$character
+"""
+
+# modules config
+[git_branch]
+format = '[|](#4c566a) [$symbol$branch]($style) '
+truncation_length = 4
+style = '#b48ead'
+
+[git_commit]
+format = "[|](#4c566a) [\\($hash\\)]($style) [\\($tag\\)]($style) "
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+style = '#ebcb8b'
+
+[kubernetes]
+format = '[$namespace $symbol](blue)[$context](#8fbcbb) '
+disabled = false
+[kubernetes.context_aliases]
+'lerta-dev' = 'development'
+'lerta-production' = '\033[0;31mproduction'
+'lerta-testing' = "testing"
+
+[status]
+disabled = false
+
+[character]
+success_symbol = '[>](#d8dee9)'
+error_symbol = '[>](#bf616a)'
+vicmd_symbol = '[<](#d8dee9)'
+
+[directory]
+format = '[|](#4c566a) [$path]($style)[$read_only]($read_only_style) '
+
+[package]
+disabled = true

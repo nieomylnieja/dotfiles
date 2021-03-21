@@ -4,7 +4,7 @@ SCRIPT_PATH=$HOME/.dotfiles/scripts
 
 # this will stop the execution flow as soon as any cmd fails
 set -o errtrace
-set -eo pipefail
+set -o pipefail
 
 help() {
   cat <<EOF

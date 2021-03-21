@@ -31,18 +31,30 @@ EOF
 
 INFRA_PATH=~/lerta/infrastructure
 
+internal='false'
+noc_request='false'
 u_flag='false'
 x_tenant='false'
 x_user_data='false'
+x_origin_system='false'
 
 if [[ $(echo "$@" | rg "\s-u\s*") ]]; then
   u_flag='true'
+fi
+if [[ $(echo "$@" | rg "\s--internal\s*") ]]; then
+  internal='true'
+fi
+if [[ $(echo "$@" | rg "\s--noc\s*") ]]; then
+  noc_request='true'
 fi
 if [[ $(echo "$@" | rg -i "\sx-tenant:\s*") ]]; then
   x_tenant='true'
 fi
 if [[ $(echo "$@" | rg -i "\sx-user-data:\s*") ]]; then
   x_user_data='true'
+fi
+if [[ $(echo "$@" | rg -i "\sx-origin-system:\s*") ]]; then
+  x_origin_system='true'
 fi
 
 if [[ $(echo "$@" | rg "\s-h\s*") ]]; then
@@ -52,7 +64,7 @@ fi
 
 for arg; do
   shift
-  [ "$arg" = "-u" ] || [ "$arg" = "-h" ] && continue
+  [ "$arg" = "-u" ] || [ "$arg" = "-h" ] || [ "$arg" = "--internal" ] || [ "$arg" = "--noc" ] && continue
   set -- "$@" "$arg"
 done
 
@@ -62,16 +74,25 @@ main() {
   if ! $x_tenant; then
     args+=("x-tenant:$DEFAULT_TENANT_ID")
   fi
-  # set X-User-Data and corresponding X-User header
-  # if not present use the default
-  # choose one from the list if u_flag was provided
-  if ! $x_user_data && ! $u_flag; then
-    args+=("x-user-data:$DEFAULT_USERDATA_OBJECT")
-    args+=("x-user:$(echo "$DEFAULT_USERDATA_OBJECT" | jq -j .id)")
-  elif $u_flag; then
-    x_user_data_header=$(setUserDataObject "$@")
-    args+=("x-user-data:$x_user_data_header")
-    args+=("x-user:$(echo "$x_user_data_header" | jq -rj .id)")
+  if $noc_request; then
+    args+=("x-tenant:noc")
+    args+=("x-origin-system:noc")
+  fi
+  if ! $internal && ! $noc_request; then
+    if ! $x_origin_system; then
+      args+=("x-origin-system:lei")
+    fi
+    # set X-User-Data and corresponding X-User header
+    # if not present use the default
+    # choose one from the list if u_flag was provided
+    if ! $x_user_data && ! $u_flag; then
+      args+=("x-user-data:$DEFAULT_USERDATA_OBJECT")
+      args+=("x-user:$(echo "$DEFAULT_USERDATA_OBJECT" | jq -j .id)")
+    elif $u_flag; then
+      x_user_data_header=$(setUserDataObject "$@")
+      args+=("x-user-data:$x_user_data_header")
+      args+=("x-user:$(echo "$x_user_data_header" | jq -rj .id)")
+    fi
   fi
   # run http with all of the provided arguments
   http "${args[@]}"

@@ -16,9 +16,6 @@ source /usr/share/autojump/autojump.sh
 # allow aliases
 shopt -s expand_aliases
 
-# prompt config
-source ~/.dotfiles/prompt.sh
-
 # Set VIM prompt
 set -o vi
 export EDITOR="vim"
@@ -31,8 +28,6 @@ esac
 
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-
-export GIT_TERMINAL_PROMPT=1
 
 # local user bins
 export PATH="$HOME/.local/bin:$PATH"
@@ -65,11 +60,7 @@ alias c="xclip -sel clip"
 alias rm_oid="sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/'"
 
 # K8s aliases
-alias krestarts='kubectl get pod --sort-by=.status.containerStatuses[0].restartCount'
-alias kstarts='kubectl get pod --sort-by=.status.startTime'
-alias kstarted='kubectl get pod --sort-by=.status.containerStatuses[0].state.running.startedAt'
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
-alias klog-kafka='kubectl get pod -n measurements-kafka | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | xargs kubectl logs -f --tail=2000 -n measurements-kafka'
 alias kpf="$HOME/lerta/developer-tools/port-forwarder/forwarder.sh"
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
@@ -77,8 +68,6 @@ alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" 
 alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
 
 # lerta aliases
-alias lertaProductionPass='sops -d ~/lerta/infrastructure/k8s/mongodb/production/passwd.json | grep "admin" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
-alias lertaStagingPass='sops -d ~/lerta/infrastructure/k8s/mongodb/staging/passwd.enc.json | grep "password" | tail -n 1 | awk '"'"'{gsub(/"/, "", $2); print $2}'"'"' | tr -d "\n" | c'
 alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
 alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
 alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
@@ -87,7 +76,7 @@ alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
 alias projects='. projects.sh'
 alias klog='klog.sh'
 
-# studies
+# vpn for studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
 
 # rust binaries
@@ -129,33 +118,20 @@ mkfileP() {
 	mkdir -p "$(dirname "$1")" || return; touch "$1";
 }
 
-# manages dotfiles ~ idea from: https://news.ycombinator.com/item?id=11070797
-alias config='/usr/bin/git --git-dir=/home/mateusz/.cfg/ --work-tree=/home/mateusz'
-
 # krew path
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
-
 # BASH SHARED SEARCH HISTORY
-
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 # Avoid duplicates
 HISTCONTROL=ignoredups:erasedups  
-
 # When the shell exits, append to the history file instead of overwriting it
 shopt -s histappend
-
 # After each command, append to the history file and reread it
 PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
 
 # java home
 export JAVA_HOME="/usr/lib/jvm/java-1.11.0-openjdk-amd64"
-
-# jq 
-get_errors(){
-  v=$1
-  cat $v | jq .error[].Message | uniq | sort
-}
 
 # golang
 export GO111MODULE=on
@@ -205,3 +181,12 @@ export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
 
 # local kafka development aliases
 export KAFKA_DIR="$HOME/kafka_2.12-2.5.0"
+
+# port-forwarder path
+export FORWARDER_PATH="$HOME/lerta/developer-tools/port-forwarder"
+
+# convenience env to secpify default browser
+export BROWSER=firefox
+
+# starship prompt init, should stay on the bottom
+eval "$(starship init bash)"

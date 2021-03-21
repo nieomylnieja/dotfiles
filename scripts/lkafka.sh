@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -o errtrace
-set -o pipefail
+set -eo pipefail
 
 KAFKA_PATH=$HOME/kafka_2.12-2.5.0
 KAFKA_PAYLOADS_PATH=$HOME/Downloads/jsons/kafka
@@ -36,7 +36,7 @@ default() {
 }
 
 consume() {
-  topics | xargs "$KAFKA_PATH"/bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic
+  topics | xargs "$KAFKA_PATH"/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic
 }
 
 produce() {

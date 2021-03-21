@@ -1,8 +1,21 @@
 set nocompatible
 set encoding=utf-8
 
+"" {{{
+"" LEGEND
+"
+" - VIMPLUG
+" - GENERAL
+" - PLUGINS
+"   - lightline
+"   - coc
+"
+"" END LEGEND
 "" }}}
-"" PLUGINS {{{
+
+
+"" {{{
+"" PLUGINS
 
 " automate vim-plugin installation
 if empty(glob('~/.vim/autoload/plug.vim'))
@@ -22,33 +35,43 @@ Plug 'preservim/nerdtree'
 Plug 'tpope/vim-sensible'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-surround'
+Plug 'tpope/vim-fugitive'
+Plug 'tpope/vim-repeat'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
 " Initialize plugin system
 call plug#end()
 
+"" END PLUGINS
+"" }}}
+
+
+"" {{{
+"" GENERAL
+
+" Do not redraw screen in the middle of a macro. Makes them complete faster.
+set lazyredraw
 " syntax
 syntax on
 filetype plugin on
-
 " Disable those filthy arrows
 noremap <Up> <Nop>
 noremap <Down> <Nop>
 noremap <Left> <Nop>
 noremap <Right> <Nop>
-
 " System clipboard
 set clipboard=unnamed,unnamedplus
 vnoremap y "+y
-
 " make backspace work like most other programs
 set backspace=2 
-
 " prevent vim from clearing clipboard on exit
 autocmd VimLeave * call system("xsel -ib", getreg('+'))
-
 " colors
 colorscheme nord
+
+"" END GENERAL
+"" }}}
+
 
 " lightline
 set laststatus=2
@@ -58,6 +81,13 @@ endif
 
 let g:lightline = {
       \ 'colorscheme': 'nord',
+      \ 'active': {
+      \   'left': [ [ 'mode', 'paste' ],
+      \             [ 'gitbranch', 'readonly', 'filename', 'modified' ] ]
+      \ },
+      \ 'component_function': {
+      \   'gitbranch': 'FugitiveHead'
+      \ },
       \ }
 
 " start nerd tree if no files were specified or when opening a dir
@@ -75,6 +105,7 @@ set cmdheight=2
 set updatetime=300
 set shortmess+=c
 set signcolumn=number
+set number
 
 " Use tab for trigger completion with characters ahead and navigate.
 " NOTE: Use command ':verbose imap <tab>' to make sure tab is not mapped by
