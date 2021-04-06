@@ -147,6 +147,7 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 --color pointer:#BF616A,info:#4C566A,spinner:#4C566A,header:#4C566A,prompt:#B48EAD,marker:#EBCB8B'
 
 # lerta utils
+export INFRA_PATH="$HOME/lerta/infrastructure"
 alias lhttp=lerta-httpie.sh
 export $(cat "$DOTFILES/secrets.local.env")
 

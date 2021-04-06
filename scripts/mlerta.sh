@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MONGO_SECRETS_PATH=/home/nieomylnieja/lerta/infrastructure/k8s/mongodb
+MONGO_SECRETS_PATH="$INFRA_PATH/k8s/mongodb"
 EXT=.secret.enc.yaml
 
 main() {

@@ -29,8 +29,6 @@ Requires: ripgrep, yq, jq, fzf
 EOF
 }
 
-INFRA_PATH=~/lerta/infrastructure
-
 internal='false'
 noc_request='false'
 u_flag='false'

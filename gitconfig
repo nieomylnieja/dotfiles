@@ -14,6 +14,9 @@
 [commit]
     	template = /home/nieomylnieja/.dotfiles/commit-template
 
+[pull]
+	rebase = false
+
 [core]
 	excludesfile = /home/nieomylnieja/.gitignore_global
 	editor = vim
@@ -28,10 +31,14 @@
 
 [delta]
     	features = side-by-side line-numbers decorations
-	syntax-theme = Dracula
+	syntax-theme = Nord
     	whitespace-error-style = 22 reverse
-	plus-style = syntax "#003800"
-    	minus-style = syntax "#3f0001"
+	plus-style = "28 bold black"
+	plus-emph-style = "#254117 28"
+	plus-non-emph-style = "28"
+    	minus-style = "red bold black"
+	minus-emph-style = "red #800517"
+	minus-non-emph-styl = "red"
 
 [delta "decorations"]
 	commit-decoration-style = bold yellow box ul
@@ -40,7 +47,6 @@
    	hunk-header-decoration-style = cyan box ul
 
 [delta "line-numbers"]
-    	line-numbers-left-style = cyan
-    	line-numbers-right-style = cyan
-    	line-numbers-minus-style = 124
+	line-numbers-zero-style = "#4c566a"
+    	line-numbers-minus-style = red
     	line-numbers-plus-style = 28

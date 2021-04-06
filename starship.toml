@@ -6,19 +6,19 @@ scan_timeout = 10
 
 # Use custom format
 format = """
- $username$kubernetes\
+┌$username$kubernetes\
 $directory\
 $git_branch\
 $git_status\
 $git_commit\
-$git_state\
-$character
+$git_state
+└$character
 """
 
 # modules config
 [git_branch]
 format = '[|](#4c566a) [$symbol$branch]($style) '
-truncation_length = 4
+truncation_length = 32
 style = '#b48ead'
 
 [git_commit]

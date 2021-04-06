@@ -16,8 +16,6 @@ EOF
 set -o errtrace
 set -o pipefail
 
-INFRA_PATH=~/lerta/infrastructure
-
 d_flag='false'
 u_flag='false'
 
