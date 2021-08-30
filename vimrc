@@ -32,11 +32,13 @@ Plug 'itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 Plug 'preservim/nerdtree'
+Plug 'Xuyuanp/nerdtree-git-plugin'
 Plug 'tpope/vim-sensible'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-repeat'
+Plug 'shumphrey/fugitive-gitlab.vim'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
 " Initialize plugin system
@@ -57,8 +59,8 @@ filetype plugin on
 " Disable those filthy arrows
 noremap <Up> <Nop>
 noremap <Down> <Nop>
-noremap <Left> <Nop>
 noremap <Right> <Nop>
+noremap <Left> <Nop>
 " System clipboard
 set clipboard=unnamed,unnamedplus
 vnoremap y "+y
@@ -71,6 +73,10 @@ colorscheme nord
 
 "" END GENERAL
 "" }}}
+
+noremap <leader>d c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>
+" vnoremap <leader>e c<c-r>=system('base64 -w 0', @")<cr><esc>gv
+vnoremap <leader>e c<c-r>=system('base64', @")<cr><BS><esc>gv<left>
 
 
 " lightline
@@ -95,6 +101,7 @@ autocmd StdinReadPre * let s:std_in=1
 autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 autocmd VimEnter * if argc() == 1 && isdirectory(argv()[0]) && !exists("s:std_in") | exe 'NERDTree' argv()[0] | wincmd p | ene | exe 'cd '.argv()[0] | endif
 map <C-n> :NERDTreeToggle<CR> " Ctrl+n
+map <C-f> :NERDTreeFocus<CR> " Ctrl+f
 
 " -----------------
 " coc configuration
@@ -133,3 +140,5 @@ endif
 inoremap <silent><expr> <cr> pumvisible() ? coc#_select_confirm()
                               \: "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
 " -----------------
+"  awesome integrations for fugitive
+let g:fugitive_gitlab_domains = ['https://my.gitlab.com']

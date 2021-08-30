@@ -1,0 +1,2 @@
+# print only topic name with partition along the offsets and lag
+./kafka-consumer-groups.sh --bootstrap-server=localhost:9092 --describe --group <GROUP_NAME> | awk '{$2=$2 "_" $3 ;$1=$3=$7=$8=$9=""; print $0}' | column -t

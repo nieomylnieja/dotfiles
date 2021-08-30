@@ -79,6 +79,10 @@ alias klog='klog.sh'
 # vpn for studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
 
+# docker aliases
+alias docker_clean_images='docker rmi $(docker images -a --filter=dangling=true -q)'
+alias docker_clean_ps='docker rm $(docker ps --filter=status=exited --filter=status=created -q)'
+
 # rust binaries
 export PATH="$HOME/.cargo/bin:$PATH"
 
@@ -134,7 +138,6 @@ PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; h
 export JAVA_HOME="/usr/lib/jvm/java-1.11.0-openjdk-amd64"
 
 # golang
-export GO111MODULE=on
 export PATH=$PATH:/usr/local/go/bin
 
 # yarn
@@ -187,7 +190,16 @@ export KAFKA_DIR="$HOME/kafka_2.12-2.5.0"
 export FORWARDER_PATH="$HOME/lerta/developer-tools/port-forwarder"
 
 # convenience env to secpify default browser
-export BROWSER=firefox
+export BROWSER=brave-browser
+
+# colored man pages
+export LESS_TERMCAP_mb=$'\e[1;34m'
+export LESS_TERMCAP_md=$'\e[1;34m'
+export LESS_TERMCAP_me=$'\e[0m'
+export LESS_TERMCAP_se=$'\e[0m'
+export LESS_TERMCAP_so=$'\e[01;95m'
+export LESS_TERMCAP_ue=$'\e[0m'
+export LESS_TERMCAP_us=$'\e[1;4;96m'
 
 # starship prompt init, should stay on the bottom
 eval "$(starship init bash)"
