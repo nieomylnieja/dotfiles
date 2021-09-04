@@ -12,13 +12,13 @@
 	insteadOf = https://github.com/
 
 [commit]
-    	template = /home/nieomylnieja/.dotfiles/commit-template
+    	template = /home/mhawrus/.dotfiles/commit-template
 
 [pull]
 	rebase = false
 
 [core]
-	excludesfile = /home/nieomylnieja/.gitignore_global
+	excludesfile = /home/mhawrus/.gitignore_global
 	editor = vim
   	autocrlf = input
     	pager = delta

@@ -61,7 +61,6 @@ alias rm_oid="sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/'"
 
 # K8s aliases
 alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
-alias kpf="$HOME/lerta/developer-tools/port-forwarder/forwarder.sh"
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
@@ -73,7 +72,6 @@ alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
 alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
 
 # scripts aliases
-alias projects='. projects.sh'
 alias klog='klog.sh'
 
 # vpn for studies
@@ -97,7 +95,7 @@ export PATH="$HOME/.dotfiles/scripts:$PATH"
 eval "$(stack --bash-completion-script stack)"
 
 # kafka
-export PATH="$HOME/kafka_2.12-2.5.0/bin:$PATH"
+# export PATH="$HOME/kafka_2.12-2.5.0/bin:$PATH"
 
 # golang coverage
 cover () {
@@ -149,18 +147,13 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 --color fg:#88C0D0,hl:#EBCB8B,fg+:#88C0D0,hl+:#EBCB8B,bg+:#434C5E
 --color pointer:#BF616A,info:#4C566A,spinner:#4C566A,header:#4C566A,prompt:#B48EAD,marker:#EBCB8B'
 
-# lerta utils
-export INFRA_PATH="$HOME/lerta/infrastructure"
-alias lhttp=lerta-httpie.sh
-export $(cat "$DOTFILES/secrets.local.env")
-
 # pfetch configuration
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"
 
 # nord dircolors
-test -r "~/.dotfiles/nord-dircolors/src/dir_colors" && eval $(dircolors ~/.dotfiles/nord-dircolors/src/dir_colors)
+test -r ~/.dotfiles/nord-dircolors/src/dir_colors && eval $(dircolors ~/.dotfiles/nord-dircolors/src/dir_colors)
 if [ ! -f ~/.dir_colors ]; then
-  ln -s "$DOTFILES/nord_dircolors/src/dir_colors" "~/.dir_colors"
+  ln "$DOTFILES/nord_dircolors/src/dir_colors" ~/.dir_colors
 fi
 
 # bat colors
@@ -174,20 +167,8 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
-# vcpkg completion -- this is temprorary and only for that project
-source /home/nieomylnieja/myProjects/graphic-design/lib/vcpkg/scripts/vcpkg_completion.bash
-
 # python gitlab cli
 export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
-
-# golang version manager
-[[ -s "/home/nieomylnieja/.gvm/scripts/gvm" ]] && source "/home/nieomylnieja/.gvm/scripts/gvm"
-
-# local kafka development aliases
-export KAFKA_DIR="$HOME/kafka_2.12-2.5.0"
-
-# port-forwarder path
-export FORWARDER_PATH="$HOME/lerta/developer-tools/port-forwarder"
 
 # convenience env to secpify default browser
 export BROWSER=brave-browser
@@ -200,6 +181,13 @@ export LESS_TERMCAP_se=$'\e[0m'
 export LESS_TERMCAP_so=$'\e[01;95m'
 export LESS_TERMCAP_ue=$'\e[0m'
 export LESS_TERMCAP_us=$'\e[1;4;96m'
+
+# fzf key bindings
+. /usr/share/doc/fzf/examples/key-bindings.bash
+
+# bash search history
+export HISTSIZE=10000
+export HISTFILESIZE=10000
 
 # starship prompt init, should stay on the bottom
 eval "$(starship init bash)"

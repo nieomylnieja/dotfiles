@@ -7,3 +7,6 @@
 [submodule "delta"]
 	path = delta
 	url = git@github.com:dandavison/delta.git
+[submodule "git-secrets"]
+	path = git-secrets
+	url = git@github.com:awslabs/git-secrets.git

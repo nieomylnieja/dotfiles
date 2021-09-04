@@ -84,7 +84,7 @@ scrolling:
   history: 20000
 
   # Scrolling distance multiplier.
-  multiplier: 3
+  multiplier: 6
 
 # Font configuration
 font:
@@ -223,6 +223,7 @@ schemes:
       magenta: '0xff46b0'
       cyan:    '0x59dffc'
       white:   '0xe6e6d1'
+
   nord: &nord
     primary:
       background: '0x2E3440'

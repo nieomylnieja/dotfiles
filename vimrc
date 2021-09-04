@@ -27,7 +27,6 @@ endif
 " Specify a directory for plugins
 call plug#begin('~/.vim/plugged')
 
-Plug 'arcticicestudio/nord-vim'
 Plug 'itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
@@ -40,6 +39,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-repeat'
 Plug 'shumphrey/fugitive-gitlab.vim'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'arcticicestudio/nord-vim'
 
 " Initialize plugin system
 call plug#end()
@@ -55,7 +55,7 @@ call plug#end()
 set lazyredraw
 " syntax
 syntax on
-filetype plugin on
+filetype plugin indent on
 " Disable those filthy arrows
 noremap <Up> <Nop>
 noremap <Down> <Nop>
