@@ -788,3 +788,5 @@ shell:
 
   # Print all received window events.
   #print_events: false
+
+# DOTFILES_LINK_TARGET=~/.config/alacritty/alacritty.yml

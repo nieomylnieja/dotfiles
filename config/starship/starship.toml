@@ -7,6 +7,7 @@ scan_timeout = 10
 # Use custom format
 format = """
 ┌$username$kubernetes\
+${custom.sloctl}\
 $directory\
 $git_branch\
 $git_status\
@@ -49,3 +50,10 @@ format = '[|](#4c566a) [$path]($style)[$read_only]($read_only_style) '
 
 [package]
 disabled = true
+
+# Nobl9 specific
+[custom.sloctl]
+description = 'provides current sloctl context'
+command = "cat ~/.config/nobl9/config.toml | grep defaultContext | awk '{print $3}' | sed 's/\"//g'"
+format = '[|](#4c566a) [N9](#5E81AC) [$output](#8FBCBB) '
+when = 'true'

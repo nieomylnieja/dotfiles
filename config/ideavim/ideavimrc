@@ -1,0 +1,47 @@
+" GENERAL {{{1
+" Tabbing
+set tabstop=2           " The number of spaces a tab is
+set shiftwidth=2        " Number of spaces to use in auto(indent)
+set softtabstop=2       " Just to be clear
+set expandtab           " Insert tabs as spaces
+
+" Searching
+set wrapscan            " Wrap searches
+set ignorecase          " Ignore search term case...
+set smartcase           " ... unless term contains an uppercase character
+set hlsearch            " ... as you type
+
+" Wrapping
+set textwidth=80        " Hard-wrap text at nth column
+set nowrap              " Don't wrap long lines (good for vsplits)
+
+" Syntax
+syntax on
+filetype plugin indent on
+
+" General
+set lazyredraw          " Do not redraw screen in the middle of a macro. Makes them complete faster.
+set backspace=2         " make backspace work like most other programs
+set clipboard=unnamed,unnamedplus
+
+
+" PLUGINS {{{1
+set NERDTree
+set commentary
+
+" MAPPING {{{1
+map <C-q> :NERDTreeToggle<CR>
+map <C-f> :NERDTreeFocus<CR>
+map gq :tabclose<CR>
+
+" Move between splits with CTRL+[hjkl]
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+" System clipboard
+vnoremap y "+y
+
+" Clear highlight after pressing ESC
+nnoremap <esc> :noh<return><esc>

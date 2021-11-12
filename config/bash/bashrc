@@ -16,9 +16,16 @@ source /usr/share/autojump/autojump.sh
 # allow aliases
 shopt -s expand_aliases
 
+# more powerful pattern matching
+shopt -s extglob
+
 # Set VIM prompt
 set -o vi
 export EDITOR="vim"
+
+# Set language
+export LANG=en_US.UTF-8
+export LC_ALL=$LANG
 
 # If not running interactively, don't do anything
 case $- in
@@ -42,7 +49,6 @@ alias tmux='TERM=xterm-256color tmux'
 # those fancy rust speeders
 alias ls='exa --group-directories-first'
 alias du='dust'
-alias find='fd'
 
 # Alias definitions.
 alias cd..='cd ..'
@@ -65,6 +71,7 @@ alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
 alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
+alias podEnv='kubectl get pod -o name | ag intake | xargs -I {} kubectl exec {} -- env | ag -v _SERVICE | ag INTAKE'
 
 # lerta aliases
 alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
@@ -80,13 +87,11 @@ alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.
 # docker aliases
 alias docker_clean_images='docker rmi $(docker images -a --filter=dangling=true -q)'
 alias docker_clean_ps='docker rm $(docker ps --filter=status=exited --filter=status=created -q)'
+alias dstop='sudo systemctl stop docker.socket && sudo systemctl stop docker.service'
+alias dstart='sudo systemctl start docker.socket && sudo systemctl start docker.service'
 
 # rust binaries
 export PATH="$HOME/.cargo/bin:$PATH"
-
-# pyenv path
-export PATH="$HOME/.pyenv/bin:$PATH"
-eval "$(pyenv init -)"
 
 # scripts path
 export PATH="$HOME/.dotfiles/scripts:$PATH"
@@ -133,10 +138,14 @@ shopt -s histappend
 PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
 
 # java home
-export JAVA_HOME="/usr/lib/jvm/java-1.11.0-openjdk-amd64"
+export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
+
+# Graphviz dot
+export GRAPHVIZ_DOT=/usr/bin/dot
 
 # golang
 export PATH=$PATH:/usr/local/go/bin
+export PATH="$(go env GOPATH)/bin:$PATH"
 
 # yarn
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
@@ -188,6 +197,51 @@ export LESS_TERMCAP_us=$'\e[1;4;96m'
 # bash search history
 export HISTSIZE=10000
 export HISTFILESIZE=10000
+
+#ignore upper and lowercase when TAB completion
+bind "set completion-ignore-case on"
+
+### ARCHIVE EXTRACTION
+# usage: ex <file>
+ex ()
+{
+  if [ -f $1 ] ; then
+    case $1 in
+      *.tar.bz2)   tar xjf $1   ;;
+      *.tar.gz)    tar xzf $1   ;;
+      *.bz2)       bunzip2 $1   ;;
+      *.rar)       unrar x $1   ;;
+      *.gz)        gunzip $1    ;;
+      *.tar)       tar xf $1    ;;
+      *.tbz2)      tar xjf $1   ;;
+      *.tgz)       tar xzf $1   ;;
+      *.zip)       unzip $1     ;;
+      *.Z)         uncompress $1;;
+      *.7z)        7z x $1      ;;
+      *.deb)       ar x $1      ;;
+      *.tar.xz)    tar xf $1    ;;
+      *.tar.zst)   unzstd $1    ;;
+      *)           echo "'$1' cannot be extracted via ex()" ;;
+    esac
+  else
+    echo "'$1' is not a valid file"
+  fi
+}
+
+# Spicetify -- an awesome spotify customization cli
+export SPICETIFY_INSTALL="$HOME/spicetify-cli"
+export PATH="$SPICETIFY_INSTALL:$PATH"
+
+# lol
+export VIMINIT='let $MYVIMRC="$XDG_CONFIG_HOME/vim/vimrc" | source $MYVIMRC'
+
+# pyenv path -- place it toward the end of bashrc
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv virtualenv-init -)"
+
+# any other custom files to be sourced
+source "$HOME"/nobl9/nobl9rc.bash
 
 # starship prompt init, should stay on the bottom
 eval "$(starship init bash)"

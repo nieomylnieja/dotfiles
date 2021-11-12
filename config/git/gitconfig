@@ -2,7 +2,7 @@
 	helper = cache
 
 [user]
-	email = mateusz.hawrus@lerta.energy
+	email = mateusz.hawrus@nobl9.com
 	name = Mateusz Hawrus
 
 [url "git@gitlab.com:"]
@@ -12,7 +12,7 @@
 	insteadOf = https://github.com/
 
 [commit]
-    	template = /home/mhawrus/.dotfiles/commit-template
+    	template = /home/mhawrus/.dotfiles/config/git/commit-template
 
 [pull]
 	rebase = false
@@ -24,7 +24,9 @@
     	pager = delta
 
 [alias]
-	pushf = push --force-with-lease
+  pushf = push --force-with-lease
+  tree = log --graph --pretty=format:'%Cblue%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%ar) %C(cyan)<%an>%Creset' --abbrev-commit
+  to = checkout
 
 [interactive]
     	diffFilter = delta --color-only

@@ -1,85 +1,75 @@
+" vim:fdm=marker:fdl=0
+
+" Environment {{{1
+" A consistent runtime environment adhering to XDG.k
+
+" Initial setup
 set nocompatible
 set encoding=utf-8
 
-"" {{{
-"" LEGEND
-"
-" - VIMPLUG
-" - GENERAL
-" - PLUGINS
-"   - lightline
-"   - coc
-"
-"" END LEGEND
-"" }}}
+set directory=$XDG_CACHE_HOME/vim,~/,/tmp
+set backupdir=$XDG_CACHE_HOME/vim,~/,/tmp
+set viminfo+=n$XDG_CACHE_HOME/vim/viminfo
+set runtimepath=$XDG_CONFIG_HOME/vim,$XDG_CONFIG_HOME/vim/after,$VIM,$VIMRUNTIME
+set packpath+=$XDG_CONFIG_HOME/vim
 
+" General preferences {{{1
 
-"" {{{
-"" PLUGINS
+" Tabbing
+set tabstop=2           " The number of spaces a tab is
+set shiftwidth=2        " Number of spaces to use in auto(indent)
+set softtabstop=2       " Just to be clear
+set expandtab           " Insert tabs as spaces
 
-" automate vim-plugin installation
-if empty(glob('~/.vim/autoload/plug.vim'))
-  silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
-    \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-  autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
-endif
+" Searching
+set wrapscan            " Wrap searches
+set ignorecase          " Ignore search term case...
+set smartcase           " ... unless term contains an uppercase character
+set hlsearch            " ... as you type
 
-" Specify a directory for plugins
-call plug#begin('~/.vim/plugged')
+" Wrapping
+set textwidth=80        " Hard-wrap text at nth column
+set nowrap              " Don't wrap long lines (good for vsplits)
 
-Plug 'itchyny/lightline.vim'
-Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
-Plug 'junegunn/fzf.vim'
-Plug 'preservim/nerdtree'
-Plug 'Xuyuanp/nerdtree-git-plugin'
-Plug 'tpope/vim-sensible'
-Plug 'tpope/vim-commentary'
-Plug 'tpope/vim-surround'
-Plug 'tpope/vim-fugitive'
-Plug 'tpope/vim-repeat'
-Plug 'shumphrey/fugitive-gitlab.vim'
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
-Plug 'arcticicestudio/nord-vim'
-
-" Initialize plugin system
-call plug#end()
-
-"" END PLUGINS
-"" }}}
-
-
-"" {{{
-"" GENERAL
-
-" Do not redraw screen in the middle of a macro. Makes them complete faster.
-set lazyredraw
-" syntax
+" Syntax
 syntax on
 filetype plugin indent on
+
+" General
+set lazyredraw          " Do not redraw screen in the middle of a macro. Makes them complete faster.
+set backspace=2         " make backspace work like most other programs
+set clipboard=unnamed,unnamedplus
+
+" Prevent vim from clearing clipboard on exit
+autocmd VimLeave * call system("xsel -ib", getreg('+'))
+
+" Mappings {{{1
+
+" Move between splits with CTRL+[hjkl]
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
 " Disable those filthy arrows
 noremap <Up> <Nop>
 noremap <Down> <Nop>
 noremap <Right> <Nop>
 noremap <Left> <Nop>
+
 " System clipboard
-set clipboard=unnamed,unnamedplus
 vnoremap y "+y
-" make backspace work like most other programs
-set backspace=2 
-" prevent vim from clearing clipboard on exit
-autocmd VimLeave * call system("xsel -ib", getreg('+'))
-" colors
-colorscheme nord
 
-"" END GENERAL
-"" }}}
-
+" Neat base64 decoding and encoding
 noremap <leader>d c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>
-" vnoremap <leader>e c<c-r>=system('base64 -w 0', @")<cr><esc>gv
 vnoremap <leader>e c<c-r>=system('base64', @")<cr><BS><esc>gv<left>
 
+" Clear highlight after pressing ESC
+nnoremap <esc> :noh<return><esc>
 
-" lightline
+" The Looks {{{1
+
+" Lightline config
 set laststatus=2
 if !has('gui_running')
   set t_Co=256
@@ -96,15 +86,19 @@ let g:lightline = {
       \ },
       \ }
 
-" start nerd tree if no files were specified or when opening a dir
+" Colors
+colorscheme nord
+
+" Start nerd tree if no files were specified or when opening a dir
 autocmd StdinReadPre * let s:std_in=1
 autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 autocmd VimEnter * if argc() == 1 && isdirectory(argv()[0]) && !exists("s:std_in") | exe 'NERDTree' argv()[0] | wincmd p | ene | exe 'cd '.argv()[0] | endif
 map <C-n> :NERDTreeToggle<CR> " Ctrl+n
 map <C-f> :NERDTreeFocus<CR> " Ctrl+f
 
-" -----------------
+
 " coc configuration
+packadd coc
 set nobackup
 set nowritebackup
 set hidden
@@ -139,6 +133,6 @@ endif
 " format on enter, <cr> could be remapped by other vim plugin
 inoremap <silent><expr> <cr> pumvisible() ? coc#_select_confirm()
                               \: "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
-" -----------------
+
 "  awesome integrations for fugitive
 let g:fugitive_gitlab_domains = ['https://my.gitlab.com']

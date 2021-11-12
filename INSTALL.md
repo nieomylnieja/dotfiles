@@ -13,6 +13,7 @@ ln -sf gitconfig ~/.gitconfig
 mkdir -p ~/.config/xmobar && ln -sf xmobar.conf ~/.config/xmobar/xmobar.config
 ln -sf vim ~/.vim
 git config --global core.excludesfile ~/.dotfiles/gitignore_global
+ln -sf qtile/qtile.desktop 
 ```
 
 1. Install `nvm`
@@ -30,12 +31,23 @@ For `coc` to work at all you'll have to install a recent nodejs version. I prefe
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash && nvm install node
 ```
 
+```shell
+cd vim/pack/plugins/opt/coc && yarn install && cd -
+```
+
+
 1. Tmux
 
 Link the `tmux.conf` and then install `tpm` (tmux plugin manager)
 
 ```shell
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+```
+
+[Tmux urlview](https://github.com/tmux-plugins/tmux-urlview) requires [urlview](https://github.com/sigpipe/urlview)
+
+```shell
+sudo apt install urlview
 ```
 
 1. [Alacirtty](https://github.com/alacritty/alacritty/blob/master/INSTALL.md)
@@ -173,3 +185,42 @@ sudo apt install xmonad libghc-xmonad-contrib-dev dmenu xmobar
 
 - [browserpass native](https://github.com/browserpass/browserpass-native)
 - [browserpass extension](https://github.com/browserpass/browserpass-extension)
+
+1. [Golang](https://golang.org/doc/install)
+
+1. [Docker](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-on-ubuntu-20-04)
+
+1. Qtile Window Manager
+
+Installation steps for X11:
+
+```shell
+pip install xcffib
+pip install cairocffi
+pip install qtile
+pip install dbus-next
+```
+
+1. Spotify
+
+Do not install `spotify` from snap, as It cannot be modified!
+[Spicetify](https://github.com/khanhas/spicetify-cli) for nice looks! -- follow the instructions listed on the wiki pages.
+
+```shell
+cp clones/spicetify-themes/Dribbblish/dribbblish.js "$(dirname "$(spicetify -c)")/Extensions
+cp clones/spicetify-themes/Dribbblish "$(dirname "$(spicetify -c)")/Themes/Dribbblish
+spicetify config extensions dribbblish.js
+spicetify config current_theme Dribbblish color_scheme nord-dark
+spicetify config inject_css 1 replace_colors 1 overwrite_assets 1
+spicetify apply
+```
+
+1. Httpie
+
+An awesome curl simplification for testing and what not.
+See the [docs](https://httpie.io/docs#installation) for the installation.
+
+```shell
+python -m pip install --upgrade pip wheel
+python -m pip install httpie
+```

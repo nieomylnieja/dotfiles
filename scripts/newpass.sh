@@ -39,6 +39,8 @@ EOF
 	fi
 	
 	echo "Created pass $path entry" && exit 0
+
+	pass show -c $path
 }
 
 main "$@"

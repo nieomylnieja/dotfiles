@@ -1,5 +1,9 @@
 #!/bin/bash
 
+Pipe::main() {
+  echo lol
+}
+
 main() {
   node="$1"
   sortBy="$2"

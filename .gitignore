@@ -1,2 +1,3 @@
 *.local.env
-*.secret.enc.*
+*secrets.enc.*
+*.swp
