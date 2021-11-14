@@ -1,3 +1,7 @@
 *.local.env
 *secrets.enc.*
 *.swp
+__pycache__
+.idea
+.vscode
+.sops.yaml

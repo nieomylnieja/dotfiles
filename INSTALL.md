@@ -224,3 +224,9 @@ See the [docs](https://httpie.io/docs#installation) for the installation.
 python -m pip install --upgrade pip wheel
 python -m pip install httpie
 ```
+
+1. [Unix utils](https://joeyh.name/code/moreutils/)
+
+```
+sudo apt install moreutils
+```

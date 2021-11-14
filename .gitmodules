@@ -49,3 +49,6 @@
 [submodule "config/vim/pack/plugins/start/csv.vim"]
 	path = config/vim/pack/plugins/start/csv.vim
 	url = git@github.com:chrisbra/csv.vim.git
+[submodule "clones/moreutils"]
+	path = clones/moreutils
+	url = git://git.joeyh.name/moreutils

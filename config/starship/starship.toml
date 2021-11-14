@@ -54,6 +54,6 @@ disabled = true
 # Nobl9 specific
 [custom.sloctl]
 description = 'provides current sloctl context'
-command = "cat ~/.config/nobl9/config.toml | grep defaultContext | awk '{print $3}' | sed 's/\"//g'"
+command = "cat ~/.config/nobl9/config.toml | tomlq -r .defaultContext"
 format = '[|](#4c566a) [N9](#5E81AC) [$output](#8FBCBB) '
 when = 'true'
