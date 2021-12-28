@@ -232,9 +232,6 @@ ex ()
 export SPICETIFY_INSTALL="$HOME/spicetify-cli"
 export PATH="$SPICETIFY_INSTALL:$PATH"
 
-# lol
-export VIMINIT='let $MYVIMRC="$XDG_CONFIG_HOME/vim/vimrc" | source $MYVIMRC'
-
 # pyenv path -- place it toward the end of bashrc
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init --path)"
@@ -242,6 +239,9 @@ eval "$(pyenv virtualenv-init -)"
 
 # any other custom files to be sourced
 source "$HOME"/nobl9/nobl9rc.bash
+
+# Run dircolors to set LS_COLORS in the envs
+eval "$(dircolors)" 
 
 # starship prompt init, should stay on the bottom
 eval "$(starship init bash)"

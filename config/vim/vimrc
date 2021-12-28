@@ -65,7 +65,7 @@ noremap <leader>d c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>
 vnoremap <leader>e c<c-r>=system('base64', @")<cr><BS><esc>gv<left>
 
 " Clear highlight after pressing ESC
-nnoremap <esc> :noh<return><esc>
+" nnoremap <esc> :noh<return><esc>
 
 " The Looks {{{1
 

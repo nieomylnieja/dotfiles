@@ -6,7 +6,9 @@ scan_timeout = 10
 
 # Use custom format
 format = """
-┌$username$kubernetes\
+┌$time\
+$username\
+$kubernetes\
 ${custom.sloctl}\
 $directory\
 $git_branch\
@@ -17,6 +19,13 @@ $git_state
 """
 
 # modules config
+[time]
+disabled = false
+format = '[$time]($style) '
+time_format = "%H:%M:%S"
+utc_time_offset = "local"
+style = "#d8dee9"
+
 [git_branch]
 format = '[|](#4c566a) [$symbol$branch]($style) '
 truncation_length = 32

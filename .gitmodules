@@ -11,43 +11,43 @@
 	path = clones/git-secrets
 	url = git@github.com:awslabs/git-secrets.git
 [submodule "config/vim/vim/pack/plugins/start/lightline.vim"]
-	path = config/vim/pack/plugins/start/lightline
+	path = config/nvim/pack/plugins/start/lightline
 	url = https://github.com/itchyny/lightline.vim.git
 [submodule "config/vim/vim/pack/plugins/start/fzf.vim"]
-	path = config/vim/pack/plugins/start/fzf
+	path = config/nvim/pack/plugins/start/fzf
 	url = https://github.com/junegunn/fzf.vim.git
 [submodule "config/vim/vim/pack/plugins/start/nerdtree"]
-	path = config/vim/pack/plugins/start/nerdtree
+	path = config/nvim/pack/plugins/start/nerdtree
 	url = https://github.com/preservim/nerdtree.git
 [submodule "config/vim/vim/pack/plugins/start/nerdtree-git-plugin"]
-	path = config/vim/pack/plugins/start/nerdtree-git-plugin
+	path = config/nvim/pack/plugins/start/nerdtree-git-plugin
 	url = https://github.com/Xuyuanp/nerdtree-git-plugin.git
 [submodule "config/vim/vim/pack/plugins/start/vim-sensible"]
-	path = config/vim/pack/plugins/start/vim-sensible
+	path = config/nvim/pack/plugins/start/vim-sensible
 	url = https://github.com/tpope/vim-sensible.git
 [submodule "config/vim/vim/pack/plugins/start/vim-commentary"]
-	path = config/vim/pack/plugins/start/vim-commentary
+	path = config/nvim/pack/plugins/start/vim-commentary
 	url = https://github.com/tpope/vim-commentary.git
 [submodule "config/vim/vim/pack/plugins/start/vim-surround"]
-	path = config/vim/pack/plugins/start/vim-surround
+	path = config/nvim/pack/plugins/start/vim-surround
 	url = https://github.com/tpope/vim-surround.git
 [submodule "config/vim/vim/pack/plugins/start/vim-fugitive"]
-	path = config/vim/pack/plugins/start/vim-fugitive
+	path = config/nvim/pack/plugins/start/vim-fugitive
 	url = https://github.com/tpope/vim-fugitive.git
 [submodule "config/vim/vim/pack/plugins/start/vim-repeat"]
-	path = config/vim/pack/plugins/start/vim-repeat
+	path = config/nvim/pack/plugins/start/vim-repeat
 	url = https://github.com/tpope/vim-repeat.git
 [submodule "config/vim/vim/pack/plugins/start/coc.nvim"]
-	path = config/vim/pack/plugins/opt/coc
+	path = config/nvim/pack/plugins/opt/coc
 	url = https://github.com/neoclide/coc.nvim.git
 [submodule "config/vim/vim/pack/plugins/start/nord-vim"]
-	path = config/vim/pack/plugins/start/nord-vim
+	path = config/nvim/pack/plugins/start/nord-vim
 	url = https://github.com/arcticicestudio/nord-vim.git
 [submodule "clones/spicetify-themes"]
 	path = clones/spicetify-themes
 	url = https://github.com/morpheusthewhite/spicetify-themes
 [submodule "config/vim/pack/plugins/start/csv.vim"]
-	path = config/vim/pack/plugins/start/csv.vim
+	path = config/nvim/pack/plugins/start/csv.vim
 	url = git@github.com:chrisbra/csv.vim.git
 [submodule "clones/moreutils"]
 	path = clones/moreutils

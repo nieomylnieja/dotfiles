@@ -22,7 +22,7 @@ ln -sf qtile/qtile.desktop
 ln -s "$DOTFILES/nord_dircolors/src/dir_colors" "~/.dir_colors"
 ```
 
-1. Vim
+1. Vim - deprecated
 
 Make sure It has the right options, you might need to install `vim-athena` or `vim-gnome` to enable clipboard support
 For `coc` to work at all you'll have to install a recent nodejs version. I prefer using `nvm` for managing those with ease.
@@ -35,6 +35,12 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash 
 cd vim/pack/plugins/opt/coc && yarn install && cd -
 ```
 
+1. Neovim
+
+Make sure to run:
+```shell
+:CocInstall coc-json
+```
 
 1. Tmux
 
