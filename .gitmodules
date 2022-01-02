@@ -52,3 +52,13 @@
 [submodule "clones/moreutils"]
 	path = clones/moreutils
 	url = git://git.joeyh.name/moreutils
+[submodule "clones/fzf"]
+	path = clones/fzf
+	url = git@github.com:junegunn/fzf.git
+[submodule "clones/autojump"]
+	path = clones/autojump
+	url = git@github.com:wting/autojump.git
+[submodule "clones/neovim"]
+	path = clones/neovim
+	url = git@github.com:neovim/neovim.git
+	branch = stable

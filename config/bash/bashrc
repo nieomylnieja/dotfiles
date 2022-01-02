@@ -1,7 +1,7 @@
 export DOTFILES="$HOME/.dotfiles"
 
 # autojump
-source /usr/share/autojump/autojump.sh
+source /etc/profile.d/autojump.sh
 
 # run ssh-agent on every tmux or terminal login
 # if this won't be enaugh for managing multiple 
@@ -20,8 +20,9 @@ shopt -s expand_aliases
 shopt -s extglob
 
 # Set VIM prompt
+alias vim='nvim'
 set -o vi
-export EDITOR="vim"
+export EDITOR="nvim"
 
 # Set language
 export LANG=en_US.UTF-8
@@ -96,9 +97,6 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # scripts path
 export PATH="$HOME/.dotfiles/scripts:$PATH"
 
-# haskell
-eval "$(stack --bash-completion-script stack)"
-
 # kafka
 # export PATH="$HOME/kafka_2.12-2.5.0/bin:$PATH"
 
@@ -113,12 +111,14 @@ cover () {
 ## Completion
 source /usr/share/bash-completion/bash_completion
 
+# haskell
+eval "$(stack --bash-completion-script stack)"
+
 # kubectl autocomplete
 source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
 alias k=kubectl
 # extend completion to work with the alias
 complete -F __start_kubectl k
-
 
 # create file with ancestor dir structure
 mkfileP() { 
@@ -128,8 +128,8 @@ mkfileP() {
 # krew path
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
-# BASH SHARED SEARCH HISTORY
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+# Bash shared search history
+[ -f $XDG_CONFIG_HOME/fzf/fzf.bash ] && source $XDG_CONFIG_HOME/fzf/fzf.bash
 # Avoid duplicates
 HISTCONTROL=ignoredups:erasedups  
 # When the shell exits, append to the history file instead of overwriting it
@@ -179,7 +179,7 @@ export NVM_DIR="$HOME/.nvm"
 # python gitlab cli
 export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
 
-# convenience env to secpify default browser
+# convenience env to specify default browser
 export BROWSER=brave-browser
 
 # colored man pages
@@ -190,9 +190,6 @@ export LESS_TERMCAP_se=$'\e[0m'
 export LESS_TERMCAP_so=$'\e[01;95m'
 export LESS_TERMCAP_ue=$'\e[0m'
 export LESS_TERMCAP_us=$'\e[1;4;96m'
-
-# fzf key bindings
-. /usr/share/doc/fzf/examples/key-bindings.bash
 
 # bash search history
 export HISTSIZE=10000
@@ -245,3 +242,6 @@ eval "$(dircolors)"
 
 # starship prompt init, should stay on the bottom
 eval "$(starship init bash)"
+
+# l1
+[ -f "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash ] && source "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash

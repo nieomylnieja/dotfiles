@@ -12,16 +12,16 @@
 	insteadOf = https://github.com/
 
 [commit]
-    	template = /home/mhawrus/.dotfiles/config/git/commit-template
+  template = /home/mhawrus/.dotfiles/config/git/commit-template
 
 [pull]
 	rebase = false
 
 [core]
 	excludesfile = /home/mhawrus/.gitignore_global
-	editor = vim
-  	autocrlf = input
-    	pager = delta
+	editor = "$EDITOR"
+  autocrlf = input
+  pager = delta
 
 [alias]
   pushf = push --force-with-lease
@@ -29,26 +29,26 @@
   to = checkout
 
 [interactive]
-    	diffFilter = delta --color-only
+  diffFilter = delta --color-only
 
 [delta]
-    	features = side-by-side line-numbers decorations
+  features = side-by-side line-numbers decorations
 	syntax-theme = Nord
-    	whitespace-error-style = 22 reverse
+  whitespace-error-style = 22 reverse
 	plus-style = "28 bold black"
 	plus-emph-style = "#254117 28"
 	plus-non-emph-style = "28"
-    	minus-style = "red bold black"
+  minus-style = "red bold black"
 	minus-emph-style = "red #800517"
 	minus-non-emph-styl = "red"
 
 [delta "decorations"]
 	commit-decoration-style = bold yellow box ul
-    	file-style = bold yellow ul
-    	file-decoration-style = none
-   	hunk-header-decoration-style = cyan box ul
+  file-style = bold yellow ul
+  file-decoration-style = none
+  hunk-header-decoration-style = cyan box ul
 
 [delta "line-numbers"]
 	line-numbers-zero-style = "#4c566a"
-    	line-numbers-minus-style = red
-    	line-numbers-plus-style = 28
+  line-numbers-minus-style = red
+  line-numbers-plus-style = 28
