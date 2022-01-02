@@ -1,4 +1,5 @@
-VIM=nvim
+SHELL := /bin/bash
+VIM := nvim
 
 
 .PHONY: update/nvim
@@ -40,6 +41,10 @@ update/pfetch:
 	git submodule update --remote clones/pfetch
 	@${MAKE} install/pfetch
 
+.PHONY: update/tmux
+update/tmux:
+	./config/tmux/tpm/bin/update_plugins all
+
 .PHONY: install
 install:
 	git submodule update --init --recursive --remote
@@ -67,3 +72,14 @@ install/pfetch:
 install/cargo:
 	curl https://sh.rustup.rs -sSf | sh
 	cargo install cargo-update
+
+.PHONY: install/tmux
+install/tmux:
+	./config/tmux/tpm/bin/install_plugins
+
+.PHONY: link
+link:
+	source config/bash/bashrc
+	mkdir -p $$XDG_CONFIG_HOME/tmux
+	ln -sf $$DOTFILES/config/tmux/tmux.conf $$XDG_CONFIG_HOME/tmux/tmux.conf
+	ln -sf $$DOTFILES/config/tmux/tpm $$XDG_CONFIG_HOME/tmux/tpm

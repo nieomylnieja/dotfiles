@@ -1,3 +1,9 @@
+# Adhere to xdg specification
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_STATE_HOME="$HOME/.local/state"
+export XDG_CACHE_HOME="$HOME/.cache"
+
 export DOTFILES="$HOME/.dotfiles"
 
 # autojump
@@ -44,9 +50,6 @@ export PATH="$HOME/.local/bin:$PATH"
 # apparently it doesn't solve the problem with newer jdk versions
 export _JAVA_AWT_WM_NONREPARENTING=1
 
-# so tmux can use 256 colors
-alias tmux='TERM=xterm-256color tmux'
-
 # those fancy rust speeders
 alias ls='exa --group-directories-first'
 alias du='dust'
@@ -91,14 +94,15 @@ alias docker_clean_ps='docker rm $(docker ps --filter=status=exited --filter=sta
 alias dstop='sudo systemctl stop docker.socket && sudo systemctl stop docker.service'
 alias dstart='sudo systemctl start docker.socket && sudo systemctl start docker.service'
 
+# Start tmux in the XDG_STATE_HOME so the logs placement is not random
+alias start_tmux='mkdir -p $XDG_STATE_HOME/tmux && cd $XDG_STATE_HOME/tmux &&
+  tmux -f $XDG_CONFIG_HOME/tmux/tmux.conf -T 256'
+
 # rust binaries
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # scripts path
 export PATH="$HOME/.dotfiles/scripts:$PATH"
-
-# kafka
-# export PATH="$HOME/kafka_2.12-2.5.0/bin:$PATH"
 
 # golang coverage
 cover () {

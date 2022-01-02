@@ -62,3 +62,6 @@
 	path = clones/neovim
 	url = git@github.com:neovim/neovim.git
 	branch = stable
+[submodule "config/tmux/plugins/tpm"]
+	path = config/tmux/tpm
+	url = git@github.com:tmux-plugins/tpm.git
