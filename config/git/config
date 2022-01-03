@@ -12,14 +12,14 @@
 	insteadOf = https://github.com/
 
 [commit]
-  template = /home/mhawrus/.dotfiles/config/git/commit-template
+	template = /home/mhawrus/.dotfiles/config/git/commit-template
 
 [pull]
 	rebase = false
 
 [core]
-	excludesfile = /home/mhawrus/.gitignore_global
-	editor = "$EDITOR"
+	excludesfile = /home/mhawrus/.dotfiles/config/git/gitignore-global
+	editor = nvim
   autocrlf = input
   pager = delta
 

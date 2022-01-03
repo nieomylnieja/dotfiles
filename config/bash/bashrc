@@ -25,6 +25,9 @@ shopt -s expand_aliases
 # more powerful pattern matching
 shopt -s extglob
 
+# expand env variables
+shopt -s direxpand
+
 # Set VIM prompt
 alias vim='nvim'
 set -o vi
@@ -53,6 +56,7 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 # those fancy rust speeders
 alias ls='exa --group-directories-first'
 alias du='dust'
+alias cat='bat'
 
 # Alias definitions.
 alias cd..='cd ..'
@@ -103,6 +107,11 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 # scripts path
 export PATH="$HOME/.dotfiles/scripts:$PATH"
+
+# git config setup
+git config --global commit.template "$DOTFILES/config/git/commit-template"
+git config --global core.excludesfile "$DOTFILES/config/git/gitignore-global"
+git config --global core.editor "$EDITOR"
 
 # golang coverage
 cover () {

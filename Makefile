@@ -80,6 +80,17 @@ install/tmux:
 .PHONY: link
 link:
 	source config/bash/bashrc
+	@${MAKE} link/tmux
+	@${MAKE} link/git
+
+.PHONY: link/tmux
+link/tmux:
 	mkdir -p $$XDG_CONFIG_HOME/tmux
 	ln -sf $$DOTFILES/config/tmux/tmux.conf $$XDG_CONFIG_HOME/tmux/tmux.conf
 	ln -sf $$DOTFILES/config/tmux/tpm $$XDG_CONFIG_HOME/tmux/tpm
+
+.PHONY: link/git
+link/git:
+	mkdir -p $$XDG_CONFIG_HOME/git
+	ln -sf $$DOTFILES/config/git/config $$XDG_CONFIG_HOME/git/config
+
