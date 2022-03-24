@@ -65,3 +65,12 @@
 [submodule "config/tmux/plugins/tpm"]
 	path = config/tmux/tpm
 	url = git@github.com:tmux-plugins/tpm.git
+[submodule "clones/ctags"]
+	path = clones/ctags
+	url = git@github.com:universal-ctags/ctags.git
+[submodule "config/nvim/pack/plugins/start/tagbar"]
+	path = config/nvim/pack/plugins/start/tagbar
+	url = git@github.com:preservim/tagbar.git
+[submodule "config/nvim/pack/plugins/start/markdown-preview.nvim"]
+	path = config/nvim/pack/plugins/start/markdown-preview.nvim
+	url = git@github.com:iamcco/markdown-preview.nvim.git

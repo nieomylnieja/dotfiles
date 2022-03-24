@@ -4,12 +4,13 @@ let mapleader = ','
 " Plugins {{{1
 
 function! ImportConfig(file)
-  exec printf('source %s', fnamemodify(expand('$MYVIMRC'), ':h') . expand('/') . a:file)
+  exec printf('source %s', fnamemodify(expand('$MYVIMRC'), ':h') . expand('/config/') . a:file)
 endfunction
 
 call ImportConfig('coc.vim')
 call ImportConfig('nerdtree.vim')
 call ImportConfig('lightline.vim')
+call ImportConfig('markdown-preview.vim')
 
 " Runtime for FZF
 set runtimepath+=/usr/local/bin/fzf
@@ -18,6 +19,9 @@ set runtimepath+=/usr/local/bin/fzf
 colorscheme nord
 
 " General preferences {{{1
+
+" Center the view
+set scrolloff=9999
 
 " Tabbing
 set tabstop=2           " The number of spaces a tab is
@@ -61,3 +65,12 @@ vnoremap y "+y
 " Neat base64 decoding and encoding
 noremap <leader>d c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>
 vnoremap <leader>e c<c-r>=system('base64', @")<cr><BS><esc>gv<left>
+
+" j/k will move virtual lines (lines that wrap)
+noremap <silent> <expr> j (v:count == 0 ? 'gj' : 'j')
+noremap <silent> <expr> k (v:count == 0 ? 'gk' : 'k')
+
+" Functions {{{1
+
+command! ReloadVimConfigs so $MYVIMRC
+  \| echo 'configs reloaded!'

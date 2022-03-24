@@ -49,10 +49,6 @@ esac
 # local user bins
 export PATH="$HOME/.local/bin:$PATH"
 
-# java gui doesn't see xmonad as a nonparenting app, this is a clean way to inform it about that
-# apparently it doesn't solve the problem with newer jdk versions
-export _JAVA_AWT_WM_NONREPARENTING=1
-
 # those fancy rust speeders
 alias ls='exa --group-directories-first'
 alias du='dust'
@@ -60,7 +56,7 @@ alias cat='bat'
 
 # Alias definitions.
 alias cd..='cd ..'
-alias l='ls -l --icons'
+alias l='ls -1 --icons | fzf --preview "if [ -f {2} ]; then bat --style numbers,changes --color=always {2} | head -500; else tree -C {2} | head -500; fi" | sed -r "s/^.{2}//"'
 alias la='ls -a'
 alias lt='ls --tree --icons'
 alias ll='ls -lah'
@@ -86,9 +82,6 @@ alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
 alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
 alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
 
-# scripts aliases
-alias klog='klog.sh'
-
 # vpn for studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
 
@@ -98,15 +91,22 @@ alias docker_clean_ps='docker rm $(docker ps --filter=status=exited --filter=sta
 alias dstop='sudo systemctl stop docker.socket && sudo systemctl stop docker.service'
 alias dstart='sudo systemctl start docker.socket && sudo systemctl start docker.service'
 
-# Start tmux in the XDG_STATE_HOME so the logs placement is not random
-alias start_tmux='mkdir -p $XDG_STATE_HOME/tmux && cd $XDG_STATE_HOME/tmux &&
-  tmux -f $XDG_CONFIG_HOME/tmux/tmux.conf -T 256'
+alias start_tmux='tmux kill-server || tmux new-session -c $HOME'
+
+# confirm before overwriting something
+alias cp="cp -i"
+alias mv='mv -i'
+alias rm='rm -I'
+
+# java gui doesn't see xmonad as a nonparenting app, this is a clean way to inform it about that
+# apparently it doesn't solve the problem with newer jdk versions
+export _JAVA_AWT_WM_NONREPARENTING=1
 
 # rust binaries
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # scripts path
-export PATH="$HOME/.dotfiles/scripts:$PATH"
+export PATH="$HOME/.dotfiles/scripts:$HOME/.dotfiles/scripts/k8s:$PATH"
 
 # git config setup
 git config --global commit.template "$DOTFILES/config/git/commit-template"
@@ -168,6 +168,43 @@ export FZF_DEFAULT_COMMAND='fd --type f'
 export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
 --color fg:#88C0D0,hl:#EBCB8B,fg+:#88C0D0,hl+:#EBCB8B,bg+:#434C5E
 --color pointer:#BF616A,info:#4C566A,spinner:#4C566A,header:#4C566A,prompt:#B48EAD,marker:#EBCB8B'
+
+export FZF_ALT_C_COMMAND='fd --type d'
+export FZF_ALT_C_OPTS='--preview "tree -C {} | head -500"'
+
+export FZF_CTRL_T_COMMAND='fd --type f'
+export FZF_CTRL_T_OPTS='--preview "bat --style numbers,changes --color=always {} | head -500"'
+
+export FZF_COMPLETION_OPTS='--border --info=inline'
+export FZF_COMPLETION_TRIGGER='**'
+
+# Use fd (https://github.com/sharkdp/fd) instead of the default find
+# command for listing path candidates.
+# - The first argument to the function ($1) is the base path to start traversal
+# - See the source code (completion.{bash,zsh}) for the details.
+_fzf_compgen_path() {
+  fd --hidden --follow --exclude ".git" . "$1"
+}
+
+# Use fd to generate the list for directory completion
+_fzf_compgen_dir() {
+  fd --type d --hidden --follow --exclude ".git" . "$1"
+}
+
+# (EXPERIMENTAL) Advanced customization of fzf options via _fzf_comprun function
+# - The first argument to the function is the name of the command.
+# - You should make sure to pass the rest of the arguments to fzf.
+_fzf_comprun() {
+  local command=$1
+  shift
+
+  case "$command" in
+    cd)           fzf "$@" --preview 'tree -C {} | head -200' ;;
+    export|unset) fzf "$@" --preview "eval 'echo \$'{}" ;;
+    ssh)          fzf "$@" --preview 'dig {}' ;;
+    *)            fzf "$@" ;;
+  esac
+}
 
 # pfetch configuration
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"

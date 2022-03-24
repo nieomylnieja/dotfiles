@@ -30,7 +30,7 @@ set NERDTree
 set commentary
 
 " MAPPING {{{1
-map <C-q> :NERDTreeToggle<CR>
+map <C-n> :NERDTreeToggle<CR>
 map <C-f> :NERDTreeFocus<CR>
 map gq :tabclose<CR>
 

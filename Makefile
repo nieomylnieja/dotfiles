@@ -77,6 +77,41 @@ install/cargo:
 install/tmux:
 	./config/tmux/tpm/bin/install_plugins
 
+.PHONY: install/gnu-parallel
+install/gnu-parallel:
+	mkdir -p build
+	wget -P build https://ftpmirror.gnu.org/parallel/parallel-latest.tar.bz2
+	tar -C build -xjf build/parallel-latest.tar.bz2
+	cd build/parallel-* && ./configure && make && sudo make install
+	rm -rf build
+
+.PHONY: install/gawk
+install/gawk:
+	mkdir -p build
+	wget -P build https://ftp.gnu.org/gnu/gawk/gawk-5.1.1.tar.gz
+	tar -C build -xvpzf build/gawk-5.1.1.tar.gz
+	cd build/gawk-5.1.1 && ./configure && make && make check && sudo make install
+	rm -rf build
+
+.PHONY: install/qtile
+install/qtile:
+	pip install --no-cache-dir xcffib cairocffi dbus-next
+	pip install qtile
+
+define pandoc_version
+pandoc-$$(cat build/pandoc-latest.json | jq -r .tag_name)
+endef
+
+.PHONY: install/markdown
+install/markdown:
+	mkdir -p build
+	curl https://api.github.com/repos/jgm/pandoc/releases/latest > build/pandoc-latest.json
+	cat build/pandoc-latest.json | jq '.assets[] | select(.name? | match("linux.*amd64")) | .browser_download_url' | xargs wget -P build
+	tar -C build -xvpzf build/$(call pandoc_version)-linux-amd64.tar.gz
+	sudo cp build/$(call pandoc_version)/bin/pandoc /usr/local/bin
+	sudo cp build/$(call pandoc_version)/share/man/man1/pandoc.1.gz /usr/local/share/man/man1
+	rm -rf build
+
 .PHONY: link
 link:
 	source config/bash/bashrc

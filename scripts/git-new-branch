@@ -11,5 +11,6 @@ curl -s "$domain/rest/api/2/search?jql=assignee=$user_id+and+project=$jira_proje
   sed 's/ /-/g' |
   sed -E 's/-{2,}/-/g' |
   sed 's/-*$//' |
+  sed 's/[:^~,]//' |
   fzf |
   xargs git checkout -b

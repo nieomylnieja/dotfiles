@@ -15,7 +15,13 @@
 	template = /home/mhawrus/.dotfiles/config/git/commit-template
 
 [pull]
-	rebase = false
+  rebase = false
+
+[merge]
+  conflictstyle = diff3
+
+[init]
+	defaultBranch = main
 
 [core]
 	excludesfile = /home/mhawrus/.dotfiles/config/git/gitignore-global
@@ -30,6 +36,9 @@
 
 [interactive]
   diffFilter = delta --color-only
+
+[diff "sopsdiffer"]
+        textconv = "sops -d"
 
 [delta]
   features = side-by-side line-numbers decorations
