@@ -9,7 +9,8 @@ update/nvim: install/nvim
 update/vim/plugins:
 	git submodule foreach --recursive \
 		'if echo "$$sm_path" | grep "^config/${VIM}/pack/plugins" >/dev/null ; then git pull ; fi'
-	@${MAKE} install/vim/coc
+	@${MAKE} update/vim/coc
+	${VIM} -c "TSUpdate"
 
 .PHONY: update/rust
 update/rust:
@@ -45,18 +46,29 @@ update/pfetch:
 update/tmux:
 	./config/tmux/tpm/bin/update_plugins all
 
+.PHONY: update/yt-dlp
+update/yt-dlp:
+	yt-dlp -U
+
+.PHONY: update/vim/coc
+update/vim/coc:
+	yarn install --cwd config/${VIM}/pack/plugins/opt/coc
+	${VIM} -c 'CocUpdate'
+
 .PHONY: install
 install:
 	git submodule update --init --recursive --remote
 	@${MAKE} install/vim/coc
 
-.PHONY: install/nvim/coc
+.PHONY: install/vim/coc
 install/vim/coc:
 	yarn install --frozen-lockfile --cwd config/${VIM}/pack/plugins/opt/coc
+	${VIM} -c 'CocInstall coc-json coc-pyrigth'
 
 .PHONY: install/nvim
 install/nvim:
-	git -C clones/neovim checkout stable
+	git -C clones/neovim checkout master
+	git -C clones/neovim pull
 	make -C clones/neovim
 	sudo make -C clones/neovim install
 
@@ -76,6 +88,11 @@ install/cargo:
 .PHONY: install/tmux
 install/tmux:
 	./config/tmux/tpm/bin/install_plugins
+
+.PHONY: install/yt-dlp
+install/yt-dlp:
+	sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+	sudo chmod a+rx /usr/local/bin/yt-dlp
 
 .PHONY: install/gnu-parallel
 install/gnu-parallel:
@@ -112,6 +129,33 @@ install/markdown:
 	sudo cp build/$(call pandoc_version)/share/man/man1/pandoc.1.gz /usr/local/share/man/man1
 	rm -rf build
 
+.PHONY: install/compton
+install/compton:
+	sudo apt install compton
+	ln -sf $$DOTFILES/config/compton/compton.conf $$XDG_CONFIG_HOME/compton.conf
+
+.PHONY: install/nitrogen
+install/nitrogen:
+	sudo apt install nitrogen
+
+define github_release_version
+$(1)-$$(cat build/$(1)-latest.json | jq -r .tag_name)
+endef
+
+.PHONY: install/rofi
+install/rofi:
+	mkdir -p build
+	curl https://api.github.com/repos/davatorium/rofi/releases/latest > build/rofi-latest.json
+	cat build/rofi-latest.json | jq '.assets[] | select(.name | (match(".*tar.gz"))) | .browser_download_url' | xargs wget -P build
+	tar -C build -xvpzf build/$(call github_release_version,rofi).tar.gz
+	cd build/$(call github_release_version,rofi) &&\
+		mkdir -p build &&\
+		cd build &&\
+		../configure &&\
+		make &&\
+		sudo make install
+	rm -rf build
+
 .PHONY: link
 link:
 	source config/bash/bashrc
@@ -129,3 +173,12 @@ link/git:
 	mkdir -p $$XDG_CONFIG_HOME/git
 	ln -sf $$DOTFILES/config/git/config $$XDG_CONFIG_HOME/git/config
 
+.PHONY: link/qtile
+link/qtile:
+	sudo ln -sf $$DOTFILES/config/qtile/qtile.desktop /usr/share/xsessions
+	ln -sf $$DOTFILES/config/qtile/config.py $$XDG_CONFIG_HOME/qtile/config.py
+	ln -sf $$DOTFILES/config/qtile/autostart.sh $$XDG_CONFIG_HOME/qtile/autostart.sh
+
+.PHONY: link/rofi
+link/rofi:
+	ln -sf $$DOTFILES/config/rofi $$XDG_CONFIG_HOME/rofi

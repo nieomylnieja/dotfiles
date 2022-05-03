@@ -9,6 +9,7 @@ format = """
 ┌$time\
 $username\
 $kubernetes\
+$gcloud\
 ${custom.sloctl}\
 $directory\
 $git_branch\
@@ -41,10 +42,11 @@ style = '#ebcb8b'
 [kubernetes]
 format = '[$namespace $symbol](blue)[$context](#8fbcbb) '
 disabled = false
-[kubernetes.context_aliases]
-'lerta-dev' = 'development'
-'lerta-production' = '\033[0;31mproduction'
-'lerta-testing' = "testing"
+
+[gcloud]
+format = '[|](#4c566a) [$symbol](blue)[$project](#8fbcbb) '
+symbol = "️🇬️  "
+disabled = false
 
 [status]
 disabled = false

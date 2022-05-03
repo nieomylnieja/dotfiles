@@ -74,3 +74,9 @@
 [submodule "config/nvim/pack/plugins/start/markdown-preview.nvim"]
 	path = config/nvim/pack/plugins/start/markdown-preview.nvim
 	url = git@github.com:iamcco/markdown-preview.nvim.git
+[submodule "config/nvim/pack/plugins/start/nvim-treesitter"]
+	path = config/nvim/pack/plugins/start/nvim-treesitter
+	url = git@github.com:nvim-treesitter/nvim-treesitter.git
+[submodule "config/nvim/pack/plugins/start/rasi.vim"]
+	path = config/nvim/pack/plugins/start/rasi.vim
+	url = git@github.com:Fymyte/rasi.vim.git

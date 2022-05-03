@@ -11,6 +11,7 @@ call ImportConfig('coc.vim')
 call ImportConfig('nerdtree.vim')
 call ImportConfig('lightline.vim')
 call ImportConfig('markdown-preview.vim')
+call ImportConfig('treesitter.lua')
 
 " Runtime for FZF
 set runtimepath+=/usr/local/bin/fzf
@@ -38,6 +39,10 @@ set smartcase           " ... unless term contains an uppercase character
 set textwidth=80        " Hard-wrap text at nth column
 set nowrap              " Don't wrap long lines (good for vsplits)
 
+" Folding
+set foldmethod=indent
+set foldlevel=99
+
 " General
 set lazyredraw          " Do not redraw screen in the middle of a macro. Makes them complete faster.
 set clipboard=unnamed,unnamedplus
@@ -61,6 +66,9 @@ noremap <Left> <Nop>
 
 " System clipboard
 vnoremap y "+y
+
+" Fold with space
+nnoremap <space> za
 
 " Neat base64 decoding and encoding
 noremap <leader>d c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>
