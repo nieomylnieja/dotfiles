@@ -80,3 +80,6 @@
 [submodule "config/nvim/pack/plugins/start/rasi.vim"]
 	path = config/nvim/pack/plugins/start/rasi.vim
 	url = git@github.com:Fymyte/rasi.vim.git
+[submodule "clones/Nordic"]
+	path = clones/Nordic
+	url = git@github.com:EliverLara/Nordic.git

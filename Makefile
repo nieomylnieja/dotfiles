@@ -138,6 +138,21 @@ install/compton:
 install/nitrogen:
 	sudo apt install nitrogen
 
+.PHONY: install/slock
+install/slock:
+	@if ! [ -d build/slock ]; then \
+		mkdir -p build &&\
+		cp -r sources/slock/patched build/slock &&\
+		cp sources/slock/config.h build/slock/config.h; fi
+	@if grep 'replace-me-.*' build/slock/config.h > /dev/null; then \
+		echo "set your user and group manually in config.h" && exit 1; fi
+	sudo make -C build/slock install
+	rm -rf build
+
+.PHONY: install/xautolock
+install/xautolock:
+	sudo apt install xautolock
+
 define github_release_version
 $(1)-$$(cat build/$(1)-latest.json | jq -r .tag_name)
 endef
@@ -155,6 +170,11 @@ install/rofi:
 		make &&\
 		sudo make install
 	rm -rf build
+
+.PHONY: install/nordic-gtk
+install/nordic-gtk: link/nordic-gtk
+	gsettings set org.gnome.desktop.interface gtk-theme "Nordic"
+	gsettings set org.gnome.desktop.wm.preferences theme "Nordic"
 
 .PHONY: link
 link:
@@ -175,10 +195,14 @@ link/git:
 
 .PHONY: link/qtile
 link/qtile:
-	sudo ln -sf $$DOTFILES/config/qtile/qtile.desktop /usr/share/xsessions
+	sudo ln -sf $$DOTFILES/config/qtile/qtile.desktop /usr/share/xsessions/qtile.desktop
 	ln -sf $$DOTFILES/config/qtile/config.py $$XDG_CONFIG_HOME/qtile/config.py
 	ln -sf $$DOTFILES/config/qtile/autostart.sh $$XDG_CONFIG_HOME/qtile/autostart.sh
 
 .PHONY: link/rofi
 link/rofi:
 	ln -sf $$DOTFILES/config/rofi $$XDG_CONFIG_HOME/rofi
+
+.PHONY: link/nordic-gtk
+link/nordic-gtk:
+	sudo ln -sf $$DOTFILES/clones/Nordic /usr/share/themes/Nordic
