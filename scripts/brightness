@@ -1,0 +1,57 @@
+#!/bin/bash
+
+
+if [ "$#" -ne 2 ]; then
+  echo >&2 "invalid number of arguments, provide exactly 2 --> <DIRECTION> <STEP>"
+  exit 1
+fi
+
+# One of {up, down}
+DIRECTION="$1"
+# Step Up/Down brightnes by: 5 = ".05", 10 = ".10", etc.
+STEP="$2"
+
+for monitor in $(xrandr -q | grep ' connected' | cut -d ' ' -f1); do
+  current=$(xrandr --verbose --current | grep ^"$monitor" -A5 | tail -n1)
+  current="${current##* }"
+
+  left=${current%%"."*}
+  right=${current#*"."}
+
+  calculated="0"
+  if [[ "$left" != 0 ]]; then
+    calculated=100
+  else
+    calculated=$(( calculated + right ))
+  fi
+
+  case $DIRECTION in
+    up) calculated=$(( calculated + STEP )) ;;
+    down) calculated=$(( calculated - STEP )) ;;
+    *)
+      echo "$DIRECTION is invalid value for DIRECTION, should be one of {up, down}"
+      exit 1
+      ;;
+  esac
+
+  [[ "${calculated:0:1}" == "-" ]] && calculated=0
+  [[ "$calculated" -gt 100  ]] && calculated=100
+
+  if [[ "${#calculated}" -eq 3 ]] ; then
+      calculated="$calculated"000
+      current="${calculated:0:1}.${calculated:1:2}"
+  else
+      calculated="$calculated"000
+      current=".${calculated:0:2}"
+  fi
+
+  xrandr --output "$monitor" --brightness "$current"
+
+  # Display current brightness
+  echo "Monitor $monitor $( xrandr --verbose --current |
+    grep ^"$monitor" -A5 |
+    tail -n1 )"
+
+done
+
+exit 0

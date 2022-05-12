@@ -1,0 +1,12 @@
+. ~/.profile
+
+# These values might change, to figure out what's right follow these steps:
+# xinput list               --> List the devices
+# xinput list-props <dev>   --> Use the device id here (or quoted name) to see all the options
+# xinput set-prop <dev> <opt> <val>
+xinput set-prop 12 325 1
+
+# set key repeat rate [delay per/sec]
+xset r rate 200 26
+
+xrdb -merge "$DOTFILES/config/Xorg/Xresources"

@@ -7,6 +7,7 @@ from libqtile import bar, layout, widget, hook
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 from libqtile.command import lazy
+from libqtile.widget.pulse_volume import PulseVolume
 
 mod = "mod4"
 terminal = "alacritty"
@@ -91,17 +92,37 @@ keys = [
     Key([mod], "f",
         lazy.window.toggle_fullscreen(),
         desc='Toggle fullscreen'),
+    Key([mod, "shift"], "f",
+         lazy.window.toggle_floating(),
+         desc='toggle floating'),
     Key([mod], "n",
         lazy.layout.normalize(),
         desc="Reset all window sizes"),
 
     # Switch focus of monitors
-     Key([mod], "period",
-         lazy.next_screen(),
-         desc='Move focus to next monitor'),
-     Key([mod], "comma",
-         lazy.prev_screen(),
-         desc='Move focus to prev monitor'),
+    Key([mod], "period",
+        lazy.next_screen(),
+        desc='Move focus to next monitor'),
+    Key([mod], "comma",
+        lazy.prev_screen(),
+        desc='Move focus to prev monitor'),
+
+    # Media keys
+    Key([], "XF86AudioMute",
+        lazy.spawn("pulseaudio-ctl mute"),
+        desc='Mute the audio'),
+    Key([], "XF86AudioRaiseVolume",
+        lazy.spawn("pulseaudio-ctl up 1"),
+        desc='Raise volume level'),
+    Key([], "XF86AudioLowerVolume",
+        lazy.spawn("pulseaudio-ctl down 1"),
+        desc='Lower volume level'),
+    Key([], "XF86MonBrightnessUp",
+        lazy.spawn("brightness up 5"),
+        desc='Increase brightness level'),
+    Key([], "XF86MonBrightnessDown",
+        lazy.spawn("brightness down 5"),
+        desc='Lower brightness level'),
 ]
 
 groups = [Group(i) for i in "123456789"]
@@ -167,8 +188,8 @@ screens = [
                     },
                     name_transform=lambda name: name.upper(),
                 ),
+                PulseVolume(),
                 widget.TextBox("test config", name="default"),
-                widget.TextBox("Press &lt;M-r&gt; to spawn", foreground="#d75f5f"),
                 widget.Systray(),
                 widget.Clock(format='%Y-%m-%d %a %I:%M %p'),
                 widget.QuickExit(),

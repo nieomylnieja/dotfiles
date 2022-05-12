@@ -153,6 +153,10 @@ install/slock:
 install/xautolock:
 	sudo apt install xautolock
 
+.PHONY: install/pavucontrol
+install/pavucontrol:
+	cd clones/pavucontrol && ./bootstrap.sh && ./configure && make && sudo make install
+
 define github_release_version
 $(1)-$$(cat build/$(1)-latest.json | jq -r .tag_name)
 endef
@@ -206,3 +210,12 @@ link/rofi:
 .PHONY: link/nordic-gtk
 link/nordic-gtk:
 	sudo ln -sf $$DOTFILES/clones/Nordic /usr/share/themes/Nordic
+
+.PHONY: link/pulseaudio-ctl
+link/pulseaudio-ctl:
+	mkdir -p $$XDG_CONFIG_HOME/pulseaudio-ctl
+	ln -sf $$DOTFILES/config/pulseaudio/pulseaudio-ctl-config $$XDG_CONFIG_HOME/pulseaudio-ctl/config
+
+.PHONY: link/xprofile
+link/xprofile:
+	ln -sf $$DOTFILES/config/Xorg/xprofile $$HOME/.xprofile

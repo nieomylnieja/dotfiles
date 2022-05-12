@@ -83,3 +83,6 @@
 [submodule "clones/Nordic"]
 	path = clones/Nordic
 	url = git@github.com:EliverLara/Nordic.git
+[submodule "clones/pavucontrol"]
+	path = clones/pavucontrol
+	url = https://gitlab.freedesktop.org/pulseaudio/pavucontrol.git

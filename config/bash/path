@@ -1,0 +1,24 @@
+#!/bin/bash
+# path contains all essential path extensions which should be loaded for some of
+# the programs to be visible early on.
+
+paths=(
+  "/usr/local/go/bin" 
+  "$HOME/bin"
+  "$HOME/.local/bin"
+  "$HOME/.cargo/bin" 
+  "$HOME/.dotfiles/scripts"
+  "$HOME/.dotfiles/scripts/k8s"
+  "$HOME/.yarn/bin"
+  "$HOME/.config/yarn/global/node_modules/.bin"
+)
+
+if [ -x "$(command -v go)" ]; then
+  paths+=("$(go env GOPATH)/bin")
+fi
+
+for newPath in "${paths[@]}"; do
+  if [ -d "$newPath" ]; then
+    export PATH="$newPath:$PATH"
+  fi
+done
