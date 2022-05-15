@@ -11,6 +11,7 @@ paths=(
   "$HOME/.dotfiles/scripts/k8s"
   "$HOME/.yarn/bin"
   "$HOME/.config/yarn/global/node_modules/.bin"
+  "$HOME/.local/share/coursier/bin"
 )
 
 if [ -x "$(command -v go)" ]; then

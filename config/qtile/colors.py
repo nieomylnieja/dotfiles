@@ -1,0 +1,18 @@
+colors = {
+    "nord0": "#2E3440",
+    "nonord1": "#3B4252",
+    "nonord2": "#434C5E",
+    "nonord3": "#4C566A",
+    "nonord4": "#D8DEE9",
+    "nonord5": "#E5E9F0",
+    "nonord6": "#ECEFF4",
+    "nonord7": "#8FBCBB",
+    "nonord8": "#88C0D0",
+    "nonord9": "#81A1C1",
+    "nonord10": "#5E81AC",
+    "nonord11": "#BF616A",
+    "nonord12": "#D08770",
+    "nonord13": "#EBCB8B",
+    "nonord14": "#A3BE8C",
+    "nonord15": "#B48EAD",
+}

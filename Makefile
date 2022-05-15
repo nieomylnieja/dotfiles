@@ -157,6 +157,10 @@ install/xautolock:
 install/pavucontrol:
 	cd clones/pavucontrol && ./bootstrap.sh && ./configure && make && sudo make install
 
+.PHONY: install/lsps
+install/lsps:
+	npm i -g pyright
+
 define github_release_version
 $(1)-$$(cat build/$(1)-latest.json | jq -r .tag_name)
 endef
@@ -179,6 +183,10 @@ install/rofi:
 install/nordic-gtk: link/nordic-gtk
 	gsettings set org.gnome.desktop.interface gtk-theme "Nordic"
 	gsettings set org.gnome.desktop.wm.preferences theme "Nordic"
+
+.PHONY: install/arandr
+install/arandr:
+	sudo aptitude install arandr
 
 .PHONY: link
 link:
@@ -219,3 +227,4 @@ link/pulseaudio-ctl:
 .PHONY: link/xprofile
 link/xprofile:
 	ln -sf $$DOTFILES/config/Xorg/xprofile $$HOME/.xprofile
+	ln -sf $$DOTFILES/config/Xorg/Xresources $$HOME/.Xresources

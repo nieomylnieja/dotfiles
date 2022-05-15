@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Device ids might change to figure out what's right follow these steps:
+# xinput list               --> List the devices
+# xinput list-props <dev>   --> Use the device id here (or quoted name) to see all the options
+# xinput set-prop <dev> <opt> <val>
+
+re="Natural Scrolling Enabled \(([0-9]+)\)"
+
+for inputID in $(xinput list --id-only); do
+  if [[ $(xinput list-props "$inputID") =~ $re ]]; then
+    xinput set-prop "$inputID" "${BASH_REMATCH[1]}" 1
+  fi
+done

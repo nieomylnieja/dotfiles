@@ -12,6 +12,8 @@ call ImportConfig('nerdtree.vim')
 call ImportConfig('lightline.vim')
 call ImportConfig('markdown-preview.vim')
 call ImportConfig('treesitter.lua')
+call ImportConfig('lspconfig.lua')
+call ImportConfig('metals.lua')
 
 " Runtime for FZF
 set runtimepath+=/usr/local/bin/fzf
