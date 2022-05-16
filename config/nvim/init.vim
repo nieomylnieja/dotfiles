@@ -14,6 +14,7 @@ call ImportConfig('markdown-preview.vim')
 call ImportConfig('treesitter.lua')
 call ImportConfig('lspconfig.lua')
 call ImportConfig('metals.lua')
+call ImportConfig('telescope.lua')
 
 " Runtime for FZF
 set runtimepath+=/usr/local/bin/fzf
@@ -79,6 +80,12 @@ vnoremap <leader>e c<c-r>=system('base64', @")<cr><BS><esc>gv<left>
 " j/k will move virtual lines (lines that wrap)
 noremap <silent> <expr> j (v:count == 0 ? 'gj' : 'j')
 noremap <silent> <expr> k (v:count == 0 ? 'gk' : 'k')
+
+" Telescope mappings, should move these to telescope.lua
+nnoremap <leader>ff <cmd>lua require('telescope.builtin').find_files()<cr>
+nnoremap <leader>fg <cmd>lua require('telescope.builtin').live_grep()<cr>
+nnoremap <leader>fb <cmd>lua require('telescope.builtin').buffers()<cr>
+nnoremap <leader>fh <cmd>lua require('telescope.builtin').help_tags()<cr>
 
 " Functions {{{1
 

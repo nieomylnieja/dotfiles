@@ -9,6 +9,6 @@ re="Natural Scrolling Enabled \(([0-9]+)\)"
 
 for inputID in $(xinput list --id-only); do
   if [[ $(xinput list-props "$inputID") =~ $re ]]; then
-    xinput set-prop "$inputID" "${BASH_REMATCH[1]}" 1
+    xinput set-prop "$inputID" "${BASH_REMATCH[1]}" 0
   fi
 done

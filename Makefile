@@ -1,16 +1,15 @@
 SHELL := /bin/bash
-VIM := nvim
-
 
 .PHONY: update/nvim
 update/nvim: install/nvim
 
-.PHONY: update/vim/plugins
-update/vim/plugins:
+.PHONY: update/nvim/plugins
+update/nvim/plugins:
 	git submodule foreach --recursive \
-		'if echo "$$sm_path" | grep "^config/${VIM}/pack/plugins" >/dev/null ; then git pull ; fi'
-	@${MAKE} update/vim/coc
-	${VIM} -c "TSUpdate"
+		'if echo "$$sm_path" | grep "^config/nvim/pack/plugins" >/dev/null ; then git pull ; fi'
+	@${MAKE} update/nvim/coc
+	nvim -c "TSUpdate"
+	@${MAKE} nvim/helptags
 
 .PHONY: update/rust
 update/rust:
@@ -50,20 +49,24 @@ update/tmux:
 update/yt-dlp:
 	yt-dlp -U
 
-.PHONY: update/vim/coc
-update/vim/coc:
-	yarn install --cwd config/${VIM}/pack/plugins/opt/coc
-	${VIM} -c 'CocUpdate'
+.PHONY: update/nvim/coc
+update/nvim/coc:
+	yarn install --cwd config/nvim/pack/plugins/opt/coc
+	nvim -c 'CocUpdate'
 
 .PHONY: install
 install:
 	git submodule update --init --recursive --remote
-	@${MAKE} install/vim/coc
+	@${MAKE} install/nvim/coc
 
-.PHONY: install/vim/coc
-install/vim/coc:
-	yarn install --frozen-lockfile --cwd config/${VIM}/pack/plugins/opt/coc
-	${VIM} -c 'CocInstall coc-json coc-pyrigth'
+.PHONY: install/nvim/coc
+install/nvim/coc:
+	yarn install --frozen-lockfile --cwd config/nvim/pack/plugins/opt/coc
+	nvim -c 'CocInstall coc-json coc-pyrigth'
+
+.PHONY: install/nvim/telescope
+install/nvim/telescope:
+	make -C config/nvim/pack/plugins/start/telescope-fzf-native.nvim
 
 .PHONY: install/nvim
 install/nvim:
@@ -228,3 +231,8 @@ link/pulseaudio-ctl:
 link/xprofile:
 	ln -sf $$DOTFILES/config/Xorg/xprofile $$HOME/.xprofile
 	ln -sf $$DOTFILES/config/Xorg/Xresources $$HOME/.Xresources
+
+.PHONY: nvim/helptags
+nvim/helptags:
+	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
+		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"

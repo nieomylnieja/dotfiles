@@ -13,9 +13,6 @@
 [submodule "config/vim/vim/pack/plugins/start/lightline.vim"]
 	path = config/nvim/pack/plugins/start/lightline
 	url = https://github.com/itchyny/lightline.vim.git
-[submodule "config/vim/vim/pack/plugins/start/fzf.vim"]
-	path = config/nvim/pack/plugins/start/fzf
-	url = https://github.com/junegunn/fzf.vim.git
 [submodule "config/vim/vim/pack/plugins/start/nerdtree"]
 	path = config/nvim/pack/plugins/start/nerdtree
 	url = https://github.com/preservim/nerdtree.git
@@ -104,3 +101,9 @@
 [submodule "config/nvim/pack/plugins/start/cmp-nvim-lsp"]
 	path = config/nvim/pack/plugins/start/cmp-nvim-lsp
 	url = https://github.com/hrsh7th/cmp-nvim-lsp.git
+[submodule "config/nvim/pack/plugins/start/telescope-fzf-native.nvim"]
+	path = config/nvim/pack/plugins/start/telescope-fzf-native.nvim
+	url = https://github.com/nvim-telescope/telescope-fzf-native.nvim.git
+[submodule "config/nvim/pack/plugins/start/telescope.nvim"]
+	path = config/nvim/pack/plugins/start/telescope.nvim
+	url = https://github.com/nvim-telescope/telescope.nvim.git
