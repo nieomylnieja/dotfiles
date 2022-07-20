@@ -16,9 +16,12 @@ vim.opt_global.shortmess:remove("F"):append("c")
 
 -- LSP mappings
 map("n", "gD", "<cmd>lua vim.lsp.buf.definition()<CR>")
+map("n", "K", "<cmd>lua vim.lsp.buf.hover()<CR>")
+map("n", "gi", "<cmd>lua vim.lsp.buf.implementation()<CR>")
+map("n", "gr", "<cmd>lua vim.lsp.buf.references()<CR>")
 map("n", "<leader>cl", [[<cmd>lua vim.lsp.codelens.run()<CR>]])
 map("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>")
-map("n", "<leader>f", "<cmd>lua vim.lsp.buf.format({ async = true })<CR>")
+map("n", "<leader>f", "<cmd>lua vim.lsp.buf.formatting()<CR>")
 
 -- completion related settings
 -- This is similiar to what I use

@@ -72,7 +72,7 @@ install/nvim/telescope:
 install/nvim:
 	git -C clones/neovim checkout master
 	git -C clones/neovim pull
-	make -C clones/neovim
+	sudo make -C clones/neovim
 	sudo make -C clones/neovim install
 
 .PHONY: install/autojump
@@ -150,7 +150,7 @@ install/slock:
 	@if grep 'replace-me-.*' build/slock/config.h > /dev/null; then \
 		echo "set your user and group manually in config.h" && exit 1; fi
 	sudo make -C build/slock install
-	rm -rf build
+	# rm -rf build
 
 .PHONY: install/xautolock
 install/xautolock:
@@ -162,7 +162,11 @@ install/pavucontrol:
 
 .PHONY: install/lsps
 install/lsps:
-	npm i -g pyright
+	go install golang.org/x/tools/gopls@latest
+	npm install -g \
+		pyright \
+		awk-language-server \
+		bash-language-server
 
 define github_release_version
 $(1)-$$(cat build/$(1)-latest.json | jq -r .tag_name)
@@ -189,13 +193,19 @@ install/nordic-gtk: link/nordic-gtk
 
 .PHONY: install/arandr
 install/arandr:
-	sudo aptitude install arandr
+	sudo apt install arandr
+
+.PHONY: install/flameshot
+install/flameshot:
+	sudo apt install flameshot
+
+.PHONY: install/zoxide
+install/zoxide:
+	curl -sS https://webinstall.dev/zoxide | bash
 
 .PHONY: link
-link:
+link: link/tmux link/git
 	source config/bash/bashrc
-	@${MAKE} link/tmux
-	@${MAKE} link/git
 
 .PHONY: link/tmux
 link/tmux:
@@ -231,6 +241,10 @@ link/pulseaudio-ctl:
 link/xprofile:
 	ln -sf $$DOTFILES/config/Xorg/xprofile $$HOME/.xprofile
 	ln -sf $$DOTFILES/config/Xorg/Xresources $$HOME/.Xresources
+
+.PHONY: link/rust
+link/rust:
+	ln -sf $$DOTFILES/config/rust/cargo $$HOME/.cargo/config
 
 .PHONY: nvim/helptags
 nvim/helptags:

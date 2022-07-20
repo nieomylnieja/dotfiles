@@ -7,7 +7,6 @@ from libqtile import bar, layout, widget, hook
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 from libqtile.command import lazy
-from libqtile.widget.pulse_volume import PulseVolume
 
 mod = "mod4"
 terminal = "alacritty"
@@ -188,8 +187,9 @@ screens = [
                     },
                     name_transform=lambda name: name.upper(),
                 ),
-                PulseVolume(),
-                widget.TextBox("test config", name="default"),
+                widget.Battery(format="{percent:2.0%}"),
+                widget.BatteryIcon(),
+                widget.PulseVolume(),
                 widget.Systray(),
                 widget.Clock(format='%Y-%m-%d %a %I:%M %p'),
                 widget.QuickExit(),
@@ -235,8 +235,8 @@ reconfigure_screens = True
 # focus, should we respect this or not?
 auto_minimize = True
 
-@hook.subscribe.startup_once
-def start_once():
+@hook.subscribe.startup
+def start():
     home = os.path.expanduser('~')
     subprocess.call([home + '/.config/qtile/autostart.sh'])
 

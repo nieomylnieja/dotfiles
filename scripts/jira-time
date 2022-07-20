@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -uo pipefail
+
+SCRIPT_PATH=$DOTFILES/scripts
+
+read -r -d '\n' email token domain user_id jira_project <<<"\
+  $(sops --config "$SCRIPT_PATH/.sops.yaml" -d "$SCRIPT_PATH/atlassian-secrets.enc.json" |
+  jq -r '.email, .token, .domain, .user_id, .jira_project')"
+
+START_FROM=${1:-6d}
+
+jql=$(echo "worklogAuthor = currentUser() and worklogDate > \
+  startOfWeek("-${START_FROM}")" | \
+  jq -sRr @uri)
+ISSUES=$(curl -f \
+  -s "${domain}/rest/api/3/search?jql=${jql}" \
+  -H "Content-Type: application/json" \
+  -u "$email:$token" )
+
+#ISSUEIDS=$(echo $ISSUES | jq -r '.issues[].id')
+ISSUEKEYS=$(echo $ISSUES | jq -r '.issues[].key')
+
+for i in ${ISSUEKEYS[@]}
+do
+    RESULT+=$(curl -f \
+        -s "${domain}/rest/api/3/issue/$i/worklog" \
+        -H "Content-Type: application/json" \
+        -u "$email:$token" | \
+      jq -r '.worklogs[] | select(.author.accountId=="'"$user_id"'") | .started,.timeSpentSeconds' | \
+      awk 'BEGIN{OFS=","} NR%2{v=$0;next;}{print $0,v}' | \
+      sed -e 's/^/'$i',/' )"\n"
+done
+
+echo -e "$RESULT" | awk -F',' '
+{
+  date=substr($3,0,10)
+  count[date]["v"]+=$2
+  count[date]["is"][$1]+=$2
+  tasks[$1]+=$2
+} END {
+  for (task in tasks) {
+    printf "%s %.2f\n", task, tasks[task]/(60*60) 
+  } 
+  for (date in count) { 
+    printf "%s %.2f ", date, count[date]["v"]/(60*60)
+    for (i in count[date]["is"]) 
+      printf "%s(%.2f),\n", i, count[date]["is"][i]/(60*60);
+    }
+  }' | \
+sort | \
+tail -n +2 | \
+column -t 

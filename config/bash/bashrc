@@ -38,6 +38,7 @@ source /etc/profile.d/autojump.sh
 alias ls='exa --group-directories-first'
 alias du='dust'
 alias cat='bat'
+alias cd='z'
 
 # Alias definitions.
 alias cd..='cd ..'
@@ -61,11 +62,6 @@ alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
 alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
 alias podEnv='kubectl get pod -o name | ag intake | xargs -I {} kubectl exec {} -- env | ag -v _SERVICE | ag INTAKE'
-
-# lerta aliases
-alias awslogin='$(aws ecr get-login --no-include-email --region us-east-1)'
-alias tag='git rev-parse --short HEAD | tr -d "\n" | xclip -sel c'
-alias timenow='date +"%Y-%m-%dT%H:%M:%S.%N" | head -c 23 | xargs -I {} echo {}Z'
 
 # vpn for studies
 alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
@@ -112,6 +108,9 @@ complete -F __start_kubectl k
 mkfileP() { 
 	mkdir -p "$(dirname "$1")" || return; touch "$1";
 }
+
+# Golang GOPATH --> some programs still need it this way.
+export GOPATH="$(go env GOPATH)"
 
 # krew path
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
@@ -252,6 +251,9 @@ eval "$(pyenv virtualenv-init -)"
 # any other custom files to be sourced
 source "$HOME"/nobl9/nobl9rc.bash
 
+# Zoxide (cd replacement)
+eval "$(zoxide init bash)"
+
 # Run dircolors to set LS_COLORS in the envs
 eval "$(dircolors)" 
 
@@ -260,3 +262,7 @@ eval "$(starship init bash)"
 
 # l1
 [ -f "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash ] && source "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash
+
+# Generated for envman. Do not edit.
+[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
+

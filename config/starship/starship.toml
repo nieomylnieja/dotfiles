@@ -9,8 +9,8 @@ format = """
 ┌$time\
 $username\
 $kubernetes\
-$gcloud\
 ${custom.sloctl}\
+$aws\
 $directory\
 $git_branch\
 $git_status\
@@ -43,11 +43,6 @@ style = '#ebcb8b'
 format = '[$namespace $symbol](blue)[$context](#8fbcbb) '
 disabled = false
 
-[gcloud]
-format = '[|](#4c566a) [$symbol](blue)[$project](#8fbcbb) '
-symbol = "️🇬️  "
-disabled = false
-
 [status]
 disabled = false
 
@@ -61,6 +56,11 @@ format = '[|](#4c566a) [$path]($style)[$read_only]($read_only_style) '
 
 [package]
 disabled = true
+
+[aws]
+format = '[|](#4c566a) [$symbol($profile )]($style)'
+style = "bold blue"
+symbol = "☁️ "
 
 # Nobl9 specific
 [custom.sloctl]
