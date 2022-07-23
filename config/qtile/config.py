@@ -127,43 +127,50 @@ keys = [
 groups = [Group(i) for i in "123456789"]
 
 for i in groups:
-    keys.extend(
-        [
-            # mod1 + letter of group = switch to group
-            Key(
-                [mod],
-                i.name,
-                lazy.group[i.name].toscreen(),
-                desc="Switch to group {}".format(i.name),
-            ),
-            # mod1 + shift + letter of group = switch to & move focused window to group
-            Key(
-                [mod, "shift"],
-                i.name,
-                lazy.window.togroup(i.name, switch_group=True),
-                desc="Switch to & move focused window to group {}".format(i.name),
-            ),
-            # Or, use below if you prefer not to switch to that group.
-            # # mod1 + shift + letter of group = move focused window to group
-            # Key([mod, "shift"], i.name, lazy.window.togroup(i.name),
-            #     desc="move focused window to group {}".format(i.name)),
-        ]
-    )
+    keys.extend([
+        # mod1 + letter of group = switch to group
+        Key([mod], i.name,
+            lazy.group[i.name].toscreen(),
+            desc="Switch to group {}".format(i.name)),
+        # mod1 + shift + letter of group = switch to & move focused window to group
+        Key([mod, "shift"], i.name,
+            lazy.window.togroup(i.name, switch_group=True),
+            desc="Switch to & move focused window to group {}".format(i.name)),
+    ])
+
+# See https://www.nordtheme.com/docs/colors-and-palettes
+colors = {
+    "polar-0": "#2E3440",
+    "polar-1": "#3B4252",
+    "polar-2": "#434C5E",
+    "polar-3": "#4C566A",
+    "snow-0": "#D8DEE9",
+    "snow-1": "#E5E9F0",
+    "snow-2": "#ECEFF4",
+    "frost-0": "#8FBCBB",
+    "frost-1": "#88C0D0",
+    "frost-2": "#81A1C1",
+    "frost-3": "#5E81AC",
+    "aurora-0": "#BF616A",
+    "aurora-1": "#D08770",
+    "aurora-2": "#EBCB8B",
+    "aurora-3": "#A3BE8C",
+    "aurora-4": "#B48EAD",
+}
+
+layout_theme = {
+    "border_width": 2,
+    "margin": 8,
+    "border_focus": colors["frost-0"],
+    "border_normal": colors["polar-0"]
+}
 
 layouts = [
-    layout.Columns(border_focus_stack=["#d75f5f", "#8f3d3d"], border_width=4),
-    layout.Max(),
-    # Try more layouts by unleashing below layouts.
-    # layout.Stack(num_stacks=2),
-    # layout.Bsp(),
-    # layout.Matrix(),
-    # layout.MonadTall(),
-    # layout.MonadWide(),
-    # layout.RatioTile(),
-    # layout.Tile(),
-    # layout.TreeTab(),
-    # layout.VerticalTile(),
-    # layout.Zoomy(),
+    layout.MonadTall(**layout_theme),
+    layout.MonadWide(**layout_theme),
+    layout.Max(**layout_theme),
+    layout.Stack(num_stacks=2),
+    layout.RatioTile(**layout_theme),
 ]
 
 widget_defaults = dict(
@@ -175,9 +182,8 @@ extension_defaults = widget_defaults.copy()
 
 screens = [
     Screen(
-        bottom=bar.Bar(
+        top=bar.Bar(
             [
-                widget.CurrentLayout(),
                 widget.GroupBox(),
                 widget.Prompt(),
                 widget.WindowName(),
@@ -191,8 +197,20 @@ screens = [
                 widget.BatteryIcon(),
                 widget.PulseVolume(),
                 widget.Systray(),
+                widget.NetGraph(
+                    bandwidth_type = "down",
+                    type='line',
+                    border_color = colors["polar-3"],
+                    graph_color = colors["frost-2"],
+                    line_width=1,
+                    padding = 5),
+                widget.Wlan(
+                    format="{essid} {percent:2.0%}",
+                    interface = "wlo1",
+                    padding = 5),
+                widget.CurrentLayout(
+                    padding = 5),
                 widget.Clock(format='%Y-%m-%d %a %I:%M %p'),
-                widget.QuickExit(),
             ],
             24,
         ),

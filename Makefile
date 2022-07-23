@@ -116,7 +116,8 @@ install/gawk:
 .PHONY: install/qtile
 install/qtile:
 	pip install --no-cache-dir xcffib cairocffi dbus-next
-	pip install qtile
+	sudo aptitude intstall libghc-iwlib-dev
+	pip install qtile psutil iwlib
 
 define pandoc_version
 pandoc-$$(cat build/pandoc-latest.json | jq -r .tag_name)

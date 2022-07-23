@@ -1,10 +1,10 @@
 #!/bin/bash
 
-run {
+run() {
   if ! pgrep $1 > /dev/null; then
-    $@&
+    "$@" &
   fi
 }
 
-nitrogen --restore &
-xautolock -time 5 -locker locker &
+run nitrogen --restore
+run xautolock -time 5 -locker locker
