@@ -10,7 +10,7 @@ from libqtile.command import lazy
 
 mod = "mod4"
 terminal = "alacritty"
-browser = "brave-browser"
+browser = "brave"
 
 keys = [
     # The basics
@@ -108,13 +108,13 @@ keys = [
 
     # Media keys
     Key([], "XF86AudioMute",
-        lazy.spawn("pulseaudio-ctl mute"),
+        lazy.spawn('if [ "$(pamixer --get-mute)" == "true" ]; then pamixer --unmute; else pamixer --mute; fi'),
         desc='Mute the audio'),
     Key([], "XF86AudioRaiseVolume",
-        lazy.spawn("pulseaudio-ctl up 1"),
+        lazy.spawn("pamixer -i 5"),
         desc='Raise volume level'),
     Key([], "XF86AudioLowerVolume",
-        lazy.spawn("pulseaudio-ctl down 1"),
+        lazy.spawn("pamixer -d 5"),
         desc='Lower volume level'),
     Key([], "XF86MonBrightnessUp",
         lazy.spawn("brightness up 5"),

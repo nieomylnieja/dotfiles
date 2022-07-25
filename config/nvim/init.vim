@@ -7,7 +7,6 @@ function! ImportConfig(file)
   exec printf('source %s', fnamemodify(expand('$MYVIMRC'), ':h') . expand('/config/') . a:file)
 endfunction
 
-call ImportConfig('coc.vim')
 call ImportConfig('nerdtree.vim')
 call ImportConfig('lightline.vim')
 call ImportConfig('markdown-preview.vim')

@@ -12,7 +12,7 @@
 	insteadOf = https://github.com/
 
 [commit]
-	template = /home/mhawrus/.dotfiles/config/git/commit-template
+	template = /home/mh/.dotfiles/config/git/commit-template
 
 [pull]
   rebase = false
@@ -24,7 +24,7 @@
 	defaultBranch = main
 
 [core]
-	excludesfile = /home/mhawrus/.dotfiles/config/git/gitignore-global
+	excludesfile = /home/mh/.dotfiles/config/git/gitignore-global
 	editor = nvim
   autocrlf = input
   pager = delta

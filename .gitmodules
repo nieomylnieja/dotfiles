@@ -1,15 +1,6 @@
-[submodule "pfetch"]
-	path = clones/pfetch
-	url = git@github.com:dylanaraps/pfetch.git
-[submodule "nord-dircolors"]
-	path = clones/nord-dircolors
-	url = git@github.com:arcticicestudio/nord-dircolors.git
 [submodule "delta"]
 	path = delta
 	url = git@github.com:dandavison/delta.git
-[submodule "git-secrets"]
-	path = clones/git-secrets
-	url = git@github.com:awslabs/git-secrets.git
 [submodule "config/vim/vim/pack/plugins/start/lightline.vim"]
 	path = config/nvim/pack/plugins/start/lightline
 	url = https://github.com/itchyny/lightline.vim.git
@@ -34,37 +25,15 @@
 [submodule "config/vim/vim/pack/plugins/start/vim-repeat"]
 	path = config/nvim/pack/plugins/start/vim-repeat
 	url = https://github.com/tpope/vim-repeat.git
-[submodule "config/vim/vim/pack/plugins/start/coc.nvim"]
-	path = config/nvim/pack/plugins/opt/coc
-	url = https://github.com/neoclide/coc.nvim.git
 [submodule "config/vim/vim/pack/plugins/start/nord-vim"]
 	path = config/nvim/pack/plugins/start/nord-vim
 	url = https://github.com/arcticicestudio/nord-vim.git
-[submodule "clones/spicetify-themes"]
-	path = clones/spicetify-themes
-	url = https://github.com/morpheusthewhite/spicetify-themes
 [submodule "config/vim/pack/plugins/start/csv.vim"]
 	path = config/nvim/pack/plugins/start/csv.vim
 	url = git@github.com:chrisbra/csv.vim.git
-[submodule "clones/moreutils"]
-	path = clones/moreutils
-	url = git://git.joeyh.name/moreutils
-[submodule "clones/fzf"]
-	path = clones/fzf
-	url = git@github.com:junegunn/fzf.git
-[submodule "clones/autojump"]
-	path = clones/autojump
-	url = git@github.com:wting/autojump.git
-[submodule "clones/neovim"]
-	path = clones/neovim
-	url = git@github.com:neovim/neovim.git
-	branch = stable
 [submodule "config/tmux/plugins/tpm"]
 	path = config/tmux/tpm
 	url = git@github.com:tmux-plugins/tpm.git
-[submodule "clones/ctags"]
-	path = clones/ctags
-	url = git@github.com:universal-ctags/ctags.git
 [submodule "config/nvim/pack/plugins/start/tagbar"]
 	path = config/nvim/pack/plugins/start/tagbar
 	url = git@github.com:preservim/tagbar.git
@@ -77,12 +46,6 @@
 [submodule "config/nvim/pack/plugins/start/rasi.vim"]
 	path = config/nvim/pack/plugins/start/rasi.vim
 	url = git@github.com:Fymyte/rasi.vim.git
-[submodule "clones/Nordic"]
-	path = clones/Nordic
-	url = git@github.com:EliverLara/Nordic.git
-[submodule "clones/pavucontrol"]
-	path = clones/pavucontrol
-	url = https://gitlab.freedesktop.org/pulseaudio/pavucontrol.git
 [submodule "config/nvim/pack/plugins/start/plenary.nvim"]
 	path = config/nvim/pack/plugins/start/plenary.nvim
 	url = https://github.com/nvim-lua/plenary.nvim.git

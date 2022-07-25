@@ -8,6 +8,12 @@
 # export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock
 # ssh-add -l > /dev/null || ssh-add
 
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
 # allow aliases
 shopt -s expand_aliases
 
@@ -20,16 +26,9 @@ shopt -s direxpand
 # Set VIM prompt
 alias vim='nvim'
 set -o vi
-export EDITOR="nvim"
 
-# If not running interactively, don't do anything
-case $- in
-    *i*) ;;
-      *) return;;
-esac
-
-# autojump
-source /etc/profile.d/autojump.sh
+#ignore upper and lowercase when TAB completion
+bind "set completion-ignore-case on"
 
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
@@ -63,72 +62,48 @@ alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" 
 alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
 alias podEnv='kubectl get pod -o name | ag intake | xargs -I {} kubectl exec {} -- env | ag -v _SERVICE | ag INTAKE'
 
-# vpn for studies
-alias ppVPN='snx -s hellfire.put.poznan.pl -u mateusz.hawrus@student.put.poznan.pl'
-
 # docker aliases
 alias docker_clean_images='docker rmi $(docker images -a --filter=dangling=true -q)'
 alias docker_clean_ps='docker rm $(docker ps --filter=status=exited --filter=status=created -q)'
 alias dstop='sudo systemctl stop docker.socket && sudo systemctl stop docker.service'
 alias dstart='sudo systemctl start docker.socket && sudo systemctl start docker.service'
 
-alias start_tmux='tmux kill-server || tmux new-session -c $HOME'
-
 # confirm before overwriting something
 alias cp="cp -i"
 alias mv='mv -i'
 alias rm='rm -I'
 
-# git config setup
-git config --global commit.template "$DOTFILES/config/git/commit-template"
-git config --global core.excludesfile "$DOTFILES/config/git/gitignore-global"
-git config --global core.editor "$EDITOR"
-
-# golang coverage
-cover () {
-    local t=$(mktemp -t cover)
-    go test $COVERFLAGS -coverprofile=$t $@ \
-        && go tool cover -func=$t \
-        && unlink $t
-}
-
 ## Completion
 source /usr/share/bash-completion/bash_completion
 
 # haskell
-eval "$(stack --bash-completion-script stack)"
+if [ -x "$(command -v stack)" ]; then
+	eval "$(stack --bash-completion-script stack)"
+fi
 
 # kubectl autocomplete
-source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
-alias k=kubectl
-# extend completion to work with the alias
-complete -F __start_kubectl k
-
-# create file with ancestor dir structure
-mkfileP() { 
-	mkdir -p "$(dirname "$1")" || return; touch "$1";
-}
-
-# Golang GOPATH --> some programs still need it this way.
-export GOPATH="$(go env GOPATH)"
+if [ -x "$(command -v kubectl)" ]; then
+	source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
+	alias k=kubectl
+	# extend completion to work with the alias
+	complete -F __start_kubectl k
+fi
 
 # krew path
-export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+if [ -x "$(command -v krew)" ]; then
+	export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+fi
 
 # Bash shared search history
-[ -f $XDG_CONFIG_HOME/fzf/fzf.bash ] && source $XDG_CONFIG_HOME/fzf/fzf.bash
+if [ -f $XDG_CONFIG_HOME/fzf/fzf.bash ]; then
+  source $XDG_CONFIG_HOME/fzf/fzf.bash
+fi
 # Avoid duplicates
 HISTCONTROL=ignoredups:erasedups  
 # When the shell exits, append to the history file instead of overwriting it
 shopt -s histappend
 # After each command, append to the history file and reread it
 PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
-
-# java home
-export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
-
-# Graphviz dot
-export GRAPHVIZ_DOT=/usr/bin/dot
 
 # fzf config
 export FZF_DEFAULT_COMMAND='fd --type f'
@@ -177,24 +152,17 @@ _fzf_comprun() {
 export PF_INFO="ascii title os host kernel uptime pkgs memory wm shell editor"
 
 # nord dircolors
-test -r ~/.dotfiles/nord-dircolors/src/dir_colors && eval $(dircolors ~/.dotfiles/nord-dircolors/src/dir_colors)
 if [ ! -f ~/.dir_colors ]; then
-  ln "$DOTFILES/nord_dircolors/src/dir_colors" ~/.dir_colors
+  ln "$DOTFILES/config/dircolors/dir_colors" "$HOME/.dir_colors"
 fi
 
 # bat colors
 export BAT_THEME="Nord"
 
-# delta diff tool, since we're building it using cargo...
-export PATH="$DOTFILES/delta/target/release:$PATH"
-
 # node version manager
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-
-# python gitlab cli
-export PYTHON_GITLAB_CFG="$HOME/.config/python-gitlab-cli/.python-gitlab.cfg"
 
 # colored man pages
 export LESS_TERMCAP_mb=$'\e[1;34m'
@@ -208,9 +176,6 @@ export LESS_TERMCAP_us=$'\e[1;4;96m'
 # bash search history
 export HISTSIZE=10000
 export HISTFILESIZE=10000
-
-#ignore upper and lowercase when TAB completion
-bind "set completion-ignore-case on"
 
 ### ARCHIVE EXTRACTION
 # usage: ex <file>
@@ -240,29 +205,33 @@ ex ()
 }
 
 # Spicetify -- an awesome spotify customization cli
-export SPICETIFY_INSTALL="$HOME/spicetify-cli"
-export PATH="$SPICETIFY_INSTALL:$PATH"
+if [ -x "$(command -v spicetify-cli)" ]; then
+	export SPICETIFY_INSTALL="$HOME/spicetify-cli"
+	export PATH="$SPICETIFY_INSTALL:$PATH"
+fi
 
 # pyenv path -- place it toward the end of bashrc
-export PATH="$HOME/.pyenv/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv virtualenv-init -)"
+if [ -x "$(command -v pyenv)" ]; then
+	export PATH="$HOME/.pyenv/bin:$PATH"
+	eval "$(pyenv init --path)"
+	eval "$(pyenv virtualenv-init -)"
+fi
 
 # any other custom files to be sourced
-source "$HOME"/nobl9/nobl9rc.bash
+if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
+	source "$HOME"/nobl9/nobl9rc.bash
+fi
 
 # Zoxide (cd replacement)
-eval "$(zoxide init bash)"
+if [ -x "$(command -v zoxide)" ]; then
+	eval "$(zoxide init bash)"
+fi
 
 # Run dircolors to set LS_COLORS in the envs
 eval "$(dircolors)" 
 
 # starship prompt init, should stay on the bottom
-eval "$(starship init bash)"
-
-# l1
-[ -f "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash ] && source "${XDG_CONFIG_HOME:-$HOME/.config}"/fzf/fzf.bash
-
-# Generated for envman. Do not edit.
-[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
+if [ -x "$(command -v starship)" ]; then
+	eval "$(starship init bash)"
+fi
 

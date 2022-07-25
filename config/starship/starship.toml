@@ -8,9 +8,6 @@ scan_timeout = 10
 format = """
 ┌$time\
 $username\
-$kubernetes\
-${custom.sloctl}\
-$aws\
 $directory\
 $git_branch\
 $git_status\

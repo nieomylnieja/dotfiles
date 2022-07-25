@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Qtile
 Comment=Qtile Session
-Exec=/home/mhawrus/.pyenv/shims/qtile start
+Exec=/usr/bin/qtile
 Type=Application
 Keywords=wm;tiling
