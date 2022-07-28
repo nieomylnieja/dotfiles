@@ -70,3 +70,6 @@
 [submodule "config/nvim/pack/plugins/start/telescope.nvim"]
 	path = config/nvim/pack/plugins/start/telescope.nvim
 	url = https://github.com/nvim-telescope/telescope.nvim.git
+[submodule "config/gtk/Nordic"]
+	path = config/gtk/Nordic
+	url = git@github.com:EliverLara/Nordic.git

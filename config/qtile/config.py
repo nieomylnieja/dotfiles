@@ -238,13 +238,12 @@ cursor_warp = False
 floating_layout = layout.Floating(float_rules=[
     # Run the utility of `xprop` to see the wm class and name of an X client.
     *layout.Floating.default_float_rules,
-    Match(wm_class='confirmreset'),  # gitk
-    Match(wm_class='makebranch'),  # gitk
-    Match(wm_class='maketag'),  # gitk
-    Match(wm_class='ssh-askpass'),  # ssh-askpass
-    Match(title='branchdialog'),  # gitk
-    Match(title='pinentry'),  # GPG key password entry
-    Match(title='drata'),  # GPG key password entry
+    Match(wm_class="confirmreset"),  # gitk
+    Match(wm_class="makebranch"),  # gitk
+    Match(wm_class="maketag"),  # gitk
+    Match(wm_class="ssh-askpass"),  # ssh-askpass
+    Match(title="branchdialog"),  # gitk
+    Match(title="pinentry"),  # GPG key password entry
 ])
 auto_fullscreen = True
 focus_on_window_activation = "smart"
@@ -256,8 +255,12 @@ auto_minimize = True
 
 @hook.subscribe.startup
 def start():
-    home = os.path.expanduser('~')
-    subprocess.call([home + '/.config/qtile/autostart.sh'])
+    home = os.path.expanduser("~")
+    subprocess.call([home + "/.config/qtile/autostart.sh"])
+
+@hook.subscribe.startup_once
+def startup_once():
+    subprocess.call(["dunstify", "LOL"])
 
 # XXX: Gasp! We're lying here. In fact, nobody really uses or cares about this
 # string besides java UI toolkits; you can see several discussions on the

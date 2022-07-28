@@ -49,3 +49,4 @@ install/slock:
 	@if grep 'replace-me-.*' build/slock/config.h > /dev/null; then \
 		echo "set your user and group manually in config.h" && exit 1; fi
 	sudo make -C build/slock install
+

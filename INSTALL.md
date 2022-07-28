@@ -91,7 +91,7 @@ git clone https://github.com/nieomylnieja/dotfiles.git .dotfiles
 - general:
 
 ```sh
-yay -S neovim rofi pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn
+yay -S neovim rofi pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn dunst cronie
 python -m ensurepip --upgrade --default-pip
 pip install --upgrade pip
 pip install psutil iwlib
@@ -100,7 +100,8 @@ pip install psutil iwlib
 - shell:
 
 ```sh
-yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq
+yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq xautolock sops pacman-contrib
+go install github.com/josephburnett/jd@latest
 ```
 
 After that we'll use nvm to get `node` and `npm` (make sure it is sourced correctly by now):
