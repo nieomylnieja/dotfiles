@@ -2,12 +2,12 @@
 
 lockDisabledInputs=( chrome firefox brave zoom vlc )
 
-runningInputs=$(pacmd list-sink-inputs | 
-  tail -n +2 |
-  "$DOTFILES/scripts/locker-parser")
+runningInputs="$(pactl -f json list sink-inputs \
+  | jq -r '
+    .[].properties |
+    ."application.process.binary" + " " + ."application.name"')"
 
 for input in "${lockDisabledInputs[@]}"; do
-  echo "$input"
   if [[ "${runningInputs[*]}" =~ "${input}" ]]; then
     echo "$input is running, skipping lock"
     exit 0
