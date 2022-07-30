@@ -1,0 +1,3 @@
+#!/bin/bash
+
+if [ "$(pamixer --get-mute)" == "true" ]; then pamixer --unmute; else pamixer --mute; fi

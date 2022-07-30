@@ -8,3 +8,6 @@ run() {
 
 run nitrogen --restore
 run xautolock -time 5 -locker locker
+run flameshot
+
+setxkbmap pl

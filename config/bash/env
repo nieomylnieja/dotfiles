@@ -18,5 +18,7 @@ export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 # Set language
 export LANG=en_GB.UTF-8
 export LC_ALL=$LANG
+# Qt
+export QT_QPA_PLATFORMTHEME=qt5ct
 # Might fix some ixxues with java GUI apps
 export _JAVA_AWT_WM_NONREPARENTING=1

@@ -34,6 +34,9 @@ link/nvim:
 link/alacritty:
 	ln -sf "$$DOTFILES/config/alacritty" "$$XDG_CONFIG_HOME/alacritty"
 
+link/qt5ct:
+	ln -s "$$DOTFILES/config/qt5ct" "$$XDG_CONFIG_HOME/qt5ct"
+
 install/lsps:
 	go install golang.org/x/tools/gopls@latest
 	npm install -g \
