@@ -20,6 +20,7 @@ link/qtile:
 link/xorg:
 	ln -sf "$$DOTFILES/config/xorg/Xresources" "$$HOME/.Xresources"
 	ln -sf "$$DOTFILES/config/xorg/xprofile" "$$HOME/.xprofile"
+	ln -sf "$$DOTFILES/config/xorg/xinitc" "$$HOME/.xinitrc"
 
 link/systemd:
 	mkdir -p "$$XDG_CONFIG_HOME/systemd/user"
@@ -53,3 +54,14 @@ install/slock:
 		echo "set your user and group manually in config.h" && exit 1; fi
 	sudo make -C build/slock install
 
+.PHONY: update/nvim/plugins
+update/nvim/plugins:
+	git submodule update --recursive --remote
+	nvim -c "TSUpdate"
+	@${MAKE} nvim/helptags
+
+.PHONY: nvim/helptags
+nvim/helptags:
+	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
+		sort | uniq |\
+		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"

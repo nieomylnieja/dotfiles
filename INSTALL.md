@@ -91,7 +91,7 @@ git clone https://github.com/nieomylnieja/dotfiles.git .dotfiles
 - general:
 
 ```sh
-yay -S neovim rofi pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn dunst cronie qt5c5 lxappearance-gtk3
+yay -S neovim rofi rofi-calc pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn dunst cronie qt5c5 lxappearance-gtk3
 python -m ensurepip --upgrade --default-pip
 pip install --upgrade pip
 pip install psutil iwlib
@@ -100,7 +100,7 @@ pip install psutil iwlib
 - shell:
 
 ```sh
-yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq xautolock sops pacman-contrib httpie
+yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq yq xautolock sops pacman-contrib httpie
 go install github.com/josephburnett/jd@latest
 ```
 

@@ -63,6 +63,9 @@ alias cp="cp -i"
 alias mv='mv -i'
 alias rm='rm -I'
 
+# git
+alias gc="git branch --list | grep -v '^\* ' | tr -d ' ' | fzf --preview 'git log {}' | xargs git checkout"
+
 # yay
 alias yayd='pacman -Qq | fzf --multi --preview "pacman -Qi {1}" | xargs -ro sudo pacman -Rns'
 

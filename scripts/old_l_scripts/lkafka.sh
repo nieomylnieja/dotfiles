@@ -1,7 +1,6 @@
 #!/bin/bash
 
-set -o errtrace
-set -eo pipefail
+set -eo errtrace pipefail
 
 KAFKA_PATH=$HOME/kafka_2.12-2.5.0
 KAFKA_PAYLOADS_PATH=$HOME/Downloads/jsons/kafka

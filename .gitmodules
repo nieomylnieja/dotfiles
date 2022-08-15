@@ -1,9 +1,6 @@
 [submodule "delta"]
 	path = delta
 	url = git@github.com:dandavison/delta.git
-[submodule "config/vim/vim/pack/plugins/start/lightline.vim"]
-	path = config/nvim/pack/plugins/start/lightline
-	url = https://github.com/itchyny/lightline.vim.git
 [submodule "config/vim/vim/pack/plugins/start/nerdtree"]
 	path = config/nvim/pack/plugins/start/nerdtree
 	url = https://github.com/preservim/nerdtree.git

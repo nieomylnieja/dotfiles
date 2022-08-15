@@ -8,9 +8,6 @@ fi
 . "$DOTFILES/config/bash/env"
 . "$DOTFILES/config/bash/path"
 
-# custom script which sets natural scrolling to 1
-set-natural-scrolling
-
 # set key repeat rate [delay per/sec]
 xset r rate 200 26
 

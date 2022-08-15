@@ -22,28 +22,34 @@ keys = [
         desc="Launch launcher"),
     Key([mod], "b",
         lazy.spawn(browser),
-        desc="Launch browser"),
+        desc='Launch browser'),
     Key([mod], "s",
-        lazy.spawn("slock"),
-        desc="Lock the screen"),
-    Key([mod], "p",
-        lazy.spawn("flameshot gui --accept-on-select"),
-        desc="Take a screenshot"),
-    Key([mod, "shift"], "p",
-        lazy.spawn("flameshot gui"),
-        desc="Select a screenshot and modify it"),
+        lazy.spawn("xautolock -locknow"),
+        desc='Lock the screen'),
     Key([mod], "Tab",
         lazy.next_layout(),
-        desc="Toggle through layouts"),
+        desc='Toggle through layouts'),
     Key([mod], "d",
         lazy.window.kill(),
-        desc="Kill active window"),
+        desc='Kill active window'),
     Key([mod, "shift"], "r",
         lazy.restart(),
-        desc="Restart Qtile"),
+        desc='Restart Qtile'),
     Key([mod, "shift"], "q",
         lazy.shutdown(),
-        desc="Shutdown Qtile"),
+        desc='Shutdown Qtile'),
+
+    # Utils
+    Key([mod], "p",
+        lazy.spawn("flameshot gui --accept-on-select"),
+        desc='Take a screenshot and save it instantly after selecting'),
+    Key([mod, "shift"], "p",
+        lazy.spawn("flameshot gui"),
+        desc='Take a screenshot'),
+    Key([mod], "c",
+        lazy.spawn("rofi -show calc -modi calc -no-show-match -no-sort " +
+            "-calc-command \"echo -n '{result}' | xclip -sel c\""),
+        desc='Open calculator'),
 
     # Switch between windows
     Key([mod], "h",
@@ -93,13 +99,13 @@ keys = [
         desc="Grow window up"),
     Key([mod], "m",
         lazy.layout.maximize(),
-        desc="Toggle window between minimum and maximum sizes"),
+        desc='Toggle window between minimum and maximum sizes'),
     Key([mod], "f",
         lazy.window.toggle_fullscreen(),
-        desc="Toggle fullscreen"),
+        desc='Toggle fullscreen'),
     Key([mod, "shift"], "f",
          lazy.window.toggle_floating(),
-         desc="toggle floating"),
+         desc='toggle floating'),
     Key([mod], "n",
         lazy.layout.normalize(),
         desc="Reset all window sizes"),
@@ -107,27 +113,42 @@ keys = [
     # Switch focus of monitors
     Key([mod], "period",
         lazy.next_screen(),
-        desc="Move focus to next monitor"),
+        desc='Move focus to next monitor'),
     Key([mod], "comma",
         lazy.prev_screen(),
-        desc="Move focus to prev monitor"),
+        desc='Move focus to prev monitor'),
 
     # Media keys
+    Key([mod], "F1",
+        lazy.spawn("pamixer --toggle-mute"),
+        desc='Mute the audio'),
     Key([], "XF86AudioMute",
-        lazy.spawn("soundctl mute"),
-        desc="Mute the audio"),
+        lazy.spawn("pamixer --toggle-mute"),
+        desc='Mute the audio'),
+    Key([mod], "Page_Up",
+        lazy.spawn("pamixer --unmute -i 5"),
+        desc='Raise volume level'),
+    Key([mod], "Page_Down",
+        lazy.spawn("pamixer --unmute -d 5"),
+        desc='Lower volume level'),
     Key([], "XF86AudioRaiseVolume",
-        lazy.spawn("soundctl up 5"),
-        desc="Raise volume level"),
+        lazy.spawn("pamixer --unmute -i 5"),
+        desc='Raise volume level'),
     Key([], "XF86AudioLowerVolume",
-        lazy.spawn("soundctl down 5"),
-        desc="Lower volume level"),
+        lazy.spawn("pamixer --unmute -d 5"),
+        desc='Lower volume level'),
+    Key([mod], "F7",
+        lazy.spawn("brightness up 5"),
+        desc='Increase brightness level'),
+    Key([mod], "F6",
+        lazy.spawn("brightness down 5"),
+        desc='Lower brightness level'),
     Key([], "XF86MonBrightnessUp",
         lazy.spawn("brightness up 5"),
-        desc="Increase brightness level"),
+        desc='Increase brightness level'),
     Key([], "XF86MonBrightnessDown",
         lazy.spawn("brightness down 5"),
-        desc="Lower brightness level"),
+        desc='Lower brightness level'),
 ]
 
 groups = [Group(i) for i in "123456789"]
@@ -180,7 +201,7 @@ layouts = [
 ]
 
 widget_defaults = dict(
-    font="sans",
+    font='sans',
     fontsize=12,
     padding=3,
 )
@@ -195,7 +216,7 @@ screens = [
                 widget.WindowName(),
                 widget.Chord(
                     chords_colors={
-                        "launch": ("#ff0000", "#ffffff"),
+                        'launch': ("#ff0000", "#ffffff"),
                     },
                     name_transform=lambda name: name.upper(),
                 ),
@@ -205,7 +226,7 @@ screens = [
                 widget.Systray(),
                 widget.NetGraph(
                     bandwidth_type = "down",
-                    type="line",
+                    type='line',
                     border_color = colors["polar-3"],
                     graph_color = colors["frost-2"],
                     line_width=1,
@@ -216,7 +237,7 @@ screens = [
                     padding = 5),
                 widget.CurrentLayout(
                     padding = 5),
-                widget.Clock(format="%Y-%m-%d %a %I:%M %p"),
+                widget.Clock(format='%Y-%m-%d %a %I:%M %p'),
             ],
             24,
         ),
@@ -264,12 +285,12 @@ def start():
     home = os.path.expanduser("~")
     subprocess.call([home + "/.config/qtile/autostart.sh"])
 
-# XXX: Gasp! We"re lying here. In fact, nobody really uses or cares about this
+# XXX: Gasp! We're lying here. In fact, nobody really uses or cares about this
 # string besides java UI toolkits; you can see several discussions on the
 # mailing lists, GitHub issues, and other WM documentation that suggest setting
-# this string if your java app doesn"t work correctly. We may as well just lie
-# and say that we"re a working one by default.
+# this string if your java app doesn't work correctly. We may as well just lie
+# and say that we're a working one by default.
 #
 # We choose LG3D to maximize irony: it is a 3D non-reparenting WM written in
-# java that happens to be on java"s whitelist.
+# java that happens to be on java's whitelist.
 wmname = "LG3D"
