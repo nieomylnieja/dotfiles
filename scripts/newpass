@@ -26,7 +26,7 @@ function main() {
   echo -n "Provide a username if applicable: "
   read -r username
 
-  local pass="$(apg -n 1 -m 16 -x 16 -a 1)"
+  local pass="$(apg -n 1 -m 16 -x 16 -a 0 -M SN)"
 
   if [ -z "$username" ]; then
     echo "$pass" | pass insert -m "$path"

@@ -7,19 +7,20 @@ function! ImportConfig(file)
   exec printf('source %s', fnamemodify(expand('$MYVIMRC'), ':h') . expand('/config/') . a:file)
 endfunction
 
-call ImportConfig('nerdtree.vim')
-call ImportConfig('lightline.vim')
+call ImportConfig('nord.lua')
+call ImportConfig('neo-tree.lua')
+call ImportConfig('lualine.lua')
 call ImportConfig('markdown-preview.vim')
 call ImportConfig('treesitter.lua')
 call ImportConfig('lsp-config.lua')
 call ImportConfig('metals.lua')
 call ImportConfig('telescope.lua')
+call ImportConfig('go.lua')
+call ImportConfig('web-devicons.lua')
+call ImportConfig('nvim-dap-ui.lua')
 
 " Runtime for FZF
 set runtimepath+=/usr/local/bin/fzf
-
-" Colors
-colorscheme nord
 
 " General preferences {{{1
 
@@ -63,6 +64,12 @@ nnoremap <C-h> <C-w>h
 nnoremap <C-j> <C-w>j
 nnoremap <C-k> <C-w>k
 nnoremap <C-l> <C-w>l
+
+" Resize splits with CTRL+SHIFT+[hjkl]
+nnoremap <silent> <S-h> :vertical resize +1<CR>
+nnoremap <silent> <S-j> :resize -1<CR>
+nnoremap <silent> <S-k> :resize +1<CR>
+nnoremap <silent> <S-l> :vertical resize -1<CR>
 
 " Disable those filthy arrows
 noremap <Up> <Nop>

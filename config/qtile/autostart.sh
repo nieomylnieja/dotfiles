@@ -15,5 +15,3 @@ run xautolock -time 5 \
   -killtime 20 \
   -killer "systemctl suspend"
 run flameshot
-
-setxkbmap pl

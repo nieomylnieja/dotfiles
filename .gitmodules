@@ -1,12 +1,6 @@
 [submodule "delta"]
 	path = delta
 	url = git@github.com:dandavison/delta.git
-[submodule "config/vim/vim/pack/plugins/start/nerdtree"]
-	path = config/nvim/pack/plugins/start/nerdtree
-	url = https://github.com/preservim/nerdtree.git
-[submodule "config/vim/vim/pack/plugins/start/nerdtree-git-plugin"]
-	path = config/nvim/pack/plugins/start/nerdtree-git-plugin
-	url = https://github.com/Xuyuanp/nerdtree-git-plugin.git
 [submodule "config/vim/vim/pack/plugins/start/vim-sensible"]
 	path = config/nvim/pack/plugins/start/vim-sensible
 	url = https://github.com/tpope/vim-sensible.git
@@ -22,9 +16,6 @@
 [submodule "config/vim/vim/pack/plugins/start/vim-repeat"]
 	path = config/nvim/pack/plugins/start/vim-repeat
 	url = https://github.com/tpope/vim-repeat.git
-[submodule "config/vim/vim/pack/plugins/start/nord-vim"]
-	path = config/nvim/pack/plugins/start/nord-vim
-	url = https://github.com/arcticicestudio/nord-vim.git
 [submodule "config/vim/pack/plugins/start/csv.vim"]
 	path = config/nvim/pack/plugins/start/csv.vim
 	url = git@github.com:chrisbra/csv.vim.git
@@ -70,3 +61,27 @@
 [submodule "config/gtk/Nordic"]
 	path = config/gtk/Nordic
 	url = git@github.com:EliverLara/Nordic.git
+[submodule "config/nvim/pack/plugins/start/formatter.nvim"]
+	path = config/nvim/pack/plugins/start/formatter.nvim
+	url = git@github.com:mhartington/formatter.nvim.git
+[submodule "config/nvim/pack/plugins/start/go.nvim"]
+	path = config/nvim/pack/plugins/start/go.nvim
+	url = https://github.com/ray-x/go.nvim.git
+[submodule "config/nvim/pack/plugins/start/nord.nvim"]
+	path = config/nvim/pack/plugins/start/nord.nvim
+	url = https://github.com/shaunsingh/nord.nvim.git
+[submodule "config/nvim/pack/plugins/start/lualine.nvim"]
+	path = config/nvim/pack/plugins/start/lualine.nvim
+	url = https://github.com/nvim-lualine/lualine.nvim.git
+[submodule "config/nvim/pack/plugins/start/neo-tree.nvim"]
+	path = config/nvim/pack/plugins/start/neo-tree.nvim
+	url = https://github.com/nvim-neo-tree/neo-tree.nvim.git
+[submodule "config/nvim/pack/plugins/start/nvim-web-devicons"]
+	path = config/nvim/pack/plugins/start/nvim-web-devicons
+	url = https://github.com/kyazdani42/nvim-web-devicons.git
+[submodule "config/nvim/pack/plugins/start/nui.nvim"]
+	path = config/nvim/pack/plugins/start/nui.nvim
+	url = https://github.com/MunifTanjim/nui.nvim.git
+[submodule "config/nvim/pack/plugins/start/nvim-dap-ui"]
+	path = config/nvim/pack/plugins/start/nvim-dap-ui
+	url = https://github.com/rcarriga/nvim-dap-ui.git

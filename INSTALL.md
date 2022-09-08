@@ -100,7 +100,7 @@ pip install psutil iwlib
 - shell:
 
 ```sh
-yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq yq xautolock sops pacman-contrib httpie
+yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq yq xautolock sops pacman-contrib httpie cht.sh-git apg
 go install github.com/josephburnett/jd@latest
 ```
 
@@ -127,3 +127,20 @@ git submodule update --init --recursive --remote
     pip install yubikey-manager
     ```
 
+9. Go NeoVim setup
+
+`go.nvim` is based on treesitter, native nvim-lsp and dap debugger (rather than
+delve).
+
+## Awesome programs
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) which is a fork of `youtube-dl`
+  along with an UI like [this](https://github.com/jely2002/youtube-dl-gui),
+  I use it so rarely I can't ever memorize how to get the metadata first and
+  then use it to download the version I want, this UI just makes it easy.
+
+- GIMP for raster graphics editing -- Inkscape for vectors :)
+
+- vlc for video playback
+
+- 

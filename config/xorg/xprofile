@@ -12,3 +12,5 @@ fi
 xset r rate 200 26
 
 xrdb -merge ~/.Xresources &
+
+setxkbmap pl

@@ -54,14 +54,15 @@ install/slock:
 		echo "set your user and group manually in config.h" && exit 1; fi
 	sudo make -C build/slock install
 
-.PHONY: update/nvim/plugins
 update/nvim/plugins:
 	git submodule update --recursive --remote
 	nvim -c "TSUpdate"
 	@${MAKE} nvim/helptags
 
-.PHONY: nvim/helptags
 nvim/helptags:
 	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
 		sort | uniq |\
 		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"
+
+install/fmt-tools:
+	yay -S prettier stylua
