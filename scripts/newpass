@@ -2,7 +2,17 @@
 
 set -e
 
-function read_non_empty() {
+flag_r=false
+
+while getopts “:r” OPTION
+do
+  case $OPTION in
+    r) flag_r=true ;;
+    ?) echo "invalid flag"; exit 1 ;;
+  esac
+done
+
+read_non_empty() {
   local input
   read -r input
   if test -z "$input"; then
@@ -12,7 +22,7 @@ function read_non_empty() {
   echo "$input"
 }
 
-function main() {
+generate_new() {
   dir="$(fd -t d -H --base-directory=$HOME/.password-store | awk '{print}; END { print "New" }' | fzf)"
 
   if [ $dir == "New" ]; then
@@ -41,6 +51,20 @@ EOF
   
   xclip -sel clip <<<"$pass"
   echo "Created pass $path entry" && exit 0
+}
+
+regenerate() {
+  dir="$(fd -t d -H --base-directory=$HOME/.password-store | fzf)"
+  local pass="$(apg -n 1 -m 16 -x 16 -a 0 -M SN)"
+  
+}
+
+main() {
+  if $flag_r ; then
+    regenerate
+  else
+    generate_new
+  fi
 }
 
 main "$@"

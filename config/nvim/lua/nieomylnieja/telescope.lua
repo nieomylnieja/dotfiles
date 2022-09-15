@@ -1,3 +1,10 @@
+-- nnoremap <leader>ff <cmd>lua require('telescope.builtin').find_files()<cr>
+-- nnoremap <leader>fg <cmd>lua require('telescope.builtin').live_grep()<cr>
+-- nnoremap <leader>fb <cmd>lua require('telescope.builtin').buffers()<cr>
+-- nnoremap <leader>fh <cmd>lua require('telescope.builtin').help_tags()<cr>
+-- nnoremap <leader>fc <cmd>lua require('telescope.builtin').git_branches()<cr>
+-- nnoremap <leader>ft <cmd>lua require('telescope.builtin').treesitter()<cr>
+
 require('telescope').setup{
   defaults = {
     -- Default configuration for telescope goes here:
@@ -8,6 +15,7 @@ require('telescope').setup{
         -- actions.which_key shows the mappings for your picker,
         -- e.g. git_{create, delete, ...}_branch for the git_branches picker
         ["<C-h>"] = "which_key"
+        -- ["<leader>ff"] = "find_files"
       }
     }
   },
