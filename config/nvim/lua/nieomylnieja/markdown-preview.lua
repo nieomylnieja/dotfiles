@@ -90,4 +90,4 @@ vim.g.mkdp_page_title = '「${name}」'
 
 -- recognized filetypes
 -- these filetypes will have MarkdownPreview... commands
-vim.g.mkdp_filetypes = { 'markdown' }
+vim.g.mkdp_filetypes = { 'markdown', 'puml' }

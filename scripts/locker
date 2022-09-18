@@ -1,9 +1,9 @@
 #!/bin/bash
 
-lockDisabledInputs=( chrome firefox brave zoom vlc )
+lockDisabledInputs=(chrome firefox brave zoom vlc)
 
-runningInputs="$(pactl -f json list sink-inputs \
-  | jq -r '
+runningInputs="$(pactl -f json list sink-inputs |
+  jq -r '
     .[].properties |
     ."application.process.binary" + " " + ."application.name"')"
 
