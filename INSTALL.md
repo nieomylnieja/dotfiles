@@ -91,7 +91,7 @@ git clone https://github.com/nieomylnieja/dotfiles.git .dotfiles
 - general:
 
 ```sh
-yay -S neovim rofi rofi-calc pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn dunst cronie qt5c5 lxappearance-gtk3
+yay -S neovim nvim-packer-git rofi rofi-calc pamixer pavucontrol nitrogen arandr flameshot nerd-fonts-mononoki nnn dunst cronie qt5c5 lxappearance-gtk3
 python -m ensurepip --upgrade --default-pip
 pip install --upgrade pip
 pip install psutil iwlib

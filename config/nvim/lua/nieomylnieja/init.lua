@@ -19,6 +19,8 @@ vim.g.mapleader = " "
 
 -- Plugins configuration {{{1
 
+rc("packer")
+
 rc("nord")
 rc("neo-tree")
 rc("lualine")

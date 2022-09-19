@@ -55,7 +55,7 @@ install/slock:
 	sudo make -C build/slock install
 
 update/nvim/plugins:
-	git submodule update --recursive --remote
+	nvim -c "PackerSync"
 	nvim -c "TSUpdate"
 	@${MAKE} nvim/helptags
 
