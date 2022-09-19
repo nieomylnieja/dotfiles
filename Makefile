@@ -55,14 +55,12 @@ install/slock:
 	sudo make -C build/slock install
 
 update/nvim/plugins:
-	nvim -c "PackerSync"
-	nvim -c "TSUpdate"
-	@${MAKE} nvim/helptags
+	nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync'
 
-nvim/helptags:
-	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
-		sort | uniq |\
-		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"
+# nvim/helptags:
+# 	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
+# 		sort | uniq |\
+# 		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"
 
 install/fmt-tools:
 	yay -S prettier stylua

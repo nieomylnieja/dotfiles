@@ -1,5 +1,4 @@
 require("nvim-treesitter.configs").setup({
-	-- A list of parser names, or "all"
 	-- I'm fine with all since it doesn't impact my nvim performance, just eats
 	-- some space, but who cares really, If I want to I can olways trim it.
 	ensure_installed = "all",

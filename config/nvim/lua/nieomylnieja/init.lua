@@ -2,12 +2,10 @@
 
 -- Essentials {{{1
 
-local function rc(conf)
-	return require("nieomylnieja." .. conf)
-end
+require("nieomylnieja.packer")
 
-rc("autocmd")
-local remap = rc("keymap")
+require("nieomylnieja.autocmd")
+local remap = require("nieomylnieja.keymap")
 local noremap = remap.noremap
 local nnoremap = remap.nnoremap
 local xnoremap = remap.xnoremap
@@ -16,23 +14,6 @@ local vnoremap = remap.vnoremap
 -- Make sure space is not mapped to anything!
 nnoremap("<space>", "<Nop>")
 vim.g.mapleader = " "
-
--- Plugins configuration {{{1
-
-rc("packer")
-
-rc("nord")
-rc("neo-tree")
-rc("lualine")
-rc("treesitter")
-rc("lsp-config")
-rc("metals")
-rc("telescope")
-rc("go")
-rc("web-devicons")
-rc("nvim-dap-ui")
-rc("markdown-preview")
-rc("formatter")
 
 -- General preferences {{{1
 
