@@ -32,37 +32,37 @@ rc("nvim-dap-ui")
 rc("markdown-preview")
 rc("formatter")
 
--- Runtime for FZF
-vim.opt.runtimepath:append("/usr/local/bin/fzf")
-
 -- General preferences {{{1
 
--- Center the view
-vim.opt.scrolloff = 9999
-
--- Tabbing
-vim.opt.tabstop = 2 -- The number of spaces a tab is
-vim.opt.shiftwidth = 2 -- Number of spaces to use in auto(indent)
-vim.opt.softtabstop = 2 -- Just to be clear
-vim.opt.expandtab = true -- Insert tabs as spaces
-vim.opt.smartindent = true -- Use smart indentation, works for C like langs.
-
--- Searching
-vim.opt.wrapscan = true -- Wrap searches
-vim.opt.ignorecase = true -- Ignore search term case...
-vim.opt.smartcase = true -- ... unless term contains an uppercase character
-
--- Wrapping
-vim.opt.textwidth = 80 -- Hard-wrap text at nth column
-vim.opt.wrap = true -- Wrap long lines (bad for vsplits)
-
--- Folding
-vim.opt.foldmethod = "indent"
-vim.opt.foldlevel = 99
+local opt = vim.opt
 
 -- General
-vim.opt.lazyredraw = true -- Do not redraw screen in the middle of a macro. Makes them complete faster.
-vim.opt.clipboard = "unnamed,unnamedplus"
+opt.lazyredraw = true -- Do not redraw screen in the middle of a macro. Makes them complete faster.
+opt.clipboard = "unnamed,unnamedplus"
+opt.scrolloff = 9999 -- Center the view
+opt.number = true
+opt.relativenumber = true
+opt.mouse = "a"
+
+-- Tabbing
+opt.tabstop = 2 -- The number of spaces a tab is
+opt.shiftwidth = 2 -- Number of spaces to use in auto(indent)
+opt.softtabstop = 2 -- Just to be clear
+opt.expandtab = true -- Insert tabs as spaces
+opt.smartindent = true -- Use smart indentation, works for C like langs.
+
+-- Searching
+opt.wrapscan = true -- Wrap searches
+opt.ignorecase = true -- Ignore search term case...
+opt.smartcase = true -- ... unless term contains an uppercase character
+
+-- Wrapping
+opt.textwidth = 80 -- Hard-wrap text at nth column
+opt.wrap = false -- Don't wrap long lines (good for vsplits, bad otherwise?)
+
+-- Folding
+opt.foldmethod = "indent"
+opt.foldlevel = 99
 
 -- Mappings {{{1
 
@@ -71,15 +71,15 @@ local sexpr = { silent = true, expr = true }
 
 -- Move between splits with CTRL+[hjkl]
 nnoremap("<C-h>", "<C-w>h")
-nnoremap("<C-h><C-j>", "<C-w>j")
-nnoremap("<C-h><C-k>", "<C-w>k")
-nnoremap("<C-h><C-l>", "<C-w>l")
+nnoremap("<C-j>", "<C-w>j")
+nnoremap("<C-k>", "<C-w>k")
+nnoremap("<C-l>", "<C-w>l")
 
 -- Resize splits with CTRL+SHIFT+[hjkl]
-nnoremap("<S-h>", ":vertical resize +1<CR>", snmap)
+nnoremap("<S-h>", ":vertical resize -1<CR>", snmap)
 nnoremap("<S-j>", ":resize -1<CR>", snmap)
 nnoremap("<S-k>", ":resize +1<CR>", snmap)
-nnoremap("<S-l>", ":vertical resize -1<CR>", snmap)
+nnoremap("<S-l>", ":vertical resize +1<CR>", snmap)
 
 -- System clipboard
 vnoremap("y", '"+y')
