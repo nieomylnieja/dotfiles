@@ -44,6 +44,7 @@ install/lsps:
 		pyright \
 		awk-language-server \
 		bash-language-server
+	./clones/lua-language-server.sh
 
 install/slock:
 	@if ! [ -d build/slock ]; then \

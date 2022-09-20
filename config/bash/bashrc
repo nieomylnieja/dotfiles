@@ -187,3 +187,5 @@ if [ -x "$(command -v starship)" ]; then
 	eval "$(starship init bash)"
 fi
 
+
+alias luamake=/home/mh/.dotfiles/clones/lua-language-server/3rd/luamake/luamake

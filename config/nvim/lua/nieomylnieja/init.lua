@@ -89,6 +89,9 @@ xnoremap("<leader>p", '"_dP')
 -- Formatting
 nnoremap("<leader>fm", ":FormatWrite<CR>", snmap)
 
+-- Symbols outline
+nnoremap("<leader>so", ":SymbolsOutline<CR>", snmap)
+
 -- Telescope mappings, should move these to telescope.lua
 
 -- Functions {{{1

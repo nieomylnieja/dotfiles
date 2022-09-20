@@ -61,7 +61,6 @@ return packer.startup(function()
 	use({
 		"iamcco/markdown-preview.nvim",
 		run = "cd app && npm install",
-		ft = { "markdown", "plantuml" },
 		config = function()
 			require("nieomylnieja.markdown-preview")
 		end,
@@ -96,6 +95,10 @@ return packer.startup(function()
 	use("hrsh7th/nvim-cmp")
 	use("hrsh7th/cmp-nvim-lsp")
 	use("hrsh7th/cmp-buffer")
+	use("onsails/lspkind.nvim")
+	use({ "L3MON4D3/LuaSnip", tag = "v<CurrentMajor>.*" })
+	use("rafamadriz/friendly-snippets")
+	use("simrat39/symbols-outline.nvim")
 	use({
 		"scalameta/nvim-metals",
 		ft = "scala",

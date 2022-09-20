@@ -1,6 +1,6 @@
-[submodule "delta"]
-	path = delta
-	url = git@github.com:dandavison/delta.git
 [submodule "config/gtk/Nordic"]
 	path = config/gtk/Nordic
 	url = git@github.com:EliverLara/Nordic.git
+[submodule "clones/lua-language-server"]
+	path = clones/lua-language-server
+	url = https://github.com/sumneko/lua-language-server
