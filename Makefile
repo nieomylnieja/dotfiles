@@ -46,6 +46,9 @@ install/lsps:
 		bash-language-server
 	./clones/lua-language-server.sh
 
+install/go:
+	go install github.com/go-delve/delve/cmd/dlv@latest
+
 install/slock:
 	@if ! [ -d build/slock ]; then \
 		mkdir -p build &&\

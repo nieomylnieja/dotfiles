@@ -32,7 +32,7 @@ end
 dap.listeners.before.event_terminated["dapui_config"] = dapui.close
 dap.listeners.before.event_exited["dapui_config"] = dapui.close
 
-require("theprimeagen.debugger.node")
+require("nieomylnieja.debugger.go")
 
 nnoremap("<Home>", function()
 	dapui.toggle(1)

@@ -75,6 +75,7 @@ time([[try_loadstring definition]], false)
 time([[Defining packer_plugins]], true)
 _G.packer_plugins = {
   LuaSnip = {
+    config = { "\27LJ\2\n9\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\30nieomylnieja.lsp.snippets\frequire\0" },
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/LuaSnip",
     url = "https://github.com/L3MON4D3/LuaSnip"
@@ -88,6 +89,11 @@ _G.packer_plugins = {
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/cmp-nvim-lsp",
     url = "https://github.com/hrsh7th/cmp-nvim-lsp"
+  },
+  cmp_luasnip = {
+    loaded = true,
+    path = "/home/mh/.local/share/nvim/site/pack/packer/start/cmp_luasnip",
+    url = "https://github.com/saadparwaiz1/cmp_luasnip"
   },
   ["formatter.nvim"] = {
     config = { "\27LJ\2\n3\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\24nieomylnieja.format\frequire\0" },
@@ -143,11 +149,13 @@ _G.packer_plugins = {
     url = "https://github.com/MunifTanjim/nui.nvim"
   },
   ["nvim-cmp"] = {
+    config = { "\27LJ\2\n9\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\30nieomylnieja.lsp.complete\frequire\0" },
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-cmp",
     url = "https://github.com/hrsh7th/nvim-cmp"
   },
   ["nvim-dap"] = {
+    config = { "\27LJ\2\n8\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\29nieomylnieja.debugger.go\frequire\0" },
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-dap",
     url = "https://github.com/mfussenegger/nvim-dap"
@@ -163,10 +171,11 @@ _G.packer_plugins = {
     url = "https://github.com/theHamsta/nvim-dap-virtual-text"
   },
   ["nvim-lspconfig"] = {
-    config = { "\27LJ\2\n0\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\21nieomylnieja.lsp\frequire\0" },
+    config = { "\27LJ\2\n7\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\28nieomylnieja.lsp.config\frequire\0" },
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-lspconfig",
-    url = "https://github.com/neovim/nvim-lspconfig"
+    url = "https://github.com/neovim/nvim-lspconfig",
+    wants = { "nvim-cmp" }
   },
   ["nvim-metals"] = {
     config = { "\27LJ\2\n3\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\24nieomylnieja.metals\frequire\0" },
@@ -254,58 +263,70 @@ _G.packer_plugins = {
 }
 
 time([[Defining packer_plugins]], false)
+-- Config for: markdown-preview.nvim
+time([[Config for markdown-preview.nvim]], true)
+try_loadstring("\27LJ\2\n=\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\"nieomylnieja.markdown-preview\frequire\0", "config", "markdown-preview.nvim")
+time([[Config for markdown-preview.nvim]], false)
+-- Config for: LuaSnip
+time([[Config for LuaSnip]], true)
+try_loadstring("\27LJ\2\n9\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\30nieomylnieja.lsp.snippets\frequire\0", "config", "LuaSnip")
+time([[Config for LuaSnip]], false)
+-- Config for: nvim-treesitter
+time([[Config for nvim-treesitter]], true)
+try_loadstring("\27LJ\2\n7\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\28nieomylnieja.treesitter\frequire\0", "config", "nvim-treesitter")
+time([[Config for nvim-treesitter]], false)
+-- Config for: nvim-cmp
+time([[Config for nvim-cmp]], true)
+try_loadstring("\27LJ\2\n9\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\30nieomylnieja.lsp.complete\frequire\0", "config", "nvim-cmp")
+time([[Config for nvim-cmp]], false)
+-- Config for: neo-tree.nvim
+time([[Config for neo-tree.nvim]], true)
+try_loadstring("\27LJ\2\n5\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\26nieomylnieja.neo-tree\frequire\0", "config", "neo-tree.nvim")
+time([[Config for neo-tree.nvim]], false)
 -- Config for: nord.nvim
 time([[Config for nord.nvim]], true)
 try_loadstring("\27LJ\2\n1\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\22nieomylnieja.nord\frequire\0", "config", "nord.nvim")
 time([[Config for nord.nvim]], false)
+-- Config for: lualine.nvim
+time([[Config for lualine.nvim]], true)
+try_loadstring("\27LJ\2\n4\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\25nieomylnieja.lualine\frequire\0", "config", "lualine.nvim")
+time([[Config for lualine.nvim]], false)
+-- Config for: formatter.nvim
+time([[Config for formatter.nvim]], true)
+try_loadstring("\27LJ\2\n3\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\24nieomylnieja.format\frequire\0", "config", "formatter.nvim")
+time([[Config for formatter.nvim]], false)
 -- Config for: nvim-web-devicons
 time([[Config for nvim-web-devicons]], true)
 try_loadstring("\27LJ\2\n9\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\30nieomylnieja.web-devicons\frequire\0", "config", "nvim-web-devicons")
 time([[Config for nvim-web-devicons]], false)
 -- Config for: nvim-lspconfig
 time([[Config for nvim-lspconfig]], true)
-try_loadstring("\27LJ\2\n0\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\21nieomylnieja.lsp\frequire\0", "config", "nvim-lspconfig")
+try_loadstring("\27LJ\2\n7\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\28nieomylnieja.lsp.config\frequire\0", "config", "nvim-lspconfig")
 time([[Config for nvim-lspconfig]], false)
 -- Config for: telescope.nvim
 time([[Config for telescope.nvim]], true)
 try_loadstring("\27LJ\2\n6\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\27nieomylnieja.telescope\frequire\0", "config", "telescope.nvim")
 time([[Config for telescope.nvim]], false)
--- Config for: formatter.nvim
-time([[Config for formatter.nvim]], true)
-try_loadstring("\27LJ\2\n3\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\24nieomylnieja.format\frequire\0", "config", "formatter.nvim")
-time([[Config for formatter.nvim]], false)
--- Config for: markdown-preview.nvim
-time([[Config for markdown-preview.nvim]], true)
-try_loadstring("\27LJ\2\n=\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\"nieomylnieja.markdown-preview\frequire\0", "config", "markdown-preview.nvim")
-time([[Config for markdown-preview.nvim]], false)
--- Config for: nvim-treesitter
-time([[Config for nvim-treesitter]], true)
-try_loadstring("\27LJ\2\n7\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\28nieomylnieja.treesitter\frequire\0", "config", "nvim-treesitter")
-time([[Config for nvim-treesitter]], false)
--- Config for: neo-tree.nvim
-time([[Config for neo-tree.nvim]], true)
-try_loadstring("\27LJ\2\n5\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\26nieomylnieja.neo-tree\frequire\0", "config", "neo-tree.nvim")
-time([[Config for neo-tree.nvim]], false)
--- Config for: lualine.nvim
-time([[Config for lualine.nvim]], true)
-try_loadstring("\27LJ\2\n4\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\25nieomylnieja.lualine\frequire\0", "config", "lualine.nvim")
-time([[Config for lualine.nvim]], false)
+-- Config for: nvim-dap
+time([[Config for nvim-dap]], true)
+try_loadstring("\27LJ\2\n8\0\0\3\0\2\0\0046\0\0\0'\2\1\0B\0\2\1K\0\1\0\29nieomylnieja.debugger.go\frequire\0", "config", "nvim-dap")
+time([[Config for nvim-dap]], false)
 vim.cmd [[augroup packer_load_aucmds]]
 vim.cmd [[au!]]
   -- Filetype lazy-loads
 time([[Defining lazy-load filetype autocommands]], true)
-vim.cmd [[au FileType scala ++once lua require("packer.load")({'nvim-metals'}, { ft = "scala" }, _G.packer_plugins)]]
 vim.cmd [[au FileType rasi ++once lua require("packer.load")({'rasi.vim'}, { ft = "rasi" }, _G.packer_plugins)]]
+vim.cmd [[au FileType scala ++once lua require("packer.load")({'nvim-metals'}, { ft = "scala" }, _G.packer_plugins)]]
 vim.cmd [[au FileType go ++once lua require("packer.load")({'go.nvim'}, { ft = "go" }, _G.packer_plugins)]]
 time([[Defining lazy-load filetype autocommands]], false)
 vim.cmd("augroup END")
 vim.cmd [[augroup filetypedetect]]
-time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]], true)
-vim.cmd [[source /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]]
-time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]], false)
 time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/go.nvim/ftdetect/go.vim]], true)
 vim.cmd [[source /home/mh/.local/share/nvim/site/pack/packer/opt/go.nvim/ftdetect/go.vim]]
 time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/go.nvim/ftdetect/go.vim]], false)
+time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]], true)
+vim.cmd [[source /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]]
+time([[Sourcing ftdetect script at: /home/mh/.local/share/nvim/site/pack/packer/opt/rasi.vim/ftdetect/rasi.vim]], false)
 vim.cmd("augroup END")
 
 _G._packer.inside_compile = false

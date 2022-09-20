@@ -12,7 +12,7 @@ end
 local packer_bootstrap = ensure_packer()
 local packer = require("packer")
 
-return packer.startup(function()
+return packer.startup(function(use)
 	use("wbthomason/packer.nvim")
 
 	-- Formatting
@@ -81,7 +81,12 @@ return packer.startup(function()
 	})
 
 	-- Debugging
-	use("mfussenegger/nvim-dap")
+	use({
+		"mfussenegger/nvim-dap",
+		config = function()
+			require("nieomylnieja.debugger.go")
+		end,
+	})
 	use({ "rcarriga/nvim-dap-ui", requires = { "mfussenegger/nvim-dap" } })
 	use({ "theHamsta/nvim-dap-virtual-text", requires = { "mfussenegger/nvim-dap" } })
 
@@ -89,16 +94,33 @@ return packer.startup(function()
 	use({
 		"neovim/nvim-lspconfig",
 		config = function()
-			require("nieomylnieja.lsp")
+			require("nieomylnieja.lsp.config")
 		end,
+		wants = "nvim-cmp",
 	})
-	use("hrsh7th/nvim-cmp")
-	use("hrsh7th/cmp-nvim-lsp")
-	use("hrsh7th/cmp-buffer")
-	use("onsails/lspkind.nvim")
-	use({ "L3MON4D3/LuaSnip", tag = "v<CurrentMajor>.*" })
-	use("rafamadriz/friendly-snippets")
-	use("simrat39/symbols-outline.nvim")
+	use({
+		"hrsh7th/nvim-cmp",
+		config = function()
+			require("nieomylnieja.lsp.complete")
+		end,
+		requires = {
+			"hrsh7th/cmp-nvim-lsp",
+			"hrsh7th/cmp-buffer",
+			{
+				"L3MON4D3/LuaSnip",
+				tag = "v1.*",
+				requires = {
+					"rafamadriz/friendly-snippets",
+					"saadparwaiz1/cmp_luasnip",
+				},
+				config = function()
+					require("nieomylnieja.lsp.snippets")
+				end,
+			},
+			"onsails/lspkind.nvim",
+			"simrat39/symbols-outline.nvim",
+		},
+	})
 	use({
 		"scalameta/nvim-metals",
 		ft = "scala",
