@@ -2,6 +2,7 @@ local nnoremap = require("nieomylnieja.keymap").nnoremap
 
 local lsp = require("lspconfig")
 local cmp_lsp = require("cmp_nvim_lsp")
+local telescope = require("telescope.builtin")
 
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities.textDocument.completion.completionItem.snippetSupport = true
@@ -11,24 +12,37 @@ local function config(_config)
 		capabilities = cmp_lsp.update_capabilities(vim.lsp.protocol.make_client_capabilities()),
 		-- Use an on_attach function to only map the following keys
 		-- after the language server attaches to the current buffer
-		on_attach = function()
+		on_attach = function(_, bufnr)
 			-- Mappings.
 			-- See `:help vim.lsp.*` for documentation on any of the below functions
-			local bufopts = { noremap = true, silent = true, buffer = bufnr }
-			nnoremap("gD", vim.lsp.buf.declaration, bufopts)
-			nnoremap("gd", vim.lsp.buf.definition, bufopts)
-			nnoremap("K", vim.lsp.buf.hover, bufopts)
-			nnoremap("gi", vim.lsp.buf.implementation, bufopts)
-			nnoremap("<C-k>", vim.lsp.buf.signature_help, bufopts)
-			nnoremap("<space>wa", vim.lsp.buf.add_workspace_folder, bufopts)
-			nnoremap("<space>wr", vim.lsp.buf.remove_workspace_folder, bufopts)
-			nnoremap("<space>wl", function()
+			local nmap = function(keys, func, desc)
+				if desc then
+					desc = "LSP: " .. desc
+				end
+				nnoremap(keys, func, { noremap = true, silent = true, buffer = bufnr, desc = desc })
+			end
+
+			nmap("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
+			nmap("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
+
+			nmap("gd", vim.lsp.buf.definition, "[G]oto [D]efinition")
+			nmap("gi", vim.lsp.buf.implementation, "[G]oto [I]mplementation")
+			nmap("gr", telescope.lsp_references, "[G]oto [R]eferences")
+			nmap("<leader>ds", telescope.lsp_document_symbols, "[D]ocument [S]ymbols")
+			nmap("<leader>ws", telescope.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
+
+			-- See `:help K` for why this keymap
+			nmap("K", vim.lsp.buf.hover, "Hover Documentation")
+			nmap("<C-k>", vim.lsp.buf.signature_help, "Signature Documentation")
+
+			-- Lesser used LSP functionality
+			nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
+			nmap("<leader>D", vim.lsp.buf.type_definition, "Type [D]efinition")
+			nmap("<leader>wa", vim.lsp.buf.add_workspace_folder, "[W]orkspace [A]dd Folder")
+			nmap("<leader>wr", vim.lsp.buf.remove_workspace_folder, "[W]orkspace [R]emove Folder")
+			nmap("<leader>wl", function()
 				print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
-			end, bufopts)
-			nnoremap("<space>D", vim.lsp.buf.type_definition, bufopts)
-			nnoremap("<space>rn", vim.lsp.buf.rename, bufopts)
-			nnoremap("<space>ca", vim.lsp.buf.code_action, bufopts)
-			nnoremap("gr", vim.lsp.buf.references, bufopts)
+			end, "[W]orkspace [L]ist Folders")
 			-- TODO: Right now I haven't figured out a way to set it only
 			-- for LSPs which support native formatting, I might just want
 			-- to use 'formatter.nvim' for that anyway as the config is more
