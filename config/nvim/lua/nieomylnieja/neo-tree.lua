@@ -9,18 +9,18 @@ require("nieomylnieja.keymap").nnoremap("<C-n>", ":Neotree<cr>")
 -- * "https://github.com/kyazdani42/nvim-web-devicons" - not strictly required, but recommended
 -- * "https://github.com/MunifTanjim/nui.nvim"
 
-tree = require('neo-tree')
+local tree = require("neo-tree")
 
 -- The defaults are at: https://github.com/nvim-neo-tree/neo-tree.nvim/blob/main/lua/neo-tree/defaults.lua
 local config = {
-  log_level = "warn",
-  source_selector = {
-    statusline = true
-  },
-  window = {
-    width = 30
-  }
+	log_level = "warn",
+	source_selector = {
+		statusline = true,
+	},
+	window = {
+		position = "right",
+		width = 30,
+	},
 }
 
 tree.setup(config)
-

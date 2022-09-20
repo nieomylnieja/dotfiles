@@ -10,6 +10,7 @@ local noremap = remap.noremap
 local nnoremap = remap.nnoremap
 local xnoremap = remap.xnoremap
 local vnoremap = remap.vnoremap
+local tnoremap = remap.tnoremap
 
 -- Make sure space is not mapped to anything!
 nnoremap("<space>", "<Nop>")
@@ -26,6 +27,7 @@ opt.scrolloff = 9999 -- Center the view
 opt.number = true
 opt.relativenumber = true
 opt.mouse = "a"
+opt.termguicolors = true -- Required by bufferline!
 
 -- Tabbing
 opt.tabstop = 2 -- The number of spaces a tab is
@@ -85,6 +87,10 @@ nnoremap("gdl", ":diffget //3<CR>")
 
 -- Paste without loosing buffer
 xnoremap("<leader>p", '"_dP')
+
+-- Terminal mode
+nnoremap("<leader>t", ":te<CR>")
+tnoremap("<Esc>", "<C-\\><C-n>")
 
 -- Formatting
 nnoremap("<leader>fm", ":FormatWrite<CR>", snmap)

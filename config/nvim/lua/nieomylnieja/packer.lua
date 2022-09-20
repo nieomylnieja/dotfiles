@@ -31,6 +31,14 @@ return packer.startup(function(use)
 			require("nieomylnieja.lualine")
 		end,
 	})
+	use({
+		"akinsho/bufferline.nvim",
+		tag = "v2.*",
+		requires = "kyazdani42/nvim-web-devicons",
+    config = function()
+      require("nieomylnieja.bufferline")
+    end
+	})
 
 	-- Tree view tab
 	use({
