@@ -102,4 +102,8 @@ nnoremap("<leader>so", ":SymbolsOutline<CR>", snmap)
 
 -- Functions {{{1
 
-vim.api.nvim_create_user_command("ReloadMyConfigs", "so $MYVIMRC | echo 'Configs reloaded!'", {})
+vim.api.nvim_create_user_command("ReloadMyConfigs", function()
+	vim.cmd([[so $MYVIMRC]])
+	vim.cmd([[:PackerCompile<CR>]])
+  print("Confgis reloaded!")
+end, {})
