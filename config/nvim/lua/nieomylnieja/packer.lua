@@ -15,20 +15,6 @@ local packer = require("packer")
 return packer.startup(function(use)
 	use("wbthomason/packer.nvim")
 
-	-- Color scheme and the looks
-	use({
-		"shaunsingh/nord.nvim",
-		config = function()
-			require("nieomylnieja.nord")
-		end,
-	})
-	use({
-		"kyazdani42/nvim-web-devicons",
-		config = function()
-			require("nieomylnieja.web-devicons")
-		end,
-	})
-
 	-- Formatting
 	use({
 		"mhartington/formatter.nvim",
@@ -40,7 +26,9 @@ return packer.startup(function(use)
 	-- Status line
 	use({
 		"nvim-lualine/lualine.nvim",
-		requires = { "kyazdani42/nvim-web-devicons" },
+		requires = {
+			"kyazdani42/nvim-web-devicons",
+		},
 		config = function()
 			require("nieomylnieja.lualine")
 		end,
@@ -48,7 +36,9 @@ return packer.startup(function(use)
 	use({
 		"akinsho/bufferline.nvim",
 		tag = "v2.*",
-		requires = "kyazdani42/nvim-web-devicons",
+		requires = {
+			"kyazdani42/nvim-web-devicons",
+		},
 		config = function()
 			require("nieomylnieja.bufferline")
 		end,
@@ -176,6 +166,20 @@ return packer.startup(function(use)
 		end,
 	})
 
+	-- Color scheme and the looks
+	use({
+		"shaunsingh/nord.nvim",
+		config = function()
+			require("nieomylnieja.nord")
+		end,
+	})
+	use({
+		"kyazdani42/nvim-web-devicons",
+		config = function()
+			require("nieomylnieja.web-devicons")
+		end,
+	})
+
 	-- Popes awesomness
 	use("tpope/vim-commentary")
 	use("tpope/vim-fugitive")
@@ -189,6 +193,10 @@ return packer.startup(function(use)
 	end
 
 	return {
+		-- We need to make sure plugins are loaded in order, as we defined them
+		-- above, otherwise we might for example don't see colors set by nord.nvim
+		-- in neotree, lualine or bufferline. Requires might fix it too, but I'm a
+		-- bit tired of it.
 		max_jobs = 1,
 	}
 end)
