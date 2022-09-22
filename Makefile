@@ -59,7 +59,7 @@ install/slock:
 	sudo make -C build/slock install
 
 update/nvim/plugins:
-	nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync'
+	nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync' -c 'MasonToolsUpdate'
 
 # nvim/helptags:
 # 	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\

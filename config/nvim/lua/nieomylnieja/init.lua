@@ -28,6 +28,7 @@ opt.number = true
 opt.relativenumber = true
 opt.mouse = "a"
 opt.termguicolors = true -- Required by bufferline!
+opt.hidden = true -- Otherwise terminals managed by toggleterm are discarded.
 
 -- Tabbing
 opt.tabstop = 2 -- The number of spaces a tab is
@@ -105,5 +106,5 @@ nnoremap("<leader>so", ":SymbolsOutline<CR>", snmap)
 vim.api.nvim_create_user_command("ReloadMyConfigs", function()
 	vim.cmd([[so $MYVIMRC]])
 	vim.cmd([[:PackerCompile<CR>]])
-  print("Confgis reloaded!")
+	print("Confgis reloaded!")
 end, {})

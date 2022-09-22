@@ -15,6 +15,20 @@ local packer = require("packer")
 return packer.startup(function(use)
 	use("wbthomason/packer.nvim")
 
+	-- Color scheme and the looks
+	use({
+		"shaunsingh/nord.nvim",
+		config = function()
+			require("nieomylnieja.nord")
+		end,
+	})
+	use({
+		"kyazdani42/nvim-web-devicons",
+		config = function()
+			require("nieomylnieja.web-devicons")
+		end,
+	})
+
 	-- Formatting
 	use({
 		"mhartington/formatter.nvim",
@@ -35,9 +49,9 @@ return packer.startup(function(use)
 		"akinsho/bufferline.nvim",
 		tag = "v2.*",
 		requires = "kyazdani42/nvim-web-devicons",
-    config = function()
-      require("nieomylnieja.bufferline")
-    end
+		config = function()
+			require("nieomylnieja.bufferline")
+		end,
 	})
 
 	-- Tree view tab
@@ -74,29 +88,29 @@ return packer.startup(function(use)
 		end,
 	})
 
-	-- Color scheme
+	-- Manage LSP and DAP server, linters and formatters.
 	use({
-		"shaunsingh/nord.nvim",
+		"williamboman/mason.nvim",
 		config = function()
-			require("nieomylnieja.nord")
+			require("nieomylnieja.mason")
 		end,
-	})
-	use({
-		"kyazdani42/nvim-web-devicons",
-		config = function()
-			require("nieomylnieja.web-devicons")
-		end,
+		requires = {
+			"williamboman/mason-lspconfig.nvim",
+			"WhoIsSethDaniel/mason-tool-installer.nvim",
+		},
 	})
 
 	-- Debugging
 	use({
 		"mfussenegger/nvim-dap",
 		config = function()
-			require("nieomylnieja.debugger.go")
+			require("nieomylnieja.debugger")
 		end,
+		requires = {
+			"rcarriga/nvim-dap-ui",
+			"theHamsta/nvim-dap-virtual-text",
+		},
 	})
-	use({ "rcarriga/nvim-dap-ui", requires = { "mfussenegger/nvim-dap" } })
-	use({ "theHamsta/nvim-dap-virtual-text", requires = { "mfussenegger/nvim-dap" } })
 
 	-- LSP
 	use({
@@ -104,7 +118,6 @@ return packer.startup(function(use)
 		config = function()
 			require("nieomylnieja.lsp.config")
 		end,
-		wants = "nvim-cmp",
 	})
 	use({
 		"hrsh7th/nvim-cmp",
@@ -127,6 +140,12 @@ return packer.startup(function(use)
 			},
 			"onsails/lspkind.nvim",
 			"simrat39/symbols-outline.nvim",
+			{
+				"mfussenegger/nvim-lint",
+				config = function()
+					require("nieomylnieja.lsp.lint")
+				end,
+			},
 		},
 	})
 	use({
@@ -137,13 +156,6 @@ return packer.startup(function(use)
 		end,
 	})
 	use({ "Fymyte/rasi.vim", ft = "rasi" })
-	use({
-		"ray-x/go.nvim",
-		ft = "go",
-		config = function()
-			require("nieomylnieja.go")
-		end,
-	})
 
 	-- Syntax highlighting
 	use({
@@ -152,8 +164,17 @@ return packer.startup(function(use)
 		config = function()
 			require("nieomylnieja.treesitter")
 		end,
+		requires = "nvim-treesitter/nvim-treesitter",
 	})
-	use("nvim-treesitter/nvim-treesitter-context")
+
+	-- Terminal
+	use({
+		"akinsho/toggleterm.nvim",
+		tag = "*",
+		config = function()
+			require("nieomylnieja.term")
+		end,
+	})
 
 	-- Popes awesomness
 	use("tpope/vim-commentary")
