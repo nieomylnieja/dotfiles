@@ -187,4 +187,8 @@ return packer.startup(function(use)
 	if packer_bootstrap then
 		packer.sync()
 	end
+
+	return {
+		max_jobs = 1,
+	}
 end)
