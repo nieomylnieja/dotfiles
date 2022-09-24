@@ -22,3 +22,16 @@ Here are the formatters I use and which should be installed along with it:
     and groups imports
   - [golines](https://github.com/segmentio/golines) which will format lenghty
     lines for me in a civilized manner
+
+## Useful keybindings
+
+### Splits
+
+```lua
+-- Swap top/bottom or left/right split
+Ctrl+W R
+-- Break out current window into a new tabview
+Ctrl+W T
+-- Close every window in the current tabview but the current one
+Ctrl+W o
+```

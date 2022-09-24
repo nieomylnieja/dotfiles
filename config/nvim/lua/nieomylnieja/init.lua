@@ -1,19 +1,4 @@
 -- vim:fdm=marker:fdl=0
-
--- Essentials {{{1
-
-require("nieomylnieja.packer")
-
-require("nieomylnieja.autocmd")
-local remap = require("nieomylnieja.keymap")
-local noremap = remap.noremap
-local nnoremap = remap.nnoremap
-local xnoremap = remap.xnoremap
-local vnoremap = remap.vnoremap
-local tnoremap = remap.tnoremap
-
--- Make sure space is not mapped to anything!
-nnoremap("<space>", "<Nop>")
 vim.g.mapleader = " "
 
 -- General preferences {{{1
@@ -29,6 +14,8 @@ opt.relativenumber = true
 opt.mouse = "a"
 opt.termguicolors = true -- Required by bufferline!
 opt.hidden = true -- Otherwise terminals managed by toggleterm are discarded.
+opt.splitbelow = true
+opt.splitright = true
 
 -- Tabbing
 opt.tabstop = 2 -- The number of spaces a tab is
@@ -50,16 +37,21 @@ opt.wrap = false -- Don't wrap long lines (good for vsplits, bad otherwise?)
 opt.foldmethod = "indent"
 opt.foldlevel = 99
 
--- Diagnostic icons
-vim.fn.sign_define("DiagnosticSignError", { text = " ", texthl = "DiagnosticSignError" })
-vim.fn.sign_define("DiagnosticSignWarn", { text = " ", texthl = "DiagnosticSignWarn" })
-vim.fn.sign_define("DiagnosticSignInfo", { text = " ", texthl = "DiagnosticSignInfo" })
-vim.fn.sign_define("DiagnosticSignHint", { text = "", texthl = "DiagnosticSignHint" })
-
 -- Mappings {{{1
 
-local snmap = { noremap = true, silent = true }
-local sexpr = { silent = true, expr = true }
+local remap = require("nieomylnieja.keymap")
+
+local noremap = remap.noremap
+local nnoremap = remap.nnoremap
+local xnoremap = remap.xnoremap
+local vnoremap = remap.vnoremap
+local tnoremap = remap.tnoremap
+
+local silent = { silent = true }
+local silent_expr = { silent = true, expr = true }
+
+-- Make sure space is not mapped to anything!
+nnoremap("<space>", "<Nop>")
 
 -- Move between splits with CTRL+[hjkl]
 nnoremap("<C-h>", "<C-w>h")
@@ -68,24 +60,18 @@ nnoremap("<C-k>", "<C-w>k")
 nnoremap("<C-l>", "<C-w>l")
 
 -- Resize splits with CTRL+SHIFT+[hjkl]
-nnoremap("<S-h>", ":vertical resize -1<CR>", snmap)
-nnoremap("<S-j>", ":resize -1<CR>", snmap)
-nnoremap("<S-k>", ":resize +1<CR>", snmap)
-nnoremap("<S-l>", ":vertical resize +1<CR>", snmap)
+nnoremap("<S-h>", ":vertical resize -1<CR>", silent)
+nnoremap("<S-j>", ":resize -1<CR>", silent)
+nnoremap("<S-k>", ":resize +1<CR>", silent)
+nnoremap("<S-l>", ":vertical resize +1<CR>", silent)
 
 -- System clipboard
 vnoremap("y", '"+y')
-
--- Fold with tab
+-- Fold
 nnoremap("<tab>", "za")
-
--- Neat base64 decoding and encoding
-noremap("<leader>d", [[c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>]])
-vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
-
 -- j/k will move virtual lines (lines that wrap)
-noremap("j", "(v:count == 0 ? 'gj' : 'j')", sexpr)
-noremap("k", "(v:count == 0 ? 'gk' : 'k')", sexpr)
+noremap("j", "(v:count == 0 ? 'gj' : 'j')", silent_expr)
+noremap("k", "(v:count == 0 ? 'gk' : 'k')", silent_expr)
 
 -- Fugitive Conflict Resolution
 nnoremap("<leader>gd", ":Gdiffsplit!<CR>")
@@ -95,15 +81,16 @@ nnoremap("gdl", ":diffget //3<CR>")
 -- Paste without loosing buffer
 xnoremap("<leader>p", '"_dP')
 
--- Terminal mode
-nnoremap("<leader>t", ":te<CR>")
+-- Others
 tnoremap("<Esc>", "<C-\\><C-n>")
+nnoremap("<leader>fm", ":FormatWrite<CR>", silent)
+nnoremap("<leader>so", ":SymbolsOutline<CR>", silent)
+noremap("<leader>d", [[c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>]])
+vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
+nnoremap("<C-g>", ":Neogit<CR>", silent)
+nnoremap("<leader>n", ":Neotree<cr>", silent)
 
--- Formatting
-nnoremap("<leader>fm", ":FormatWrite<CR>", snmap)
-
--- Symbols outline
-nnoremap("<leader>so", ":SymbolsOutline<CR>", snmap)
+require("keys")
 
 -- Telescope mappings, should move these to telescope.lua
 
@@ -114,3 +101,36 @@ vim.api.nvim_create_user_command("ReloadMyConfigs", function()
 	vim.cmd([[:PackerCompile<CR>]])
 	print("Confgis reloaded!")
 end, {})
+
+-- Plugins {{{1
+
+local function req(name)
+	require("nieomylnieja." .. name)
+end
+
+-- My own
+req("autocmd")
+
+-- Managers
+req("packer")
+req("mason")
+-- Looks
+req("nord")
+req("web-devicons")
+req("lualine")
+req("bufferline")
+req("neotree")
+-- Code
+req("debugger")
+req("lsp")
+req("format")
+req("treesitter")
+req("treesitter-context")
+req("gitsigns")
+req("which-key")
+-- Other
+req("markdown-preview")
+req("telescope")
+req("term")
+req("neogit")
+require("octo").setup() -- The defaults are fine, but it needs to load after telescope.

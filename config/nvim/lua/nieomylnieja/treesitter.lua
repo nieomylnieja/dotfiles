@@ -17,3 +17,7 @@ require("nvim-treesitter.configs").setup({
 
 -- Runtime for FZF
 vim.opt.runtimepath:append("/usr/local/bin/fzf")
+
+-- Highlight for Octo
+local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+parser_config.markdown.filetype_to_parsername = "octo"

@@ -13,185 +13,86 @@ local packer_bootstrap = ensure_packer()
 local packer = require("packer")
 
 return packer.startup(function(use)
-		use("wbthomason/packer.nvim")
+	use("wbthomason/packer.nvim")
 
-		-- Color scheme and the looks
-		use({
-			"shaunsingh/nord.nvim",
-			config = function()
-				require("nieomylnieja.nord")
-			end,
-		})
-		use({
-			"kyazdani42/nvim-web-devicons",
-			config = function()
-				require("nieomylnieja.web-devicons")
-			end,
-		})
+	-- Prerequisite
+	use("nvim-lua/plenary.nvim")
 
-		-- Formatting
-		use({
-			"mhartington/formatter.nvim",
-			config = function()
-				require("nieomylnieja.format")
-			end,
-		})
+	-- Color scheme and the looks
+	use("shaunsingh/nord.nvim")
+	use("kyazdani42/nvim-web-devicons")
+	use("nvim-lualine/lualine.nvim")
+	use({ "akinsho/bufferline.nvim", tag = "v2.*" })
+	use({
+		"nvim-neo-tree/neo-tree.nvim",
+		branch = "v2.x",
+		requires = "MunifTanjim/nui.nvim",
+	})
+	use("folke/which-key.nvim")
+	use("folke/trouble.nvim")
 
-		-- Status line
-		use({
-			"nvim-lualine/lualine.nvim",
-      -- after = "shaunsingh/nord.nvim",
-			requires = {
-				"kyazdani42/nvim-web-devicons",
-			},
-			config = function()
-				require("nieomylnieja.lualine")
-			end,
-		})
-		use({
-			"akinsho/bufferline.nvim",
-			tag = "v2.*",
-      -- after = "shaunsingh/nord.nvim",
-			requires = {
-				"kyazdani42/nvim-web-devicons",
-			},
-			config = function()
-				require("nieomylnieja.bufferline")
-			end,
-		})
+	-- Searching
+	use({ "nvim-telescope/telescope.nvim", branch = "0.1.x" })
+	use({ "nvim-telescope/telescope-fzf-native.nvim", run = "make" })
 
-		-- Tree view tab
-		use({
-			"nvim-neo-tree/neo-tree.nvim",
-			branch = "v2.x",
-      -- after = "shaunsingh/nord.nvim",
-			requires = {
-				"nvim-lua/plenary.nvim",
-				"kyazdani42/nvim-web-devicons",
-				"MunifTanjim/nui.nvim",
-			},
-			config = function()
-				require("nieomylnieja.neo-tree")
-			end,
-		})
+	-- Markdown, plantuml and more previewer
+	use({ "iamcco/markdown-preview.nvim", run = "cd app && npm install" })
 
-		-- Searching
-		use({
-			"nvim-telescope/telescope.nvim",
-			branch = "0.1.x",
-			requires = { "nvim-lua/plenary.nvim" },
-			config = function()
-				require("nieomylnieja.telescope")
-			end,
-		})
-		use({ "nvim-telescope/telescope-fzf-native.nvim", run = "make" })
+	-- Manage LSP and DAP server, linters and formatters.
+	use("williamboman/mason.nvim")
+	use("williamboman/mason-lspconfig.nvim")
+	use("WhoIsSethDaniel/mason-tool-installer.nvim")
 
-		-- Markdown, plantuml and more previewer
-		use({
-			"iamcco/markdown-preview.nvim",
-			run = "cd app && npm install",
-			config = function()
-				require("nieomylnieja.markdown-preview")
-			end,
-		})
+	-- Debugging
+	use("mfussenegger/nvim-dap")
+	use("rcarriga/nvim-dap-ui")
+	use("theHamsta/nvim-dap-virtual-text")
 
-		-- Manage LSP and DAP server, linters and formatters.
-		use({
-			"williamboman/mason.nvim",
-			config = function()
-				require("nieomylnieja.mason")
-			end,
-			requires = {
-				"williamboman/mason-lspconfig.nvim",
-				"WhoIsSethDaniel/mason-tool-installer.nvim",
-			},
-		})
+	-- LSP
+	use("neovim/nvim-lspconfig")
+	use("hrsh7th/nvim-cmp")
+	use("hrsh7th/cmp-nvim-lsp")
+	use("hrsh7th/cmp-buffer")
+	use("onsails/lspkind.nvim")
+	use("simrat39/symbols-outline.nvim")
+	use("mfussenegger/nvim-lint")
+	use({ "L3MON4D3/LuaSnip", tag = "v1.*" })
+	use("rafamadriz/friendly-snippets")
+	use("saadparwaiz1/cmp_luasnip")
+	use({
+		"scalameta/nvim-metals",
+		ft = "scala",
+		config = function()
+			require("nieomylnieja.metals")
+		end,
+	})
+	use({ "Fymyte/rasi.vim", ft = "rasi" })
 
-		-- Debugging
-		use({
-			"mfussenegger/nvim-dap",
-			config = function()
-				require("nieomylnieja.debugger")
-			end,
-			requires = {
-				"rcarriga/nvim-dap-ui",
-				"theHamsta/nvim-dap-virtual-text",
-			},
-		})
+	-- Syntax highlighting
+	use({ "nvim-treesitter/nvim-treesitter", run = ":TSUpdate" })
+	use("nvim-treesitter/nvim-treesitter-context")
 
-		-- LSP
-		use({
-			"neovim/nvim-lspconfig",
-			config = function()
-				require("nieomylnieja.lsp.config")
-			end,
-		})
-		use({
-			"hrsh7th/nvim-cmp",
-			config = function()
-				require("nieomylnieja.lsp.complete")
-			end,
-			requires = {
-				"hrsh7th/cmp-nvim-lsp",
-				"hrsh7th/cmp-buffer",
-				{
-					"L3MON4D3/LuaSnip",
-					tag = "v1.*",
-					requires = {
-						"rafamadriz/friendly-snippets",
-						"saadparwaiz1/cmp_luasnip",
-					},
-					config = function()
-						require("nieomylnieja.lsp.snippets")
-					end,
-				},
-				"onsails/lspkind.nvim",
-				"simrat39/symbols-outline.nvim",
-				{
-					"mfussenegger/nvim-lint",
-					config = function()
-						require("nieomylnieja.lsp.lint")
-					end,
-				},
-			},
-		})
-		use({
-			"scalameta/nvim-metals",
-			ft = "scala",
-			config = function()
-				require("nieomylnieja.metals")
-			end,
-		})
-		use({ "Fymyte/rasi.vim", ft = "rasi" })
+	-- Formatting
+	use("mhartington/formatter.nvim")
 
-		-- Syntax highlighting
-		use({
-			"nvim-treesitter/nvim-treesitter",
-			run = ":TSUpdate",
-			config = function()
-				require("nieomylnieja.treesitter")
-			end,
-			requires = "nvim-treesitter/nvim-treesitter",
-		})
+	-- Terminal
+	use({ "akinsho/toggleterm.nvim", tag = "*" })
 
-		-- Terminal
-		use({
-			"akinsho/toggleterm.nvim",
-			tag = "*",
-			config = function()
-				require("nieomylnieja.term")
-			end,
-		})
+	-- Git
+	use("lewis6991/gitsigns.nvim")
+	use("pwntester/octo.nvim")
+	use("sindrets/diffview.nvim")
+	use("TimUntersberger/neogit")
+	use("petertriho/cmp-git")
 
-		-- Popes awesomness
-		use("tpope/vim-commentary")
-		use("tpope/vim-fugitive")
-		use("tpope/vim-repeat")
-		-- TODO: I should write these settings to init.lua to get a better grasp on what's what.
-		use("tpope/vim-sensible")
-		use("tpope/vim-surround")
+	-- Popes awesomness
+	use("tpope/vim-commentary")
+	use("tpope/vim-repeat")
+	-- TODO: I should write these settings to init.lua to get a better grasp on what's what.
+	use("tpope/vim-sensible")
+	use("tpope/vim-surround")
 
-		if packer_bootstrap then
-			packer.sync()
-		end
+	if packer_bootstrap then
+		packer.sync()
+	end
 end)

@@ -1,12 +1,17 @@
+#!/bin/sh
+
 export DOTFILES="$HOME/.dotfiles"
 
-if ! [ -d "$DOTFILES" ] || ! [ -n "$BASH_VERSION" ]; then
+if ! [ -d "$DOTFILES" ] || [ -z "$BASH_VERSION" ]; then
   echo "dotfiles are not present, nothing to load"
   exit 0
 fi
 
-. "$DOTFILES/config/bash/env"
-. "$DOTFILES/config/bash/path"
+for file in "$DOTFILES/config/bash/env" "$DOTFILES/config/bash/path"; do
+  if [ -f "$file" ]; then
+    . "$file"
+  fi
+done
 
 # set key repeat rate [delay per/sec]
 xset r rate 200 26
@@ -14,3 +19,5 @@ xset r rate 200 26
 xrdb -merge ~/.Xresources &
 
 setxkbmap pl
+
+exec qtile start

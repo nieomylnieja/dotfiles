@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Qtile
 Comment=Qtile Session
-Exec=/usr/bin/qtile
+Exec=/etc/lightdm/Xsession
 Type=Application
 Keywords=wm;tiling

@@ -13,4 +13,12 @@ vim.g.nord_italic = true
 -- Enables/disables colorful backgrounds when used in diff mode
 vim.g.nord_uniform_diff_background = true
 
-require('nord').set()
+require("nord").set()
+
+local util = require("nord.util")
+local colors = require("nord.named_colors")
+
+util.loadColorSet({
+	NeoTreeTabInactive = { fg = colors.light_gray , bg = colors.dark_gray },
+	NeoTreeTabActive = { fg = colors.teal , bg = colors.gray  },
+})

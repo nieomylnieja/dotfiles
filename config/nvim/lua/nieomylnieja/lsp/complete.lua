@@ -11,6 +11,7 @@ local source_mapping = {
 	cmp_tabnine = "[TN]",
 	path = "[Path]",
 	luasnip = "[Snip]",
+	git = "[git]",
 }
 
 require("symbols-outline").setup({
@@ -86,6 +87,7 @@ cmp.setup({
 		{ name = "nvim_lsp" },
 		{ name = "luasnip" },
 		{ name = "buffer" },
+		{ name = "git" },
 	}),
 })
 
@@ -105,4 +107,10 @@ cmp.setup.cmdline(":", {
 	}, {
 		{ name = "cmdline" },
 	}),
+})
+
+-- Octo is supported by default config.
+require("cmp_git").setup({
+	filetypes = { "gitcommit", "octo" },
+	remotes = { "upstream", "origin" },
 })

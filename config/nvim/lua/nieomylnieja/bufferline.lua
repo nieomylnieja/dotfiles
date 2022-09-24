@@ -8,18 +8,17 @@ nnoremap("<S-n>", ":BufferLineMoveNext<CR>", opts)
 nnoremap("<S-p>", ":BufferLineMovePrev<CR>", opts)
 
 -- Support nord theme.
-local nord0 = "#2E3440"
-local nord1 = "#3B4252"
-local nord9 = "#81A1C1"
-local fill = nord0 --'#181c24' if separator_style is "slant"
-local indicator = nord9
-local bg = nord0
-local buffer_bg = nord0
-local buffer_bg_selected = nord1
-local buffer_bg_visible = "#2A2F3A"
+local colors = require("nord.named_colors")
+local fill = colors.black --'#181c24' if separator_style is "slant"
+local indicator = colors.glacier
+local bg = colors.black
+local buffer_bg = colors.black
+local buffer_bg_selected = colors.dark_gray
+local buffer_bg_visible = colors.black
 
 require("bufferline").setup({
 	options = {
+		show_close_icon = false,
 		diagnostics = "nvim_lsp",
 		diagnostics_indicator = function(_, level)
 			local icon = level:match("error") and " " or ""
@@ -30,6 +29,7 @@ require("bufferline").setup({
 				filetype = "neo-tree",
 				text = "File Explorer",
 				text_align = "center",
+				separator = true,
 			},
 		},
 		color_icons = true,
@@ -41,7 +41,6 @@ require("bufferline").setup({
 		background = {
 			bg = bg,
 		},
-
 		buffer_selected = {
 			bg = buffer_bg_selected,
 		},
@@ -49,7 +48,6 @@ require("bufferline").setup({
 			bg = buffer_bg_visible,
 			italic = true,
 		},
-
 		numbers = {
 			bg = buffer_bg,
 		},
@@ -60,7 +58,6 @@ require("bufferline").setup({
 			bg = buffer_bg_visible,
 			italic = true,
 		},
-
 		diagnostic = {
 			bg = buffer_bg,
 		},
@@ -72,7 +69,6 @@ require("bufferline").setup({
 		diagnostic_visible = {
 			bg = buffer_bg_visible,
 		},
-
 		hint = {
 			bg = buffer_bg,
 		},
@@ -95,7 +91,6 @@ require("bufferline").setup({
 			bold = true,
 			italic = true,
 		},
-
 		info = {
 			bg = buffer_bg,
 		},
@@ -118,7 +113,6 @@ require("bufferline").setup({
 			bold = true,
 			italic = true,
 		},
-
 		warning = {
 			bg = buffer_bg,
 		},
@@ -163,7 +157,6 @@ require("bufferline").setup({
 			bold = true,
 			italic = true,
 		},
-
 		close_button = {
 			bg = buffer_bg,
 		},
@@ -173,7 +166,6 @@ require("bufferline").setup({
 		close_button_selected = {
 			bg = buffer_bg_selected,
 		},
-
 		duplicate = {
 			bg = buffer_bg,
 		},
@@ -183,7 +175,6 @@ require("bufferline").setup({
 		duplicate_visible = {
 			bg = buffer_bg_visible,
 		},
-
 		separator = {
 			fg = fill,
 			bg = buffer_bg,
@@ -223,6 +214,10 @@ require("bufferline").setup({
 			bg = buffer_bg_visible,
 			bold = true,
 			italic = true,
+		},
+		offset_separator = {
+			fg = colors.gray,
+			bg = buffer_bg,
 		},
 	},
 })

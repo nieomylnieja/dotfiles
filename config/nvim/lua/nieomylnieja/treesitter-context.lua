@@ -1,5 +1,3 @@
-local nnoremap = require("nieomylnieja.keymap").nnoremap
-
 require("treesitter-context").setup({
 	enable = true,
 	throttle = true, -- Throttles plugin updates (may improve performance)
