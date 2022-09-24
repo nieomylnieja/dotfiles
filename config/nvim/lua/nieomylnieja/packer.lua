@@ -17,6 +17,7 @@ return packer.startup(function(use)
 
 	-- Prerequisite
 	use("nvim-lua/plenary.nvim")
+	use("lewis6991/impatient.nvim")
 
 	-- Color scheme and the looks
 	use("shaunsingh/nord.nvim")
@@ -29,7 +30,10 @@ return packer.startup(function(use)
 		requires = "MunifTanjim/nui.nvim",
 	})
 	use("folke/which-key.nvim")
-	use("folke/trouble.nvim")
+
+  -- Management
+	use("goolord/alpha-nvim")
+  use("ahmedkhalf/project.nvim")
 
 	-- Searching
 	use({ "nvim-telescope/telescope.nvim", branch = "0.1.x" })
@@ -37,6 +41,7 @@ return packer.startup(function(use)
 
 	-- Markdown, plantuml and more previewer
 	use({ "iamcco/markdown-preview.nvim", run = "cd app && npm install" })
+	use({ "preservim/vim-markdown", ft = "markdown" })
 
 	-- Manage LSP and DAP server, linters and formatters.
 	use("williamboman/mason.nvim")
@@ -48,17 +53,21 @@ return packer.startup(function(use)
 	use("rcarriga/nvim-dap-ui")
 	use("theHamsta/nvim-dap-virtual-text")
 
-	-- LSP
+	-- Code (LSPs and stuff)
 	use("neovim/nvim-lspconfig")
+	use("folke/lua-dev.nvim")
+	-- Completion
 	use("hrsh7th/nvim-cmp")
 	use("hrsh7th/cmp-nvim-lsp")
 	use("hrsh7th/cmp-buffer")
+	use("hrsh7th/cmp-path")
+	use("hrsh7th/cmp-cmdline")
+	use("saadparwaiz1/cmp_luasnip")
 	use("onsails/lspkind.nvim")
 	use("simrat39/symbols-outline.nvim")
 	use("mfussenegger/nvim-lint")
 	use({ "L3MON4D3/LuaSnip", tag = "v1.*" })
 	use("rafamadriz/friendly-snippets")
-	use("saadparwaiz1/cmp_luasnip")
 	use({
 		"scalameta/nvim-metals",
 		ft = "scala",
@@ -67,13 +76,15 @@ return packer.startup(function(use)
 		end,
 	})
 	use({ "Fymyte/rasi.vim", ft = "rasi" })
-
-	-- Syntax highlighting
+	use("windwp/nvim-autopairs")
+	-- Treesitter
 	use({ "nvim-treesitter/nvim-treesitter", run = ":TSUpdate" })
 	use("nvim-treesitter/nvim-treesitter-context")
-
-	-- Formatting
+	use("JoosepAlviste/nvim-ts-context-commentstring")
 	use("mhartington/formatter.nvim")
+	use("folke/trouble.nvim")
+	use("numToStr/Comment.nvim")
+	use("lukas-reineke/indent-blankline.nvim")
 
 	-- Terminal
 	use({ "akinsho/toggleterm.nvim", tag = "*" })
@@ -85,12 +96,8 @@ return packer.startup(function(use)
 	use("TimUntersberger/neogit")
 	use("petertriho/cmp-git")
 
-	-- Popes awesomness
-	use("tpope/vim-commentary")
-	use("tpope/vim-repeat")
 	-- TODO: I should write these settings to init.lua to get a better grasp on what's what.
 	use("tpope/vim-sensible")
-	use("tpope/vim-surround")
 
 	if packer_bootstrap then
 		packer.sync()

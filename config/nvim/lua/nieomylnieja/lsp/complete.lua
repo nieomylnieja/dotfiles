@@ -10,8 +10,9 @@ local source_mapping = {
 	nvim_lua = "[Lua]",
 	cmp_tabnine = "[TN]",
 	path = "[Path]",
+	cmdline = "[CMD]",
 	luasnip = "[Snip]",
-	git = "[git]",
+	git = "[Git]",
 }
 
 require("symbols-outline").setup({

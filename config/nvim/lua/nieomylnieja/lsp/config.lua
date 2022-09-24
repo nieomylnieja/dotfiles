@@ -1,5 +1,8 @@
 local nnoremap = require("nieomylnieja.keymap").nnoremap
 
+-- IMPORTANT: make sure to setup lua-dev BEFORE lspconfig
+require("lua-dev")
+
 local lsp = require("lspconfig")
 local cmp_lsp = require("cmp_nvim_lsp")
 local telescope = require("telescope.builtin")
@@ -19,7 +22,7 @@ local function config(_config)
 				if desc then
 					desc = "LSP: " .. desc
 				end
-				nnoremap(keys, func, { noremap = true, silent = true, buffer = bufnr, desc = desc })
+				nnoremap(keys, func, { silent = true, buffer = bufnr, desc = desc })
 			end
 
 			nmap("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
@@ -117,6 +120,9 @@ lsp.sumneko_lua.setup(config({
 				-- Setup your lua path
 				path = vim.split(package.path, ";"),
 			},
+			format = {
+				enable = false,
+			},
 			diagnostics = {
 				-- Get the language server to recognize the `vim` global
 				globals = { "vim" },
@@ -127,6 +133,9 @@ lsp.sumneko_lua.setup(config({
 					[vim.fn.expand("$VIMRUNTIME/lua")] = true,
 					[vim.fn.expand("$VIMRUNTIME/lua/vim/lsp")] = true,
 				},
+			},
+			telemetry = {
+				enable = false,
 			},
 		},
 	},

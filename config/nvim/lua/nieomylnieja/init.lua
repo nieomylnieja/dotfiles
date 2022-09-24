@@ -90,8 +90,6 @@ vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
 nnoremap("<C-g>", ":Neogit<CR>", silent)
 nnoremap("<leader>n", ":Neotree<cr>", silent)
 
-require("keys")
-
 -- Telescope mappings, should move these to telescope.lua
 
 -- Functions {{{1
@@ -108,6 +106,9 @@ local function req(name)
 	require("nieomylnieja." .. name)
 end
 
+-- Optimize
+require("impatient").enable_profile()
+
 -- My own
 req("autocmd")
 
@@ -120,17 +121,24 @@ req("web-devicons")
 req("lualine")
 req("bufferline")
 req("neotree")
+req("dashboard")
 -- Code
-req("debugger")
 req("lsp")
+req("debugger")
 req("format")
 req("treesitter")
 req("treesitter-context")
 req("gitsigns")
 req("which-key")
+req("autopairs")
+req("comments")
+req("indent")
 -- Other
 req("markdown-preview")
 req("telescope")
 req("term")
 req("neogit")
 require("octo").setup() -- The defaults are fine, but it needs to load after telescope.
+req("projects")
+-- Mappings
+req("keys")

@@ -31,6 +31,18 @@ require("bufferline").setup({
 				text_align = "center",
 				separator = true,
 			},
+			{
+				filetype = "DiffviewFiles",
+				text = "Diff View",
+				highlight = "PanelHeading",
+				padding = 1,
+			},
+			{
+				filetype = "packer",
+				text = "Packer",
+				highlight = "PanelHeading",
+				padding = 1,
+			},
 		},
 		color_icons = true,
 	},

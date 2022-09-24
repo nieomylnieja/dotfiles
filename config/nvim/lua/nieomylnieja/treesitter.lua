@@ -11,8 +11,17 @@ require("nvim-treesitter.configs").setup({
 		-- Instead of true it can also be a list of languages
 		additional_vim_regex_highlighting = false,
 	},
-
-	indent = { enable = true, disable = { "" } },
+	autopairs = {
+		enable = true,
+	},
+	indent = {
+		enable = true,
+		disable = { "" },
+	},
+  context_commentstring = {
+    enable = true,
+    enable_autocmd = false,
+  }
 })
 
 -- Runtime for FZF
