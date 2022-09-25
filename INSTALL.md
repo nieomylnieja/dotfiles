@@ -100,7 +100,7 @@ pip install psutil iwlib
 - shell:
 
 ```sh
-yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq yq xautolock sops pacman-contrib httpie cht.sh-git apg luarocks github-cli
+yay -S dust starship ripgrep bat zoxide fzf moreutils exa xclip lesspipe git-delta fd bash-completion man-db man-pages nvm yarn bottom jq yq xautolock sops pacman-contrib httpie cht.sh-git apg luarocks github-cli lnav
 go install github.com/josephburnett/jd@latest
 ```
 

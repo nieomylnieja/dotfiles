@@ -1,10 +1,57 @@
 -- Diagnostic icons
-vim.fn.sign_define("DiagnosticSignError", { text = "", texthl = "DiagnosticSignError" })
-vim.fn.sign_define("DiagnosticSignWarn", { text = "", texthl = "DiagnosticSignWarn" })
-vim.fn.sign_define("DiagnosticSignHint", { text = "", texthl = "DiagnosticSignHint" })
-vim.fn.sign_define("DiagnosticSignInfo", { text = "", texthl = "DiagnosticSignInfo" })
+local signs = {
+	{ name = "DiagnosticSignError", text = "" },
+	{ name = "DiagnosticSignWarn", text = "" },
+	{ name = "DiagnosticSignHint", text = "" },
+	{ name = "DiagnosticSignInfo", text = "" },
+}
+for _, sign in ipairs(signs) do
+	vim.fn.sign_define(sign.name, { texthl = sign.name, text = sign.text, numhl = "" })
+end
 
-require("trouble").setup({
+local config = {
+	-- disable virtual text
+	virtual_lines = false,
+	virtual_text = false,
+	-- virtual_text = {
+	--   -- spacing = 7,
+	--   -- update_in_insert = false,
+	--   -- severity_sort = true,
+	--   -- prefix = "<-",
+	--   prefix = " ●",
+	--   source = "if_many", -- Or "always"
+	--   -- format = function(diag)
+	--   --   return diag.message .. "blah"
+	--   -- end,
+	-- },
+
+	-- show signs
+	signs = {
+		active = signs,
+	},
+	update_in_insert = true,
+	underline = true,
+	severity_sort = true,
+	float = {
+		focusable = true,
+		style = "minimal",
+		border = "rounded",
+		-- border = {"▄","▄","▄","█","▀","▀","▀","█"},
+		source = "if_many", -- Or "always"
+		header = "",
+		prefix = "",
+		-- width = 40,
+	},
+}
+
+vim.diagnostic.config(config)
+
+local is_loaded, trouble = pcall(require, "trouble")
+if not is_loaded then
+  return
+end
+
+trouble.setup({
 	position = "bottom", -- position of the list can be: bottom, top, left, right
 	height = 10, -- height of the trouble list when position is top or bottom
 	width = 50, -- width of the list when position is left or right

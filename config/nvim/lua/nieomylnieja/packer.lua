@@ -18,10 +18,13 @@ return packer.startup(function(use)
 	-- Prerequisite
 	use("nvim-lua/plenary.nvim")
 	use("lewis6991/impatient.nvim")
+  use("rcarriga/nvim-notify")
+  use("Tastyep/structlog.nvim")
 
 	-- Color scheme and the looks
 	use("shaunsingh/nord.nvim")
 	use("kyazdani42/nvim-web-devicons")
+  use("stevearc/dressing.nvim")
 	use("nvim-lualine/lualine.nvim")
 	use({ "akinsho/bufferline.nvim", tag = "v2.*" })
 	use({
@@ -38,6 +41,7 @@ return packer.startup(function(use)
 	-- Searching
 	use({ "nvim-telescope/telescope.nvim", branch = "0.1.x" })
 	use({ "nvim-telescope/telescope-fzf-native.nvim", run = "make" })
+  use("nvim-pack/nvim-spectre")
 
 	-- Markdown, plantuml and more previewer
 	use({ "iamcco/markdown-preview.nvim", run = "cd app && npm install" })
@@ -56,6 +60,8 @@ return packer.startup(function(use)
 	-- Code (LSPs and stuff)
 	use("neovim/nvim-lspconfig")
 	use("folke/lua-dev.nvim")
+  use("ray-x/lsp_signature.nvim")
+  use("RRethy/vim-illuminate")
 	-- Completion
 	use("hrsh7th/nvim-cmp")
 	use("hrsh7th/cmp-nvim-lsp")
@@ -65,7 +71,6 @@ return packer.startup(function(use)
 	use("saadparwaiz1/cmp_luasnip")
 	use("onsails/lspkind.nvim")
 	use("simrat39/symbols-outline.nvim")
-	use("mfussenegger/nvim-lint")
 	use({ "L3MON4D3/LuaSnip", tag = "v1.*" })
 	use("rafamadriz/friendly-snippets")
 	use({
@@ -81,7 +86,7 @@ return packer.startup(function(use)
 	use({ "nvim-treesitter/nvim-treesitter", run = ":TSUpdate" })
 	use("nvim-treesitter/nvim-treesitter-context")
 	use("JoosepAlviste/nvim-ts-context-commentstring")
-	use("mhartington/formatter.nvim")
+  use("jose-elias-alvarez/null-ls.nvim")
 	use("folke/trouble.nvim")
 	use("numToStr/Comment.nvim")
 	use("lukas-reineke/indent-blankline.nvim")

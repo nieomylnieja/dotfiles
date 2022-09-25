@@ -6,16 +6,25 @@ vim.g.mapleader = " "
 local opt = vim.opt
 
 -- General
+opt.shortmess:append("c")
 opt.lazyredraw = true -- Do not redraw screen in the middle of a macro. Makes them complete faster.
-opt.clipboard = "unnamed,unnamedplus"
+opt.clipboard = { "unnamed", "unnamedplus" } -- Allows neovim to access the system clipboard
 opt.scrolloff = 9999 -- Center the view
-opt.number = true
-opt.relativenumber = true
-opt.mouse = "a"
+opt.number = true -- Set numbered lines
+opt.relativenumber = true -- Set relative numbered lines
+opt.mouse = "a" -- Enable mouse
 opt.termguicolors = true -- Required by bufferline!
 opt.hidden = true -- Otherwise terminals managed by toggleterm are discarded.
-opt.splitbelow = true
-opt.splitright = true
+opt.splitbelow = true -- Force all horizontal splits to go below current window
+opt.splitright = true -- Force all vertical splits to go to the right of current window
+opt.swapfile = false
+opt.pumheight = 10
+opt.completeopt = { "menuone", "noselect" }
+opt.timeoutlen = 500
+opt.undofile = true -- Peristent undo
+opt.updatetime = 300 -- Faster completion (4s default!)
+opt.writebackup = false
+opt.signcolumn = "yes" -- Always show the sign column, otherwise it would shift the text each time
 
 -- Tabbing
 opt.tabstop = 2 -- The number of spaces a tab is
@@ -36,6 +45,11 @@ opt.wrap = false -- Don't wrap long lines (good for vsplits, bad otherwise?)
 -- Folding
 opt.foldmethod = "indent"
 opt.foldlevel = 99
+
+-- Setup {{{1
+
+require("nieomylnieja.lib.notify").setup()
+require("nieomylnieja.lib.commands").load()
 
 -- Mappings {{{1
 
@@ -59,11 +73,11 @@ nnoremap("<C-j>", "<C-w>j")
 nnoremap("<C-k>", "<C-w>k")
 nnoremap("<C-l>", "<C-w>l")
 
--- Resize splits with CTRL+SHIFT+[hjkl]
-nnoremap("<S-h>", ":vertical resize -1<CR>", silent)
-nnoremap("<S-j>", ":resize -1<CR>", silent)
-nnoremap("<S-k>", ":resize +1<CR>", silent)
-nnoremap("<S-l>", ":vertical resize +1<CR>", silent)
+-- Resize with arrows
+nnoremap("<S-k>", ":resize -2<CR>", silent)
+nnoremap("<S-j>", ":resize +2<CR>", silent)
+nnoremap("<S-h>", ":vertical resize -2<CR>", silent)
+nnoremap("<S-l>", ":vertical resize +2<CR>", silent)
 
 -- System clipboard
 vnoremap("y", '"+y')
@@ -73,32 +87,19 @@ nnoremap("<tab>", "za")
 noremap("j", "(v:count == 0 ? 'gj' : 'j')", silent_expr)
 noremap("k", "(v:count == 0 ? 'gk' : 'k')", silent_expr)
 
--- Fugitive Conflict Resolution
-nnoremap("<leader>gd", ":Gdiffsplit!<CR>")
-nnoremap("gdh", ":diffget //2<CR>")
-nnoremap("gdl", ":diffget //3<CR>")
-
 -- Paste without loosing buffer
 xnoremap("<leader>p", '"_dP')
 
 -- Others
 tnoremap("<Esc>", "<C-\\><C-n>")
-nnoremap("<leader>fm", ":FormatWrite<CR>", silent)
+nnoremap("<leader>fm", vim.lsp.buf.formatting_sync, silent)
+vnoremap("<leader>fm", vim.lsp.buf.range_formatting, silent)
 nnoremap("<leader>so", ":SymbolsOutline<CR>", silent)
 noremap("<leader>d", [[c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>]])
 vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
 nnoremap("<C-g>", ":Neogit<CR>", silent)
 nnoremap("<leader>n", ":Neotree<cr>", silent)
-
--- Telescope mappings, should move these to telescope.lua
-
--- Functions {{{1
-
-vim.api.nvim_create_user_command("ReloadMyConfigs", function()
-	vim.cmd([[so $MYVIMRC]])
-	vim.cmd([[:PackerCompile<CR>]])
-	print("Confgis reloaded!")
-end, {})
+nnoremap("<C-x>", ":BufferKill<CR>", silent)
 
 -- Plugins {{{1
 
@@ -112,12 +113,12 @@ require("impatient").enable_profile()
 -- My own
 req("autocmd")
 
--- Managers
+-- Manager
 req("packer")
-req("mason")
 -- Looks
 req("nord")
 req("web-devicons")
+req("dressing")
 req("lualine")
 req("bufferline")
 req("neotree")
@@ -125,7 +126,6 @@ req("dashboard")
 -- Code
 req("lsp")
 req("debugger")
-req("format")
 req("treesitter")
 req("treesitter-context")
 req("gitsigns")
@@ -133,6 +133,7 @@ req("which-key")
 req("autopairs")
 req("comments")
 req("indent")
+req("illuminate")
 -- Other
 req("markdown-preview")
 req("telescope")

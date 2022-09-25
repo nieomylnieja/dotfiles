@@ -1,5 +1,5 @@
 local nnoremap = require("nieomylnieja.keymap").nnoremap
-local opts = { noremap = true, silent = true }
+local opts = { silent = true }
 -- These commands will navigate through buffers in order.
 nnoremap("<C-n>", ":BufferLineCycleNext<CR>", opts)
 nnoremap("<C-p>", ":BufferLineCyclePrev<CR>", opts)

@@ -2,8 +2,6 @@ local cmp = require("cmp")
 local lspkind = require("lspkind")
 local luasnip = require("luasnip")
 
-vim.opt.completeopt = "menu,menuone,noselect"
-
 local source_mapping = {
 	buffer = "[Buffer]",
 	nvim_lsp = "[LSP]",
