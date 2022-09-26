@@ -33,6 +33,7 @@ return packer.startup(function(use)
 		requires = "MunifTanjim/nui.nvim",
 	})
 	use("folke/which-key.nvim")
+  use("norcalli/nvim-colorizer.lua")
 
   -- Management
 	use("goolord/alpha-nvim")
@@ -90,6 +91,8 @@ return packer.startup(function(use)
 	use("folke/trouble.nvim")
 	use("numToStr/Comment.nvim")
 	use("lukas-reineke/indent-blankline.nvim")
+  use("folke/todo-comments.nvim")
+  use("danymat/neogen")
 
 	-- Terminal
 	use({ "akinsho/toggleterm.nvim", tag = "*" })

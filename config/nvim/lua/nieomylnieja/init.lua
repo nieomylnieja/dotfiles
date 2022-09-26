@@ -6,7 +6,7 @@ vim.g.mapleader = " "
 local opt = vim.opt
 
 -- General
-opt.shortmess:append("c")
+opt.shortmess:append "c"
 opt.lazyredraw = true -- Do not redraw screen in the middle of a macro. Makes them complete faster.
 opt.clipboard = { "unnamed", "unnamedplus" } -- Allows neovim to access the system clipboard
 opt.scrolloff = 9999 -- Center the view
@@ -48,12 +48,16 @@ opt.foldlevel = 99
 
 -- Setup {{{1
 
-require("nieomylnieja.lib.notify").setup()
-require("nieomylnieja.lib.commands").load()
+local function req(name)
+  return require("nieomylnieja." .. name)
+end
+
+req("lib.notify").setup()
+req("lib.commands").load()
 
 -- Mappings {{{1
 
-local remap = require("nieomylnieja.keymap")
+local remap = require "nieomylnieja.keymap"
 
 local noremap = remap.noremap
 local nnoremap = remap.nnoremap
@@ -103,43 +107,42 @@ nnoremap("<C-x>", ":BufferKill<CR>", silent)
 
 -- Plugins {{{1
 
-local function req(name)
-	require("nieomylnieja." .. name)
-end
-
 -- Optimize
-require("impatient").enable_profile()
+require("impatient")
 
 -- My own
-req("autocmd")
+req "autocmd"
 
 -- Manager
-req("packer")
+req "packer"
 -- Looks
-req("nord")
-req("web-devicons")
-req("dressing")
-req("lualine")
-req("bufferline")
-req("neotree")
-req("dashboard")
+req "nord"
+req "web-devicons"
+req "dressing"
+req "lualine"
+req "bufferline"
+req "neotree"
+req "dashboard"
+require("colorizer").setup()
 -- Code
-req("lsp")
-req("debugger")
-req("treesitter")
-req("treesitter-context")
-req("gitsigns")
-req("which-key")
-req("autopairs")
-req("comments")
-req("indent")
-req("illuminate")
+req "lsp"
+req "debugger"
+req "treesitter"
+req "treesitter-context"
+req "gitsigns"
+req "which-key"
+req "autopairs"
+req "comments"
+req "indent"
+req "illuminate"
+req("code.annotations").setup()
 -- Other
-req("markdown-preview")
-req("telescope")
-req("term")
-req("neogit")
-require("octo").setup() -- The defaults are fine, but it needs to load after telescope.
-req("projects")
+req "markdown-preview"
+req "telescope"
+req "term"
+req "neogit"
+require("octo").setup()
+req "projects"
+req("spectre").setup()
 -- Mappings
-req("keys")
+req "keys"
