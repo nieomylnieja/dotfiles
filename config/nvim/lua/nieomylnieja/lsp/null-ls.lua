@@ -30,7 +30,7 @@ local sources = {
 	-- Shell
 	fmt.shfmt,
 	-- Terraform
-	fmt.terraform_fmt, -- NOTE: Manual installation
+	fmt.terraform_fmt,
 	-- All types
 	fmt.trim_newlines,
 	fmt.trim_whitespace,
@@ -42,7 +42,7 @@ local sources = {
 	-- Makefile
 	lint.checkmake, -- NOTE: Manual installation
 	-- Git commit
-	lint.commitlint, -- NOTE: Manual installation
+	-- lint.commitlint, -- NOTE: Manual installation
 	-- All types, spelling
 	-- lint.cspell, -- TODO: Configure it only for projects with cspell.json
 	-- Go
@@ -70,3 +70,8 @@ local sources = {
 }
 
 null_ls.setup({ sources = sources })
+
+-- Custom
+local custom = require("nieomylnieja.lsp.null-ls-custom")
+-- Terraform
+null_ls.register(custom.tflint)

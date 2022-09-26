@@ -4,7 +4,13 @@ really need or understand).
 
 ## LSP
 
-TODO
+## Linting
+
+Most of the linters, lsps, daps and formatters are managed (installed and updated)
+by mason, except for the following:
+- remark
+- checkmake
+- commitlint
 
 ## Formatting
 
@@ -40,9 +46,11 @@ Ctrl+W o
 
 #### Projects
 
+```
 f	<c-f>	find_project_files
 b	<c-b>	browse_project_files
 d	<c-d>	delete_project
 s	<c-s>	search_in_project_files
 r	<c-r>	recent_project_files
 w	<c-w>	change_working_directory
+```

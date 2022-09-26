@@ -8,6 +8,7 @@ require("mason-lspconfig").setup({
 		"pyright",
 		"gopls",
 		"sumneko_lua",
+    "terraform-ls",
 	},
 })
 
@@ -23,6 +24,7 @@ require("mason-tool-installer").setup({
 		"buf",
 		"yamllint",
 		"hadolint",
+    "tflint",
 		-- Formatters
 		"stylua",
 		"goimports",
