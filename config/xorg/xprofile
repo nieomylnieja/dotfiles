@@ -19,7 +19,3 @@ xset r rate 200 26
 xrdb -merge ~/.Xresources &
 
 setxkbmap pl
-
-if ! pgrep qtile > /dev/null; then
-  exec qtile start
-fi

@@ -50,7 +50,7 @@ local function keymaps(bufnr)
 		print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
 	end, "[W]orkspace [L]ist Folders")
 
-  -- Diagnostics
+	-- Diagnostics
 	nmap("gl", vim.diagnostic.open_float, "Open diagnostics popup")
 	nmap("[d", vim.diagnostic.goto_prev, "Goto previous diagnostic")
 	nmap("]d", vim.diagnostic.goto_next, "Goto previous diagnostic")
@@ -62,7 +62,9 @@ local function config(_config)
 		-- Use an on_attach function to only map the following keys
 		-- after the language server attaches to the current buffer
 		capabilities = capabilities,
-		on_attach = function(_, bufnr)
+		on_attach = function(client, bufnr)
+			-- Let null-ls format stuff for us
+			client.resolved_capabilities.document_formatting = false
 			keymaps(bufnr)
 		end,
 	}, _config or {})
@@ -119,13 +121,11 @@ lsp.bashls.setup(config({
 }))
 
 -- Lua
-local sumneko_root_path = os.getenv("DOTFILES") .. "/clones/lua-language-server"
-local sumneko_binary = sumneko_root_path .. "/bin/lua-language-server"
 
 -- IMPORTANT: make sure to setup lua-dev BEFORE sumneko_lua
 require("lua-dev").setup(config())
 lsp.sumneko_lua.setup(config({
-	cmd = { sumneko_binary, "-E", sumneko_root_path .. "/main.lua" },
+	cmd = { "lua-language-server" },
 	filetypes = { "lua" },
 	settings = {
 		Lua = {
@@ -159,6 +159,6 @@ lsp.sumneko_lua.setup(config({
 -- Terraform
 lsp.terraformls.setup(config({
 	cmd = { "terraform-ls", "serve" },
-	filetypes = { "terraform" ,"tf" },
-  root_dir = lsputil.root_pattern('.terraform', '.git'),
+	filetypes = { "terraform", "tf" },
+	root_dir = lsputil.root_pattern(".terraform", ".git"),
 }))

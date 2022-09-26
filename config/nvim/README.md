@@ -2,6 +2,10 @@ The purpose of this document is to gather all the plugins I use and try to
 document them in hopes of keeping my setup clean (without extra stuff I don't
 really need or understand).
 
+## Reminders
+
+- `null-ls`: On 0.8, you should use `vim.lsp.buf.format` (see the help file for usage instructions).
+
 ## LSP
 
 ## Linting

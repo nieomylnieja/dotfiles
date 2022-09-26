@@ -4,7 +4,7 @@ end
 
 req("mason")
 req("complete")
-req("config")
+req("lsp")
 req("snippets")
 req("diagnostics")
 req("null-ls")
