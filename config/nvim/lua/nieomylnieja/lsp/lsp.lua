@@ -1,5 +1,4 @@
 local lsp = require "lspconfig"
--- local saga = require "lspsaga"
 local telescope = require "telescope.builtin"
 
 local capabilities = vim.lsp.protocol.make_client_capabilities()
@@ -19,18 +18,6 @@ end
 vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
 
 vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, { border = "rounded" })
-
--- saga.init_lsp_saga {
---   code_action_lightbulb = {
---     enable = false,
---     -- enable_in_insert = true,
---     -- cache_code_action = true,
---     -- sign = true,
---     -- update_time = 150,
---     -- sign_priority = 20,
---     -- virtual_text = true,
---   },
--- }
 
 local function keymaps(bufnr)
   -- See `:help vim.lsp.*` for documentation on any of the below functions
@@ -134,7 +121,6 @@ lsp.bashls.setup(config {
 })
 
 -- Lua
-
 lsp.sumneko_lua.setup(config {
   cmd = { "lua-language-server" },
   filetypes = { "lua" },

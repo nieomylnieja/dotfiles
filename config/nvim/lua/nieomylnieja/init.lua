@@ -104,11 +104,15 @@ vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
 nnoremap("<C-g>", ":Neogit<CR>", silent)
 nnoremap("<leader>n", ":Neotree<cr>", silent)
 nnoremap("<C-x>", ":BufferKill<CR>", silent)
+nnoremap('f', "<cmd>lua require'hop'.hint_words()<cr>", {})
+nnoremap('F', "<cmd>lua require'hop'.hint_lines()<cr>", {})
+vnoremap('f', "<cmd>lua require'hop'.hint_char2()<cr>", {})
+vnoremap('F', "<cmd>lua require'hop'.hint_lines<cr>", {})
 
 -- Plugins {{{1
 
 -- Optimize
-require("impatient")
+require "impatient"
 
 -- My own
 req "autocmd"
@@ -144,5 +148,7 @@ req "neogit"
 require("octo").setup()
 req "projects"
 req("spectre").setup()
+req("todo-comments").setup()
+req("hop").setup()
 -- Mappings
 req "keys"
