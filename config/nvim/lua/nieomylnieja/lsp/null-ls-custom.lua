@@ -35,7 +35,7 @@ M.tflint = {
 							row = d.range.start.line,
 							col = d.range.start.column,
 							message = d.message,
-							severity = h.diagnostics.severities["warning"],
+							severity = h.diagnostics.severities[d.rule.severity],
 						})
 					end
 				end

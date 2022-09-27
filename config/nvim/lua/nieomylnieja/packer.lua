@@ -60,9 +60,9 @@ return packer.startup(function(use)
 
   -- Code (LSPs and stuff)
   use "neovim/nvim-lspconfig"
-  use "folke/lua-dev.nvim"
   use "ray-x/lsp_signature.nvim"
   use "RRethy/vim-illuminate"
+  use "glepnir/lspsaga.nvim"
   -- Completion
   use "hrsh7th/nvim-cmp"
   use "hrsh7th/cmp-nvim-lsp"

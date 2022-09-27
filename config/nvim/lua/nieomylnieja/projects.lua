@@ -7,7 +7,7 @@ if not status_ok then
 end
 
 project.setup {
-  exclude_dirs = { "~/.dotfiles/*" },
+  -- exclude_dirs = { "~/.dotfiles/*" },
 
   ---@usage set to true to disable setting the current-woriking directory
   --- Manual mode doesn't automatically change your root directory, so you have
