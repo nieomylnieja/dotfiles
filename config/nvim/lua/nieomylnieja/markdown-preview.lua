@@ -27,11 +27,11 @@ vim.g.mkdp_open_to_the_world = 0
 -- useful when you work in remote vim and preview on local browser
 -- more detail see: https://github.com/iamcco/markdown-preview.nvim/pull/9
 -- default empty
-vim.g.mkdp_open_ip = ''
+vim.g.mkdp_open_ip = ""
 
 -- specify browser to open preview page
 -- default: ''
-vim.g.mkdp_browser = os.getenv('BROWSER')
+vim.g.mkdp_browser = os.getenv "BROWSER"
 
 -- set to 1, echo preview page url in command line when open preview page
 -- default is 0
@@ -40,7 +40,7 @@ vim.g.mkdp_echo_preview_url = 0
 -- a custom vim function name to open preview page
 -- this function will receive url as param
 -- default is empty
-vim.g.mkdp_browserfunc = ''
+vim.g.mkdp_browserfunc = ""
 
 -- options for markdown render
 -- mkit: markdown-it options for render
@@ -59,11 +59,14 @@ vim.g.mkdp_browserfunc = ''
 vim.g.mkdp_preview_options = {
   mkit = {},
   katex = {},
-  uml = {},
+  uml = {
+    -- TODO: Automate this `docker run -d -p 8091:8080 plantuml/plantuml-server:jetty`
+    server = "http://localhost:8091",
+  },
   maid = {},
   disable_sync_scroll = 0,
   hide_yaml_meta = 1,
-  sync_scroll_type = 'relative',
+  sync_scroll_type = "relative",
   sequence_diagrams = {},
   flowchart_diagrams = {},
   content_editable = false,
@@ -72,19 +75,19 @@ vim.g.mkdp_preview_options = {
 
 -- use a custom markdown style must be absolute path
 -- like '/Users/username/markdown.css' or expand('~/markdown.css')
-vim.g.mkdp_markdown_css = ''
+vim.g.mkdp_markdown_css = ""
 
 -- use a custom highlight style must absolute path
 -- like '/Users/username/highlight.css' or expand('~/highlight.css')
-vim.g.mkdp_highlight_css = ''
+vim.g.mkdp_highlight_css = ""
 
 -- use a custom port to start server or random for empty
-vim.g.mkdp_port = ''
+vim.g.mkdp_port = ""
 
 -- preview page title
 -- ${name} will be replace with the file name
-vim.g.mkdp_page_title = '「${name}」'
+vim.g.mkdp_page_title = "「${name}」"
 
 -- recognized filetypes
 -- these filetypes will have MarkdownPreview... commands
-vim.g.mkdp_filetypes = { 'markdown', 'puml' }
+vim.g.mkdp_filetypes = { "markdown", "puml" }
