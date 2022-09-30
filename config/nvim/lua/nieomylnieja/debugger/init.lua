@@ -1,29 +1,31 @@
 local dap = require("dap")
 local dapui = require("dapui")
 local daptext = require("nvim-dap-virtual-text")
+local dapGo = require("nieomylnieja.debugger.go")
 
 local nnoremap = require("nieomylnieja.keymap").nnoremap
 
+dapGo.setup()
 daptext.setup()
 dapui.setup({
-	layouts = {
-		{
-			elements = {
-				"console",
-			},
-			size = 7,
-			position = "bottom",
-		},
-		{
-			elements = {
-				-- Elements can be strings or table with id and size keys.
-				{ id = "scopes", size = 0.25 },
-				"watches",
-			},
-			size = 40,
-			position = "left",
-		},
-	},
+	-- layouts = {
+	-- 	{
+	-- 		elements = {
+	-- 			"console",
+	-- 		},
+	-- 		size = 7,
+	-- 		position = "bottom",
+	-- 	},
+	-- 	{
+	-- 		elements = {
+	-- 			-- Elements can be strings or table with id and size keys.
+	-- 			{ id = "scopes", size = 0.25 },
+	-- 			"watches",
+	-- 		},
+	-- 		size = 40,
+	-- 		position = "left",
+	-- 	},
+	-- },
 })
 
 dap.listeners.after.event_initialized["dapui_config"] = function()

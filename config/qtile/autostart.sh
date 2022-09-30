@@ -6,6 +6,7 @@ run() {
   fi
 }
 
+run emacs --daemon
 run nitrogen --restore
 run xautolock -time 5 \
   -locker locker \

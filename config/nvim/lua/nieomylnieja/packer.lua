@@ -44,6 +44,7 @@ return packer.startup(function(use)
   use { "nvim-telescope/telescope-fzf-native.nvim", run = "make" }
   use "nvim-pack/nvim-spectre"
   use "phaazon/hop.nvim"
+  use "rlane/pounce.nvim"
 
   -- Markdown, plantuml and more
   use { "iamcco/markdown-preview.nvim", run = "cd app && npm install", ft = { "markdown", "plantuml" } }
@@ -58,6 +59,8 @@ return packer.startup(function(use)
   use "mfussenegger/nvim-dap"
   use "rcarriga/nvim-dap-ui"
   use "theHamsta/nvim-dap-virtual-text"
+  use "leoluz/nvim-dap-go"
+  use "nvim-telescope/telescope-dap.nvim"
 
   -- Code (LSPs and stuff)
   use "neovim/nvim-lspconfig"

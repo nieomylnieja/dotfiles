@@ -246,6 +246,11 @@ _G.packer_plugins = {
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-dap",
     url = "https://github.com/mfussenegger/nvim-dap"
   },
+  ["nvim-dap-go"] = {
+    loaded = true,
+    path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-dap-go",
+    url = "https://github.com/leoluz/nvim-dap-go"
+  },
   ["nvim-dap-ui"] = {
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/nvim-dap-ui",
@@ -314,6 +319,11 @@ _G.packer_plugins = {
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/plenary.nvim",
     url = "https://github.com/nvim-lua/plenary.nvim"
   },
+  ["pounce.nvim"] = {
+    loaded = true,
+    path = "/home/mh/.local/share/nvim/site/pack/packer/start/pounce.nvim",
+    url = "https://github.com/rlane/pounce.nvim"
+  },
   ["project.nvim"] = {
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/project.nvim",
@@ -335,6 +345,11 @@ _G.packer_plugins = {
     loaded = true,
     path = "/home/mh/.local/share/nvim/site/pack/packer/start/symbols-outline.nvim",
     url = "https://github.com/simrat39/symbols-outline.nvim"
+  },
+  ["telescope-dap.nvim"] = {
+    loaded = true,
+    path = "/home/mh/.local/share/nvim/site/pack/packer/start/telescope-dap.nvim",
+    url = "https://github.com/nvim-telescope/telescope-dap.nvim"
   },
   ["telescope-fzf-native.nvim"] = {
     loaded = true,

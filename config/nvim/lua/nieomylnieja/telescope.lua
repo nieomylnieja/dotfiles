@@ -36,5 +36,7 @@ telescope.setup({
 	},
 })
 
-telescope.load_extension("fzf")
-telescope.load_extension("projects")
+for _, ext in pairs({"fzf", "projects", "dap"}) do
+  telescope.load_extension(ext)
+end
+

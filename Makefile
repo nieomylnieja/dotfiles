@@ -38,6 +38,10 @@ link/alacritty:
 link/qt5ct:
 	ln -s "$$DOTFILES/config/qt5ct" "$$XDG_CONFIG_HOME/qt5ct"
 
+link/doom:
+	rm -rf "$$HOME/.doom.d"
+	ln -s "$$DOTFILES/config/doom" "$$HOME/.doom.d"
+
 install/lsps:
 	go install golang.org/x/tools/gopls@latest
 	npm install -g \
@@ -48,6 +52,11 @@ install/lsps:
 
 install/go:
 	go install github.com/go-delve/delve/cmd/dlv@latest
+
+install/doomemacs:
+	git clone https://github.com/hlissner/doom-emacs ~/.emacs.d
+	doom install
+	doom doctor
 
 install/slock:
 	@if ! [ -d build/slock ]; then \
