@@ -1,4 +1,4 @@
--- vim:fdm=marker:fdl=0
+-- vim:fdm=marker
 vim.g.mapleader = " "
 
 -- General preferences {{{1
@@ -85,7 +85,6 @@ nnoremap("<S-l>", ":vertical resize +2<CR>", silent)
 
 -- System clipboard
 vnoremap("y", '"+y')
-
 -- j/k will move virtual lines (lines that wrap)
 noremap("j", "(v:count == 0 ? 'gj' : 'j')", silent_expr)
 noremap("k", "(v:count == 0 ? 'gk' : 'k')", silent_expr)
@@ -105,26 +104,7 @@ vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
 nnoremap("<C-g>", ":Neogit<CR>", silent)
 nnoremap("<leader>n", ":Neotree<cr>", silent)
 nnoremap("<C-x>", ":BufferKill<CR>", silent)
-vim.cmd [[
-nmap s <cmd>Pounce<CR>
-nmap S <cmd>PounceRepeat<CR>
-vmap s <cmd>Pounce<CR>
-omap gs <cmd>Pounce<CR>  " 's' is used by vim-surround
-]]
 
-vim.cmd [[
-hi PounceMatch  guibg=#a3be8c
-hi PounceGap  guibg=#ebcb8b
-hi PounceAccept guibg=#d08770
-hi PounceAcceptBest guibg=#81a1c1
-]]
-
-require("pounce").setup {
-  accept_keys = "JFKDLSAHGNUVRBYTMICEOXWPQZ",
-  accept_best_key = "<enter>",
-  multi_window = true,
-  debug = false,
-}
 -- Plugins {{{1
 
 -- Optimize
@@ -165,5 +145,6 @@ require("octo").setup()
 req "projects"
 req("spectre").setup()
 req("todo-comments").setup()
+req("surround").setup()
 -- Mappings
 req "keys"

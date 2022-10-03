@@ -75,6 +75,8 @@ keys = [
     Key([mod, "shift"], "k", lazy.layout.shuffle_up(), desc="Move window up"),
     # Grow windows. If current window is on the edge of screen and direction
     # will be to screen edge - window would shrink.
+    Key([mod, "control"], "i", lazy.layout.grow(), desc="Grow window"),
+    Key([mod, "control"], "s", lazy.layout.shrink(), desc="Shrink window"),
     Key([mod, "control"], "h", lazy.layout.grow_left(), desc="Grow window to the left"),
     Key(
         [mod, "control"], "l", lazy.layout.grow_right(), desc="Grow window to the right"
@@ -89,7 +91,7 @@ keys = [
     ),
     Key([mod], "f", lazy.window.toggle_fullscreen(), desc="Toggle fullscreen"),
     Key([mod, "shift"], "f", lazy.window.toggle_floating(), desc="toggle floating"),
-    Key([mod], "n", lazy.layout.normalize(), desc="Reset all window sizes"),
+    Key([mod, "shift"], "n", lazy.layout.normalize(), desc="Reset all window sizes"),
     # Switch focus of monitors
     Key([mod], "period", lazy.next_screen(), desc="Move focus to next monitor"),
     Key([mod], "comma", lazy.prev_screen(), desc="Move focus to prev monitor"),
@@ -177,16 +179,18 @@ colors = {
 
 layout_theme = {
     "border_width": 2,
-    "margin": 8,
+    "margin": 10,
     "border_focus": colors["frost-0"],
     "border_normal": colors["polar-0"],
 }
 
 layouts = [
     layout.MonadTall(**layout_theme),
-    layout.MonadWide(**layout_theme),
+    layout.MonadWide(
+        **layout_theme,
+        ratio=0.75,
+    ),
     layout.Max(**layout_theme),
-    layout.Stack(**layout_theme, num_stacks=2),
     layout.RatioTile(**layout_theme),
 ]
 
@@ -199,52 +203,46 @@ widget_defaults = dict(
 bar_defaults = dict(
     size=23,
     background=colors["polar-0"],
-    # margin = [6,6,0,6],
+    margin=[6, 6, 0, 6],
     opacity=0.8,
 )
 
 extension_defaults = widget_defaults.copy()
 
 widgets = [
-    # widget.Sep(
-    #     foreground=colors["snow-0"],
-    #     linewidth=1,
-    #     padding=10,
-    # ),
     widget.Image(
+        **widget_defaults,
         filename="~/.config/qtile/icons/python.png",
         margin=2,
     ),
-    # widget.Sep(
-    #     foreground=colors["snow-0"],
-    #     linewidth=1,
-    #     padding=10,
-    # ),
     widget.GroupBox(
+        **widget_defaults,
         active=colors["frost-2"],
         inactive=colors["snow-1"],
         highlight_color=colors["polar-1"],
         borderwidth=2,
         disable_drag=True,
-        fontsize=14,
         highlight_method="line",
         margin_x=0,
         margin_y=3,
-        padding_x=5,
         padding_y=8,
         rounded=False,
         this_current_screen_border=colors["aurora-2"],  # ebcb8b
         urgent_alert_method="line",
     ),
-    widget.Prompt(),
-    widget.WindowName(),
-    widget.Chord(
-        chords_colors={
-            "launch": ("#ff0000", "#ffffff"),
-        },
-        name_transform=lambda name: name.upper(),
+    widget.WindowName(**widget_defaults),
+    widget.Mpris2(
+        **widget_defaults,
+        display_metadata=["xesam:album", "xesam:artist"],
+        scroll=True,
+        width=150,
+        objname="org.mpris.MediaPlayer2.spotify",
     ),
-    widget.Systray(),
+    widget.Systray(**widget_defaults),
+    widget.Sep(**widget_defaults),
+    widget.CPU(**widget_defaults, format="{freq_current}GHz {load_percent}%"),
+    widget.Memory(**widget_defaults, format="{MemUsed:.0f}{mm}/{MemTotal:.0f}{mm}"),
+    widget.Sep(**widget_defaults),
     widget.Battery(
         **widget_defaults,
         charge_char="",
@@ -260,16 +258,9 @@ widgets = [
         # FIXME: This doesn't work right now.
         # mouse_callbacks={"Button3": lambda: qtile.cmd_spawn("easyeffects")},
     ),
-    widget.Net(
-        **widget_defaults,
-        # FIXME: I should be able to automate that somehow... What if I change
-        # the laptop or sth?
-        interface="wlan0",
-        prefix="M",
-        format="{down} {up}",
-    ),
-    widget.CurrentLayout(padding=5),
-    widget.Clock(format="%Y-%m-%d %a %I:%M %p"),
+    widget.Sep(**widget_defaults),
+    widget.CurrentLayout(**widget_defaults),
+    widget.Clock(**widget_defaults, format="%Y-%m-%d %a %I:%M %p"),
 ]
 
 screens = [
@@ -311,6 +302,7 @@ floating_layout = layout.Floating(
         Match(wm_class="ssh-askpass"),  # ssh-askpass
         Match(title="branchdialog"),  # gitk
         Match(title="pinentry"),  # GPG key password entry
+        Match(role="GtkFileChooserDialog"),  # File picker dialog
     ]
 )
 auto_fullscreen = True
@@ -327,6 +319,42 @@ def start():
     home = os.path.expanduser("~")
     subprocess.call([home + "/.config/qtile/autostart.sh"])
 
+
+def get_keys_description() -> str:
+    key_help = ""
+    for k in keys:
+        mods = ""
+
+        for m in k.modifiers:
+            if m == "mod4":
+                mods += "Super + "
+            else:
+                mods += m.capitalize() + " + "
+
+        if len(k.key) > 1:
+            mods += k.key.capitalize()
+        else:
+            mods += k.key
+
+        key_help += "{:<30} {}".format(mods, k.desc + "\n")
+
+    return key_help
+
+
+keys.extend(
+    [
+        Key(
+            [mod],
+            "t",
+            lazy.spawn(
+                "sh -c 'echo \""
+                + get_keys_description()
+                + '" | rofi -dmenu -i -mesg "Keyboard shortcuts"\''
+            ),
+            desc="Print keyboard bindings",
+        ),
+    ]
+)
 
 # XXX: Gasp! We're lying here. In fact, nobody really uses or cares about this
 # string besides java UI toolkits; you can see several discussions on the

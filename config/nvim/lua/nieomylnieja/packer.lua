@@ -43,7 +43,6 @@ return packer.startup(function(use)
   use { "nvim-telescope/telescope.nvim", branch = "0.1.x" }
   use { "nvim-telescope/telescope-fzf-native.nvim", run = "make" }
   use "nvim-pack/nvim-spectre"
-  use "rlane/pounce.nvim"
 
   -- Markdown, plantuml and more
   use { "iamcco/markdown-preview.nvim", run = "cd app && npm install", ft = { "markdown", "plantuml" } }
@@ -95,6 +94,7 @@ return packer.startup(function(use)
   use "lukas-reineke/indent-blankline.nvim"
   use "folke/todo-comments.nvim"
   use "danymat/neogen"
+  use "kylechui/nvim-surround"
 
   -- Terminal
   use { "akinsho/toggleterm.nvim", tag = "*" }

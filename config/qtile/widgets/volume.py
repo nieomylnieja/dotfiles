@@ -114,7 +114,7 @@ class Volume(base._TextBox):
             elif self.volume < 80:
                 self.text = f"\U0001f509 {self.volume}%"
             elif self.volume >= 80:
-                self.text = f"\U0001f50a {self.volume}"
+                self.text = f"\U0001f50a {self.volume}%"
 
     def setup_images(self):
         from libqtile import images

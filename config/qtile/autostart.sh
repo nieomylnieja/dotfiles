@@ -6,6 +6,7 @@ run() {
   fi
 }
 
+run picom --experimental-backends
 run emacs --daemon
 run nitrogen --restore
 run xautolock -time 5 \
