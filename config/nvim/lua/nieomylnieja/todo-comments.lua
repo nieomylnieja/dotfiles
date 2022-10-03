@@ -21,7 +21,7 @@ M.setup = function()
       -- regex that will be used to match keywords.
       -- don't replace the (KEYWORDS) placeholder
       -- FIXME: this will catch strings containing the pattern, which is meh...
-      pattern = [[^\b(KEYWORDS):]], -- ripgrep regex
+      pattern = [[\b(KEYWORDS):]], -- ripgrep regex
     },
   }
 end

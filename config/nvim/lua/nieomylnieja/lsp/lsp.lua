@@ -31,8 +31,8 @@ local function keymaps(bufnr)
   nmap("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
   nmap("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
 
-  nmap("gd", vim.lsp.buf.definition, "[G]oto [D]efinition")
-  nmap("gi", vim.lsp.buf.implementation, "[G]oto [I]mplementation")
+  nmap("gd", telescope.lsp_definitions, "[G]oto [D]efinition")
+  nmap("gi", telescope.lsp_implementations, "[G]oto [I]mplementation")
   nmap("gr", telescope.lsp_references, "[G]oto [R]eferences")
   nmap("<leader>ds", telescope.lsp_document_symbols, "[D]ocument [S]ymbols")
   nmap("<leader>ws", telescope.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
@@ -43,7 +43,7 @@ local function keymaps(bufnr)
 
   -- Lesser used LSP functionality
   nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
-  nmap("<leader>D", vim.lsp.buf.type_definition, "Type [D]efinition")
+  nmap("<leader>D", telescope.lsp_type_definitions, "Type [D]efinition")
   nmap("<leader>wa", vim.lsp.buf.add_workspace_folder, "[W]orkspace [A]dd Folder")
   nmap("<leader>wr", vim.lsp.buf.remove_workspace_folder, "[W]orkspace [R]emove Folder")
   nmap("<leader>wl", function()
@@ -64,7 +64,7 @@ local function config(_config)
     capabilities = capabilities,
     on_attach = function(client, bufnr)
       -- Let null-ls format stuff for us
-      client.resolved_capabilities.document_formatting = false
+      client.server_capabilities.document_formatting = false
       keymaps(bufnr)
     end,
   }, _config or {})

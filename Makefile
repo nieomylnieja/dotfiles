@@ -42,6 +42,9 @@ link/doom:
 	rm -rf "$$HOME/.doom.d"
 	ln -s "$$DOTFILES/config/doom" "$$HOME/.doom.d"
 
+link/picom:
+	ln -s "$$DOTFILES/config/picom" "$$HOME/.config/picom"
+
 install/lsps:
 	go install golang.org/x/tools/gopls@latest
 	npm install -g \

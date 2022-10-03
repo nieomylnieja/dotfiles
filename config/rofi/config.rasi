@@ -1,7 +1,21 @@
 configuration {
- modi: "window,drun,ssh,combi";
- font: "hack 10";
- combi-modi: "window,drun,ssh";
- }
+  modi:			"window,drun,filebrowser";
+  sort:			true;
+  sorting-method:	"normal";
+  disable-history:	false;
+  scroll-method:	0;
+  drun-display-format:	"{name}";
+  matching:		"fuzzy";
+  window-thumbnail:	true;
+  display-drun:		"Apps";
+  display-window:	"Windows";
+  display-filebrowser:	"Files";
+
+  filebrowser {
+    directories-first:	true;
+    sorting-method:	"name";
+  }
+}
+
 @theme "nord"
 

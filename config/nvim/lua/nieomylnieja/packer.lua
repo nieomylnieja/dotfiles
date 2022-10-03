@@ -43,7 +43,6 @@ return packer.startup(function(use)
   use { "nvim-telescope/telescope.nvim", branch = "0.1.x" }
   use { "nvim-telescope/telescope-fzf-native.nvim", run = "make" }
   use "nvim-pack/nvim-spectre"
-  use "phaazon/hop.nvim"
   use "rlane/pounce.nvim"
 
   -- Markdown, plantuml and more

@@ -85,29 +85,26 @@ nnoremap("<S-l>", ":vertical resize +2<CR>", silent)
 
 -- System clipboard
 vnoremap("y", '"+y')
--- Fold
-nnoremap("<tab>", "za")
+
 -- j/k will move virtual lines (lines that wrap)
 noremap("j", "(v:count == 0 ? 'gj' : 'j')", silent_expr)
 noremap("k", "(v:count == 0 ? 'gk' : 'k')", silent_expr)
 
 -- Paste without loosing buffer
 xnoremap("<leader>p", '"_dP')
+nnoremap("<leader>d", '"_d')
+vnoremap("<leader>d", '"_d')
 
 -- Others
 tnoremap("<Esc>", "<C-\\><C-n>")
-nnoremap("<leader>fm", vim.lsp.buf.formatting_sync, silent)
-vnoremap("<leader>fm", vim.lsp.buf.range_formatting, silent)
+nnoremap("<leader>fm", vim.lsp.buf.format, silent)
+vnoremap("<leader>fm", vim.lsp.buf.format, silent)
 nnoremap("<leader>so", ":SymbolsOutline<CR>", silent)
 noremap("<leader>d", [[c<c-r>=system('base64 --decode', @")<cr><esc>gv<left>]])
 vnoremap("<leader>e", [[c<c-r>=system('base64', @")<cr><BS><esc>gv<left>]])
 nnoremap("<C-g>", ":Neogit<CR>", silent)
 nnoremap("<leader>n", ":Neotree<cr>", silent)
 nnoremap("<C-x>", ":BufferKill<CR>", silent)
-nnoremap("f", "<cmd>lua require'hop'.hint_words()<cr>", {})
-nnoremap("F", "<cmd>lua require'hop'.hint_lines()<cr>", {})
-vnoremap("f", "<cmd>lua require'hop'.hint_char2()<cr>", {})
-vnoremap("F", "<cmd>lua require'hop'.hint_lines<cr>", {})
 vim.cmd [[
 nmap s <cmd>Pounce<CR>
 nmap S <cmd>PounceRepeat<CR>
@@ -122,12 +119,12 @@ hi PounceAccept guibg=#d08770
 hi PounceAcceptBest guibg=#81a1c1
 ]]
 
-require("pounce").setup({
+require("pounce").setup {
   accept_keys = "JFKDLSAHGNUVRBYTMICEOXWPQZ",
   accept_best_key = "<enter>",
   multi_window = true,
   debug = false,
-})
+}
 -- Plugins {{{1
 
 -- Optimize
@@ -168,6 +165,5 @@ require("octo").setup()
 req "projects"
 req("spectre").setup()
 req("todo-comments").setup()
-req("hop").setup()
 -- Mappings
 req "keys"
