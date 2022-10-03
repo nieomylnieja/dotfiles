@@ -178,9 +178,9 @@ colors = {
 }
 
 layout_theme = {
-    "border_width": 2,
+    "border_width": 3,
     "margin": 10,
-    "border_focus": colors["frost-0"],
+    "border_focus": colors["polar-3"],
     "border_normal": colors["polar-0"],
 }
 
@@ -203,11 +203,19 @@ widget_defaults = dict(
 bar_defaults = dict(
     size=23,
     background=colors["polar-0"],
-    margin=[6, 6, 0, 6],
+    margin=[6, 10, 0, 10],
     opacity=0.8,
 )
 
 extension_defaults = widget_defaults.copy()
+
+music_widget = widget.Mpris2(
+    **widget_defaults,
+    display_metadata=["xesam:album", "xesam:artist"],
+    scroll=True,
+    width=150,
+    objname="org.mpris.MediaPlayer2.spotify",
+)
 
 widgets = [
     widget.Image(
@@ -231,13 +239,7 @@ widgets = [
         urgent_alert_method="line",
     ),
     widget.WindowName(**widget_defaults),
-    widget.Mpris2(
-        **widget_defaults,
-        display_metadata=["xesam:album", "xesam:artist"],
-        scroll=True,
-        width=150,
-        objname="org.mpris.MediaPlayer2.spotify",
-    ),
+    music_widget,
     widget.Systray(**widget_defaults),
     widget.Sep(**widget_defaults),
     widget.CPU(**widget_defaults, format="{freq_current}GHz {load_percent}%"),
@@ -262,6 +264,36 @@ widgets = [
     widget.CurrentLayout(**widget_defaults),
     widget.Clock(**widget_defaults, format="%Y-%m-%d %a %I:%M %p"),
 ]
+
+
+keys.extend(
+    [
+        Key(
+            [mod],
+            "Insert",
+            lazy.function(lambda _: music_widget.cmd_play_pause()),
+            desc="Play/Pause playback",
+        ),
+        Key(
+            [mod],
+            "Home",
+            lazy.function(lambda _: music_widget.cmd_next()),
+            desc="Next track",
+        ),
+        Key(
+            [mod],
+            "End",
+            lazy.function(lambda _: music_widget.cmd_previous()),
+            desc="Previous track",
+        ),
+        Key(
+            [mod],
+            "Delete",
+            lazy.function(lambda _: music_widget.cmd_stop()),
+            desc="Stop playback",
+        ),
+    ]
+)
 
 screens = [
     Screen(
