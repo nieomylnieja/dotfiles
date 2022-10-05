@@ -116,7 +116,7 @@ req "autocmd"
 -- Manager
 req "packer"
 -- Looks
-req "nord"
+req("colors").setup()
 req "web-devicons"
 req "dressing"
 req "lualine"
@@ -146,5 +146,6 @@ req "projects"
 req("spectre").setup()
 req("todo-comments").setup()
 req("surround").setup()
+req("knap").setup()
 -- Mappings
 req "keys"

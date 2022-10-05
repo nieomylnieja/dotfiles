@@ -22,7 +22,6 @@ return packer.startup(function(use)
   use "Tastyep/structlog.nvim"
 
   -- Color scheme and the looks
-  use "shaunsingh/nord.nvim"
   use "kyazdani42/nvim-web-devicons"
   use "stevearc/dressing.nvim"
   use "nvim-lualine/lualine.nvim"
@@ -47,6 +46,7 @@ return packer.startup(function(use)
   -- Markdown, plantuml and more
   use { "iamcco/markdown-preview.nvim", run = "cd app && npm install", ft = { "markdown", "plantuml" } }
   use { "preservim/vim-markdown", ft = "markdown" }
+  use { "frabjous/knap" }
 
   -- Manage LSP and DAP server, linters and formatters.
   use "williamboman/mason.nvim"

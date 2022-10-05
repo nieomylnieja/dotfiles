@@ -38,8 +38,8 @@ local function keymaps(bufnr)
   nmap("<leader>ws", telescope.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
 
   -- See `:help K` for why this keymap
-  nmap("K", vim.lsp.buf.hover, "Hover Documentation")
-  nmap("<C-k>", vim.lsp.buf.signature_help, "Signature Documentation")
+  nmap("gk", vim.lsp.buf.hover, "Hover Documentation")
+  nmap("gK", vim.lsp.buf.signature_help, "Signature Documentation")
 
   -- Lesser used LSP functionality
   nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
@@ -155,4 +155,39 @@ lsp.terraformls.setup(config {
   cmd = { "terraform-ls", "serve" },
   filetypes = { "terraform", "tf" },
   root_dir = lsputil.root_pattern(".terraform", ".git"),
+})
+
+-- Latex
+lsp.texlab.setup(config {
+  cmd = { "texlab" },
+  filetypes = { "tex", "plaintex", "bib" },
+  single_file_support = true,
+  settings = {
+    texlab = {
+      rootDirectory = nil,
+      build = {
+        executable = "latexmk",
+        args = { "-pdf", "-interaction=nonstopmode", "-synctex=1", "%f" },
+        onSave = false,
+        forwardSearchAfter = false,
+      },
+      auxDirectory = ".",
+      forwardSearch = {
+        executable = nil,
+        args = {},
+      },
+      chktex = {
+        onOpenAndSave = false,
+        onEdit = false,
+      },
+      diagnosticsDelay = 300,
+      latexFormatter = "latexindent",
+      latexindent = {
+        ["local"] = nil, -- local is a reserved keyword
+        modifyLineBreaks = false,
+      },
+      bibtexFormatter = "texlab",
+      formatterLineLength = 80,
+    },
+  },
 })

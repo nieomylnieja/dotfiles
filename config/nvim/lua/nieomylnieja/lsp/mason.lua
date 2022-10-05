@@ -9,6 +9,7 @@ require("mason-lspconfig").setup({
 		"gopls",
 		"sumneko_lua",
     "terraform-ls",
+    "texlab",
 	},
 })
 

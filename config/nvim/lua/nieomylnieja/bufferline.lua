@@ -8,7 +8,7 @@ nnoremap("<S-n>", ":BufferLineMoveNext<CR>", opts)
 nnoremap("<S-p>", ":BufferLineMovePrev<CR>", opts)
 
 -- Support nord theme.
-local colors = require("nord.named_colors")
+local colors = require("nieomylnieja.colors.nord")
 local fill = colors.black --'#181c24' if separator_style is "slant"
 local indicator = colors.glacier
 local bg = colors.black

@@ -5,7 +5,7 @@ local config = {
   options = {
     section_separators = "",
     component_separators = "",
-    theme = "nord",
+    theme = require("nieomylnieja.colors.lualine"),
     disabled_filetypes = {
       statusline = { "neo-tree" },
     },
