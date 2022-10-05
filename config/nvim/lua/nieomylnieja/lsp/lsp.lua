@@ -49,12 +49,6 @@ local function keymaps(bufnr)
   nmap("<leader>wl", function()
     print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
   end, "[W]orkspace [L]ist Folders")
-
-  -- Diagnostics
-  nmap("gl", vim.diagnostic.open_float, "Open diagnostics popup")
-  nmap("[d", vim.diagnostic.goto_prev, "Goto previous diagnostic")
-  nmap("]d", vim.diagnostic.goto_next, "Goto previous diagnostic")
-  nmap("<space>q", vim.diagnostic.setloclist, "Set local")
 end
 
 local function config(_config)
