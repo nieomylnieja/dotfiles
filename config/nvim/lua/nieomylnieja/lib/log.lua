@@ -23,19 +23,21 @@ function Log:init()
   local log = {
     nieomylnieja = {
       sinks = {
-        structlog.sinks.Console(log_level, {
-          async = true,
-          processors = {
-            structlog.processors.Namer(),
-            structlog.processors.StackWriter({ "line", "file" }, { max_parents = 0, stack_level = 2 }),
-            structlog.processors.Timestamper "%H:%M:%S",
-          },
-          formatter = structlog.formatters.FormatColorizer(
-            "%s [%-5s] %s: %-30s",
-            { "timestamp", "level", "logger_name", "msg" },
-            { level = structlog.formatters.FormatColorizer.color_level() }
-          ),
-        }),
+        -- TODO: Clean this up, If I prefer notifications go with them, oterwise remove notifications.
+        -- I should only use one at the end of the day.
+        -- structlog.sinks.Console(log_level, {
+        --   async = true,
+        --   processors = {
+        --     structlog.processors.Namer(),
+        --     structlog.processors.StackWriter({ "line", "file" }, { max_parents = 0, stack_level = 2 }),
+        --     structlog.processors.Timestamper "%H:%M:%S",
+        --   },
+        --   formatter = structlog.formatters.FormatColorizer(
+        --     "%s [%-5s] %s: %-30s",
+        --     { "timestamp", "level", "logger_name", "msg" },
+        --     { level = structlog.formatters.FormatColorizer.color_level() }
+        --   ),
+        -- }),
         structlog.sinks.File(log_level, self:get_path(), {
           processors = {
             structlog.processors.Namer(),

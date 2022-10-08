@@ -31,7 +31,6 @@ opt.tabstop = 2 -- The number of spaces a tab is
 opt.shiftwidth = 2 -- Number of spaces to use in auto(indent)
 opt.softtabstop = 2 -- Just to be clear
 opt.expandtab = true -- Insert tabs as spaces
-opt.smartindent = true -- Use smart indentation, works for C like langs.
 
 -- Searching
 opt.wrapscan = true -- Wrap searches
@@ -131,8 +130,8 @@ req "treesitter"
 req "treesitter-context"
 req "gitsigns"
 req "which-key"
-req "autopairs"
-req "comments"
+req("autopairs").setup()
+req("comments").setup()
 req "indent"
 req "illuminate"
 req("code.annotations").setup()
@@ -140,12 +139,11 @@ req("code.annotations").setup()
 req "markdown-preview"
 req "telescope"
 req "term"
-req "neogit"
-require("octo").setup()
-req "projects"
+-- req "neogit"
+req("projects").setup()
 req("spectre").setup()
 req("todo-comments").setup()
 req("surround").setup()
-req("knap").setup()
+-- req("knap").setup()
 -- Mappings
 req "keys"

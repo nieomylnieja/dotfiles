@@ -46,7 +46,7 @@ return packer.startup(function(use)
   -- Markdown, plantuml and more
   use { "iamcco/markdown-preview.nvim", run = "cd app && npm install", ft = { "markdown", "plantuml" } }
   use { "preservim/vim-markdown", ft = "markdown" }
-  use { "frabjous/knap" }
+  -- use { "frabjous/knap" }
 
   -- Manage LSP and DAP server, linters and formatters.
   use "williamboman/mason.nvim"
@@ -101,13 +101,10 @@ return packer.startup(function(use)
 
   -- Git
   use "lewis6991/gitsigns.nvim"
-  use "pwntester/octo.nvim"
   use "sindrets/diffview.nvim"
-  use "TimUntersberger/neogit"
+  -- FIXME: After they fix it for non git cwd I'll have to remove the commit restraint.
+  use { "TimUntersberger/neogit", commit = "8adf22f103250864171f7eb087046db8ad296f78" }
   use "petertriho/cmp-git"
-
-  -- TODO: I should write these settings to init.lua to get a better grasp on what's what.
-  use "tpope/vim-sensible"
 
   if packer_bootstrap then
     packer.sync()
