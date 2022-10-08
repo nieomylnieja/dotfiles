@@ -3,9 +3,6 @@ local opts = { silent = true }
 -- These commands will navigate through buffers in order.
 nnoremap("<C-n>", ":BufferLineCycleNext<CR>", opts)
 nnoremap("<C-p>", ":BufferLineCyclePrev<CR>", opts)
--- These commands will move the current buffer backwards or forwards.
-nnoremap("<S-n>", ":BufferLineMoveNext<CR>", opts)
-nnoremap("<S-p>", ":BufferLineMovePrev<CR>", opts)
 
 -- Support nord theme.
 local colors = require("nieomylnieja.colors.nord")
