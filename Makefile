@@ -45,6 +45,9 @@ link/doom:
 link/picom:
 	ln -s "$$DOTFILES/config/picom" "$$HOME/.config/picom"
 
+xdg/defaults:
+	xdg-mime default org.pwmt.zathura.desktop application/pdf
+
 install/lsps:
 	go install golang.org/x/tools/gopls@latest
 	npm install -g \

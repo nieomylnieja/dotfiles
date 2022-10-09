@@ -51,15 +51,21 @@ local function keymaps(bufnr)
   end, "[W]orkspace [L]ist Folders")
 end
 
+local formatting_whitelist = {
+  "texlab",
+}
+
 local function config(_config)
   return vim.tbl_deep_extend("force", {
     -- Use an on_attach function to only map the following keys
     -- after the language server attaches to the current buffer
     capabilities = capabilities,
     on_attach = function(client, bufnr)
-      -- Let null-ls format stuff for us
-      client.server_capabilities.document_formatting = false
-      keymaps(bufnr)
+      if not formatting_whitelist[client.name] then
+        -- Let null-ls format stuff for us
+        client.server_capabilities.document_formatting = false
+        keymaps(bufnr)
+      end
     end,
   }, _config or {})
 end
@@ -158,10 +164,9 @@ lsp.texlab.setup(config {
   single_file_support = true,
   settings = {
     texlab = {
-      rootDirectory = nil,
       build = {
         executable = "latexmk",
-        args = { "-pdf", "-interaction=nonstopmode", "-synctex=1", "%f" },
+        args = { "-pdf", "--shell-escape", "-interaction=nonstopmode", "-synctex=1", "%f" },
         onSave = false,
         forwardSearchAfter = false,
       },
@@ -171,8 +176,8 @@ lsp.texlab.setup(config {
         args = {},
       },
       chktex = {
-        onOpenAndSave = false,
-        onEdit = false,
+        onOpenAndSave = true,
+        onEdit = true,
       },
       diagnosticsDelay = 300,
       latexFormatter = "latexindent",

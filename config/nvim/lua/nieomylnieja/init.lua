@@ -144,6 +144,6 @@ req("projects").setup()
 req("spectre").setup()
 req("todo-comments").setup()
 req("surround").setup()
--- req("knap").setup()
+req("knap").setup()
 -- Mappings
 req "keys"

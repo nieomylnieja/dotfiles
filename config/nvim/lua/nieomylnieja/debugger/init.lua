@@ -33,8 +33,8 @@ vim.fn.sign_define("DapBreakpointCondition", { text = "⛔", texthl = "Debug", l
 vim.fn.sign_define("DapBreakpointRejected", { text = "🚫", texthl = "Debug", linehl = "", numhl = "" })
 
 dap.listeners.after.event_initialized["dapui_config"] = dapui.open
-dap.listeners.before.event_terminated["dapui_config"] = dapui.close
-dap.listeners.before.event_exited["dapui_config"] = dapui.close
+-- dap.listeners.before.event_terminated["dapui_config"] = dapui.close
+-- dap.listeners.before.event_exited["dapui_config"] = dapui.close
 
 require "nieomylnieja.debugger.go"
 
