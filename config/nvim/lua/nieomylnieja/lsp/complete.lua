@@ -101,11 +101,27 @@ local function jumpable(dir)
   end
 end
 
+--- In most languages, especially Python, items that start with one or
+--- more underlines should be at the end of the completion suggestion.
+---@param e1 string first entry to compare.
+---@param e2 string second entry to compare.
+local function under_comparator(e1, e2)
+  local _, e1_u = e1.completion_item.label:find "^_+"
+  local _, e2_u = e2.completion_item.label:find "^_+"
+  e1_u = e1_u or 0
+  e2_u = e2_u or 0
+  if e1_u > e2_u then
+    return false
+  elseif e1_u < e2_u then
+    return true
+  end
+end
+
 local conf = {
   source_names = {
     buffer = "(Buffer)",
-    nvim_lsp = "(LSP)",
     nvim_lua = "(Lua)",
+    nvim_lsp = "(LSP)",
     cmp_tabnine = "(TN)",
     path = "(Path)",
     cmdline = "(CMD)",
@@ -129,6 +145,18 @@ cmp.setup {
     expand = function(args)
       luasnip.lsp_expand(args.body)
     end,
+  },
+  sorting = {
+    comparators = {
+      cmp.config.compare.offset,
+      cmp.config.compare.exact,
+      cmp.config.compare.score,
+      under_comparator,
+      cmp.config.compare.kind,
+      cmp.config.compare.sort_text,
+      cmp.config.compare.length,
+      cmp.config.compare.order,
+    },
   },
   completion = {
     ---@usage The minimum length of a word to complete on.
@@ -217,6 +245,7 @@ cmp.setup {
     -- I might give it a try: https://github.com/tzachar/cmp-tabnine#install
     -- { name = "cmp_tabnine" },
     { name = "nvim_lsp" },
+    { name = "nvim_lua" },
     { name = "luasnip" },
     { name = "buffer" },
     { name = "git" },

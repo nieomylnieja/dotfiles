@@ -11,9 +11,7 @@ require("nvim-treesitter.configs").setup {
     -- Instead of true it can also be a list of languages
     additional_vim_regex_highlighting = false,
   },
-  autopairs = {
-    enable = true,
-  },
+  autopairs = { enable = true },
   indent = {
     enable = true,
     -- FIXME: Once treesitter works fine for these, remove that ;)
@@ -34,6 +32,7 @@ require("nvim-treesitter.configs").setup {
       json = "",
     },
   },
+  endwise = { enable = true },
 }
 
 -- Runtime for FZF

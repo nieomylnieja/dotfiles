@@ -59,6 +59,8 @@ return packer.startup(function(use)
   use "theHamsta/nvim-dap-virtual-text"
   use "leoluz/nvim-dap-go"
   use "nvim-telescope/telescope-dap.nvim"
+  use "jbyuki/one-small-step-for-vimkind"
+  use "mfussenegger/nvim-dap-python"
 
   -- Code (LSPs and stuff)
   use "neovim/nvim-lspconfig"
@@ -71,6 +73,8 @@ return packer.startup(function(use)
   use "hrsh7th/cmp-path"
   use "hrsh7th/cmp-cmdline"
   use "saadparwaiz1/cmp_luasnip"
+  use "rcarriga/cmp-dap"
+  use "hrsh7th/cmp-nvim-lsp-signature-help"
   use "onsails/lspkind.nvim"
   use "simrat39/symbols-outline.nvim"
   use { "L3MON4D3/LuaSnip", tag = "v1.*" }
@@ -95,6 +99,7 @@ return packer.startup(function(use)
   use "folke/todo-comments.nvim"
   use "danymat/neogen"
   use "kylechui/nvim-surround"
+  use "RRethy/nvim-treesitter-endwise"
 
   -- Terminal
   use { "akinsho/toggleterm.nvim", tag = "*" }

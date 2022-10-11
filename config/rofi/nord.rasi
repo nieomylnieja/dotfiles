@@ -7,19 +7,18 @@
  */
 
 configuration {
-
 	font: "Mononoki Nerd Font 10";
 	width: 30;
 	line-margin: 10;
 	lines: 6;
 	columns: 2;
 
-    display-ssh:    "  ";
-    display-run:    "  ";
-    display-drun:   "  ";
-    display-window: "  ";
-    display-combi:  "  ";
-    show-icons:     true;
+  display-ssh:    "  ";
+  display-run:    "  ";
+  display-drun:   "  ";
+  display-window: "  ";
+  display-combi:  "  ";
+  show-icons:     true;
 }
 
 * {
@@ -43,20 +42,20 @@ configuration {
 	nord14: #a3be8c;
 	nord15: #b48ead;
 
-    foreground:  @nord9;
-    backlight:   #ccffeedd;
-    background-color:  transparent;
-    
-    highlight:     underline bold #eceff4;
+  foreground:  @nord9;
+  backlight:   #ccffeedd;
+  background-color:  transparent;
+  
+  highlight:     underline bold #eceff4;
 
-    transparent: rgba(46,52,64,0);
+  transparent: rgba(46,52,64,0);
 }
 
 window {
     location: center;
     anchor:   center;
     transparency: "screenshot";
-    padding: 10px;
+    padding: 0px;
     border:  0px;
     border-radius: 6px;
 

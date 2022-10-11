@@ -1,11 +1,15 @@
 local dap = require "dap"
+-- Addons.
 local dapui = require "dapui"
 local daptext = require "nvim-dap-virtual-text"
+-- Adapter protocols for languages.
 local dap_go = require "nieomylnieja.debugger.go"
+local dap_lua = require "nieomylnieja.debugger.lua"
 
 local nnoremap = require("nieomylnieja.keymap").nnoremap
 
 dap_go.setup()
+dap_lua.setup(dap)
 daptext.setup()
 dapui.setup {
   -- layouts = {

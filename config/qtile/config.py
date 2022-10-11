@@ -76,7 +76,7 @@ keys = [
     # Grow windows. If current window is on the edge of screen and direction
     # will be to screen edge - window would shrink.
     Key([mod, "control"], "i", lazy.layout.grow(), desc="Grow window"),
-    Key([mod, "control"], "s", lazy.layout.shrink(), desc="Shrink window"),
+    Key([mod, "control"], "o", lazy.layout.shrink(), desc="Shrink window"),
     Key([mod, "control"], "h", lazy.layout.grow_left(), desc="Grow window to the left"),
     Key(
         [mod, "control"], "l", lazy.layout.grow_right(), desc="Grow window to the right"
