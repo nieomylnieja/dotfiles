@@ -1,8 +1,6 @@
 import os
 import subprocess
 
-from typing import List  # noqa: F401
-
 from libqtile import bar, layout, widget, hook
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
@@ -13,7 +11,6 @@ from widgets.volume import Volume, VolumeCommands
 mod = "mod4"
 terminal = "alacritty"
 browser = "brave"
-
 
 keys = [
     # The basics
@@ -44,7 +41,8 @@ keys = [
         lazy.spawn("flameshot gui --accept-on-select"),
         desc="Take a screenshot and save it instantly after selecting",
     ),
-    Key([mod, "shift"], "p", lazy.spawn("flameshot gui"), desc="Take a screenshot"),
+    Key([mod, "shift"], "p", lazy.spawn(
+        "flameshot gui"), desc="Take a screenshot"),
     Key(
         [mod],
         "c",
@@ -59,7 +57,8 @@ keys = [
     Key([mod], "l", lazy.layout.right(), desc="Move focus to right"),
     Key([mod], "j", lazy.layout.down(), desc="Move focus down"),
     Key([mod], "k", lazy.layout.up(), desc="Move focus up"),
-    Key([mod], "space", lazy.layout.next(), desc="Move window focus to other window"),
+    Key([mod], "space", lazy.layout.next(),
+        desc="Move window focus to other window"),
     # Move windows between left/right columns or move up/down in current stack.
     # Moving out of range in Columns layout will create new column.
     Key(
@@ -77,7 +76,8 @@ keys = [
     # will be to screen edge - window would shrink.
     Key([mod, "control"], "i", lazy.layout.grow(), desc="Grow window"),
     Key([mod, "control"], "o", lazy.layout.shrink(), desc="Shrink window"),
-    Key([mod, "control"], "h", lazy.layout.grow_left(), desc="Grow window to the left"),
+    Key([mod, "control"], "h", lazy.layout.grow_left(),
+        desc="Grow window to the left"),
     Key(
         [mod, "control"], "l", lazy.layout.grow_right(), desc="Grow window to the right"
     ),
@@ -91,9 +91,11 @@ keys = [
     ),
     Key([mod], "f", lazy.window.toggle_fullscreen(), desc="Toggle fullscreen"),
     Key([mod, "shift"], "f", lazy.window.toggle_floating(), desc="toggle floating"),
-    Key([mod, "shift"], "n", lazy.layout.normalize(), desc="Reset all window sizes"),
+    Key([mod, "shift"], "n", lazy.layout.normalize(),
+        desc="Reset all window sizes"),
     # Switch focus of monitors
-    Key([mod], "period", lazy.next_screen(), desc="Move focus to next monitor"),
+    Key([mod], "period", lazy.next_screen(),
+        desc="Move focus to next monitor"),
     Key([mod], "comma", lazy.prev_screen(), desc="Move focus to prev monitor"),
     # Media keys
     Key([mod], "F1", VolumeCommands.TOGGLE_MUTE.lazy, desc="Mute the audio"),
@@ -119,8 +121,10 @@ keys = [
         VolumeCommands.DECREASE_VOLUME.lazy,
         desc="Lower volume level",
     ),
-    Key([mod], "F7", lazy.spawn("brightness up 5"), desc="Increase brightness level"),
-    Key([mod], "F6", lazy.spawn("brightness down 5"), desc="Lower brightness level"),
+    Key([mod], "F7", lazy.spawn("brightness up 5"),
+        desc="Increase brightness level"),
+    Key([mod], "F6", lazy.spawn("brightness down 5"),
+        desc="Lower brightness level"),
     Key(
         [],
         "XF86MonBrightnessUp",
@@ -152,7 +156,8 @@ for i in groups:
                 [mod, "shift"],
                 i.name,
                 lazy.window.togroup(i.name, switch_group=True),
-                desc="Switch to & move focused window to group {}".format(i.name),
+                desc="Switch to & move focused window to group {}".format(
+                    i.name),
             ),
         ]
     )
@@ -207,8 +212,6 @@ bar_defaults = dict(
     opacity=0.8,
 )
 
-extension_defaults = widget_defaults.copy()
-
 music_widget = widget.Mpris2(
     **widget_defaults,
     display_metadata=["xesam:album", "xesam:artist"],
@@ -243,7 +246,8 @@ widgets = [
     widget.Systray(**widget_defaults),
     widget.Sep(**widget_defaults),
     widget.CPU(**widget_defaults, format="{freq_current}GHz {load_percent}%"),
-    widget.Memory(**widget_defaults, format="{MemUsed:.0f}{mm}/{MemTotal:.0f}{mm}"),
+    widget.Memory(**widget_defaults,
+                  format="{MemUsed:.0f}{mm}/{MemTotal:.0f}{mm}"),
     widget.Sep(**widget_defaults),
     widget.Battery(
         **widget_defaults,
@@ -262,9 +266,8 @@ widgets = [
     ),
     widget.Sep(**widget_defaults),
     widget.CurrentLayout(**widget_defaults),
-    widget.Clock(**widget_defaults, format="%Y-%m-%d %a %I:%M %p"),
+    widget.Clock(**widget_defaults, format="%H:%M %a %Y-%m-%d"),
 ]
-
 
 keys.extend(
     [
@@ -312,14 +315,13 @@ mouse = [
         lazy.window.set_position_floating(),
         start=lazy.window.get_position(),
     ),
-    Drag(
-        [mod], "Button3", lazy.window.set_size_floating(), start=lazy.window.get_size()
-    ),
+    Drag([mod], "Button3", lazy.window.set_size_floating(),
+         start=lazy.window.get_size()),
     Click([mod], "Button2", lazy.window.bring_to_front()),
 ]
 
 dgroups_key_binder = None
-dgroups_app_rules = []  # type: List
+dgroups_app_rules = []
 follow_mouse_focus = True
 bring_front_click = False
 cursor_warp = False
