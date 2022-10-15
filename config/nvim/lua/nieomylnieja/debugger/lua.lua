@@ -1,6 +1,6 @@
 local M = {}
 
-M.setup = function(dap)
+M.load = function(dap)
   dap.configurations.lua = {
     {
       type = "nlua",

@@ -15,6 +15,7 @@ browser = "brave"
 keys = [
     # The basics
     Key([mod], "Return", lazy.spawn(terminal), desc="Launch terminal"),
+    Key([mod], "v", lazy.spawn("neovide --notabs"), desc="Launch Neovide"),
     Key(
         [mod, "shift"],
         "Return",

@@ -100,6 +100,7 @@ return packer.startup(function(use)
   use "danymat/neogen"
   use "kylechui/nvim-surround"
   use "RRethy/nvim-treesitter-endwise"
+  use "simrat39/rust-tools.nvim"
 
   -- Terminal
   use { "akinsho/toggleterm.nvim", tag = "*" }

@@ -16,8 +16,20 @@ if is_loaded then
 end
 
 vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
-
 vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, { border = "rounded" })
+
+-- format gives power to null-ls over any LSP foramtting options.
+-- TODO: check if the client is supported by null-ls, otherwise return true to let LSP do it's job.
+local function format()
+  vim.lsp.buf.format {
+    filter = function(client)
+      if client.name == "null-ls" or client.name == "texlab" then
+        return true
+      end
+      return false
+    end,
+  }
+end
 
 local function keymaps(bufnr)
   -- See `:help vim.lsp.*` for documentation on any of the below functions
@@ -37,6 +49,8 @@ local function keymaps(bufnr)
   nmap("<leader>ds", telescope.lsp_document_symbols, "[D]ocument [S]ymbols")
   nmap("<leader>ws", telescope.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
 
+  nmap("<leader>fm", format, "[F]or[M]at buffer")
+
   -- See `:help K` for why this keymap
   nmap("gk", vim.lsp.buf.hover, "Hover Documentation")
   nmap("gK", vim.lsp.buf.signature_help, "Signature Documentation")
@@ -51,26 +65,21 @@ local function keymaps(bufnr)
   end, "[W]orkspace [L]ist Folders")
 end
 
-local formatting_whitelist = {
-  "texlab",
-}
-
 local function config(_config)
   return vim.tbl_deep_extend("force", {
     -- Use an on_attach function to only map the following keys
     -- after the language server attaches to the current buffer
     capabilities = capabilities,
-    on_attach = function(client, bufnr)
-      if not formatting_whitelist[client.name] then
-        -- Let null-ls format stuff for us
-        client.server_capabilities.document_formatting = false
-        keymaps(bufnr)
-      end
+    on_attach = function(_, bufnr)
+      keymaps(bufnr)
     end,
   }, _config or {})
 end
 
 local lsputil = require "lspconfig/util"
+
+-- Null LS
+require("nieomylnieja.lsp.null-ls").setup(config)
 
 -- Python
 lsp.pyright.setup(config {
@@ -127,6 +136,7 @@ lsp.sumneko_lua.setup(config {
   settings = {
     Lua = {
       runtime = {
+
         -- Tell the language server which version of Lua you're using (most likely LuaJIT in the case of Neovim)
         version = "LuaJIT",
         -- Setup your lua path
@@ -190,3 +200,27 @@ lsp.texlab.setup(config {
     },
   },
 })
+
+-- YAML
+lsp.yamlls.setup(config {
+  filetypes = { "yaml", "yaml.docker-compose" },
+  single_file_support = true,
+  settings = {
+    redhat = {
+      telemetry = {
+        enabled = false,
+      },
+    },
+  },
+})
+
+-- TOML
+lsp.taplo.setup(config {
+  cmd = { "taplo", "lsp", "stdio" },
+  filetypes = { "toml" },
+  single_file_support = true,
+  root_dir = lsputil.root_pattern("*.toml", ".git"),
+})
+
+-- Rust
+-- Controlled by "nieomylnieja.code.rust"

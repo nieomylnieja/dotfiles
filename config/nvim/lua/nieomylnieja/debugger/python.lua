@@ -1,28 +1,12 @@
 local M = {}
 
-M.setup = function(dap)
-  dap.adapters.python = {
-    type = "executable",
-    command = "python",
-    args = { "-m", "debugpy.adapter" },
-  }
-
-  dap.configurations.python = {
-    {
-      type = "python",
-      request = "launch",
-      name = "Launch file",
-      program = "${file}",
-      pythonPath = function()
-        local venv_path = vim.fn.getenv "VIRTUAL_ENVIRONMENT"
-        if venv_path ~= vim.NIL and venv_path ~= "" then
-          return venv_path .. "/bin/python"
-        else
-          return "/usr/bin/python"
-        end
-      end,
-    },
-  }
+M.load = function(_)
+  local is_loaded, python = pcall(require, "dap-python")
+  if not is_loaded then
+    require("nieomylnieja.lib.log"):error "'dap-python' was required but not loaded"
+    return
+  end
+  python.setup(require("nieomylnieja.lsp.mason").path .. "/packages/debugpy/venv/bin/python")
 end
 
 return M

@@ -2,14 +2,18 @@ local dap = require "dap"
 -- Addons.
 local dapui = require "dapui"
 local daptext = require "nvim-dap-virtual-text"
+
 -- Adapter protocols for languages.
-local dap_go = require "nieomylnieja.debugger.go"
-local dap_lua = require "nieomylnieja.debugger.lua"
+local languages = {
+  require "nieomylnieja.debugger.go",
+  require "nieomylnieja.debugger.lua",
+  require "nieomylnieja.debugger.lldb",
+  require "nieomylnieja.debugger.python",
+}
+for _, lang in pairs(languages) do
+  lang.load(dap)
+end
 
-local nnoremap = require("nieomylnieja.keymap").nnoremap
-
-dap_go.setup()
-dap_lua.setup(dap)
 daptext.setup()
 dapui.setup {
   -- layouts = {
@@ -40,7 +44,7 @@ dap.listeners.after.event_initialized["dapui_config"] = dapui.open
 -- dap.listeners.before.event_terminated["dapui_config"] = dapui.close
 -- dap.listeners.before.event_exited["dapui_config"] = dapui.close
 
-require "nieomylnieja.debugger.go"
+local nnoremap = require("nieomylnieja.keymap").nnoremap
 
 nnoremap("<Home>", function()
   dapui.toggle(1)
@@ -65,6 +69,8 @@ nnoremap("<leader>td", function()
   if ft == "go" then
     -- TODO: Maybe expose it through language specific config instead?
     require("dap-go").debug_test()
+  elseif ft == "python" then
+    require("dap-python").test_method()
   else
     vim.notify "lool!"
   end

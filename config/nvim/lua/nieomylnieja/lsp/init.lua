@@ -1,11 +1,10 @@
 local function req(name)
-	require("nieomylnieja.lsp." .. name)
+	return require("nieomylnieja.lsp." .. name)
 end
 
-req("mason")
+req("mason").setup()
 req("complete")
 req("lsp")
 req("snippets")
 req("diagnostics")
-req("null-ls")
 req("signature")

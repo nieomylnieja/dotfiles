@@ -1,4 +1,5 @@
 require("gitsigns").setup {
+  debug_mode = true,
   signs = {
     add = {
       hl = "GitSignsAdd",
