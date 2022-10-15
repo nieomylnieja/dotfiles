@@ -1,0 +1,59 @@
+#!/bin/bash
+set -u pipefail
+
+main() {
+	read -r pod namespace <<<"$(kubectl get pod \
+		--no-headers --all-namespaces \
+		-o custom-columns=NAME:.metadata.name,NS:.metadata.namespace |
+		fzf --nth=1)"
+
+	json=$(kubectl get pod -n "$namespace" "$pod" -o json)
+	readarray containers < <(
+		jq -r '.spec.containers[].name, try .initContainers[].name + " (init)"' \
+			<<<"$json"
+	)
+	read -r container isInit < <(
+		printf '%s' "${containers[@]}" |
+			fzf --select-1 --nth=1
+	)
+
+	field="containers"
+	if [[ -n $isInit ]]; then
+		field="initContainers"
+	fi
+
+	allEnvs=$(jq ".spec.${field}[] | select(.name == \"${container}\") | .env[]" <<<"$json")
+	readarray -t selectedEnvs < <(
+		jq -r .name <<<"$allEnvs" |
+			fzf -m |
+			sed 's/\n/ /'
+	)
+
+  # TODO: fetch only once per resource.
+	# declare -A resources
+	for env in "${selectedEnvs[@]}"; do
+		entry=$(jq "select(.name == \"$env\")" <<<"$allEnvs")
+		if [[ $entry == *'"value"'* ]]; then
+			value=$(jq -r .value <<<"$entry")
+		elif [[ $entry == *'"valueFrom"'* ]]; then
+			type=$(jq -r '.valueFrom | keys[0]' <<<"$entry")
+			if [[ $type == "secretKeyRef" ]] || [[ $type == "configMapKeyRef" ]]; then
+				read -r -d '\n' key name <<<"$(jq -r ".valueFrom.$type | .key, .name" <<<"$entry")" || true
+				value=$(kubectl get -n "$namespace" "${type%"KeyRef"}/$name" -o json |
+					jq -r ".data.\"$key\"")
+				if [[ $type == "secretKeyRef" ]]; then
+					value=$(base64 -d <<<"$value")
+				fi
+			elif [[ $type == "fieldRef" ]]; then
+				path=$(jq -r .valueFrom.fieldRef.fieldPath <<<"$entry" | sed "s/'/\"/g")
+				value=$(jq -r ".$path" <<<"$json")
+			fi
+		fi
+
+		if [[ -n $value ]]; then
+			echo "$env=$value"
+		fi
+	done
+}
+
+main "$@"

@@ -56,6 +56,15 @@ install/lsps:
 		bash-language-server
 	./clones/lua-language-server.sh
 
+install/rust:
+	# I don't know yet how to make it auto add the bins to the path though...
+	# So for now just use rust-anaylzer from arch repo.
+	rustup toolchain install nightly \
+		--allow-downgrade \
+		--profile minimal \
+		--component clippy,rust-analyzer-preview
+	rustup default nightly
+
 install/go:
 	go install github.com/go-delve/delve/cmd/dlv@latest
 
