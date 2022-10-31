@@ -12,7 +12,7 @@ capabilities.textDocument.completion.completionItem.resolveSupport = {
 }
 local is_loaded, cmp_nvim_lsp = pcall(require, "cmp_nvim_lsp")
 if is_loaded then
-  capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
+  capabilities = cmp_nvim_lsp.default_capabilities(capabilities)
 end
 
 vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
@@ -223,4 +223,28 @@ lsp.taplo.setup(config {
 })
 
 -- Rust
--- Controlled by "nieomylnieja.code.rust"
+require("nieomylnieja.lsp.rust").setup(config)
+
+-- Ansible
+lsp.ansiblels.setup(config {
+  cmd = { "ansible-language-server", "--stdio" },
+  filetypes = { "yaml.ansible" },
+  single_file_support = true,
+  settings = {
+    ansible = {
+      ansible = {
+        path = "ansible",
+      },
+      ansibleLint = {
+        enabled = true,
+        path = "ansible-lint",
+      },
+      executionEnvironment = {
+        enabled = false,
+      },
+      python = {
+        interpreterPath = "python",
+      },
+    },
+  },
+})

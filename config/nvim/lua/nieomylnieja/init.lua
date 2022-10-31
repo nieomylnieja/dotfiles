@@ -133,7 +133,6 @@ req("comments").setup()
 req "indent"
 req "illuminate"
 req("code.annotations").setup()
-req("code.rust").setup()
 -- Other
 req "markdown-preview"
 req "telescope"
@@ -146,22 +145,5 @@ req("surround").setup()
 req("knap").setup()
 -- Mappings
 req "keys"
-
---- Neovide {{{1
-if vim.g.neovide then
-  vim.g.neovide_transparency = 0.9
-  opt.guifont = "mononoki Nerd Font Mono:h14"
-  vim.g.neovide_floating_blur_amount_x = 2.0
-  vim.g.neovide_floating_blur_amount_y = 2.0
-  vim.g.neovide_hide_mouse_when_typing = true
-  vim.g.neovide_scale_factor = 1.0
-  vim.api.nvim_create_user_command("ChangeScaleFactor", function(opts)
-    local value = 1.25
-    if opts.args == "down" then
-      value = 1 / value
-    end
-    vim.g.neovide_scale_factor = vim.g.neovide_scale_factor + value
-  end, { nargs = 1 })
-  noremap("<C-=>", ":ChangeScaleFactor up<cr>", silent)
-  noremap("<C-->", ":ChangeScaleFactor down<cr>", silent)
-end
+-- Neovide
+req("neovide").setup()

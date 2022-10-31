@@ -23,9 +23,10 @@ M.setup = function()
       "pyright",
       "gopls",
       "sumneko_lua",
-      "terraform-ls",
+      "terraformls",
       "texlab",
-      "yaml-language-server",
+      "yamlls",
+      "ansiblels",
     },
   }
 

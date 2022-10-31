@@ -11,7 +11,7 @@ vim.g.mkdp_auto_close = 0
 -- leave from insert mode, default 0 is auto refresh markdown as you edit or
 -- move the cursor
 -- default: 0
-vim.g.mkdp_refresh_slow = 0
+vim.g.mkdp_refresh_slow = 1
 
 -- set to 1, the MarkdownPreview command can be use for all files,
 -- by default it can be use in markdown file
@@ -90,4 +90,4 @@ vim.g.mkdp_page_title = "「${name}」"
 
 -- recognized filetypes
 -- these filetypes will have MarkdownPreview... commands
-vim.g.mkdp_filetypes = { "markdown", "puml" }
+vim.g.mkdp_filetypes = { "markdown", "plantuml" }

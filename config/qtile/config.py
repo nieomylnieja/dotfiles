@@ -27,7 +27,8 @@ keys = [
     Key([mod], "s", lazy.spawn("xautolock -locknow"), desc="Lock the screen"),
     Key([mod], "Tab", lazy.next_layout(), desc="Toggle through layouts"),
     Key([mod], "d", lazy.window.kill(), desc="Kill active window"),
-    Key([mod, "shift"], "d", lazy.spawn("displays"), desc="Kill active window"),
+    Key([mod], "m", lazy.spawn("displays.sh"), desc="Select displays preset"),
+    Key([mod, "shift"], "m", lazy.spawn("monitors.sh"), desc="Select monitors layout"),
     Key([mod, "shift"], "r", lazy.restart(), desc="Restart Qtile"),
     Key(
         [mod],
@@ -86,7 +87,7 @@ keys = [
     Key([mod, "control"], "k", lazy.layout.grow_up(), desc="Grow window up"),
     Key(
         [mod],
-        "m",
+        "n",
         lazy.layout.maximize(),
         desc="Toggle window between minimum and maximum sizes",
     ),

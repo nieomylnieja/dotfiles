@@ -1,6 +1,6 @@
 local M = {}
 
-M.setup = function()
+M.setup = function(lsp_config)
   local is_loaded, rust = pcall(require, "rust-tools")
   if not is_loaded then
     require("nieomylnieja.lib.log"):error "'rust-tools' was required but not loaded"
@@ -16,16 +16,11 @@ M.setup = function()
         other_hints_prefix = "",
       },
     },
-    server = {
-      on_attach = function(_, bufnr)
-        -- Hover actions
-        vim.keymap.set("n", "<C-space>", rust.hover_actions.hover_actions, { buffer = bufnr })
-        -- Code action groups
-        vim.keymap.set("n", "<Leader>a", rust.code_action_group.code_action_group, { buffer = bufnr })
-      end,
+    server = lsp_config {
+      standalone = true,
       ["rust-analyzer"] = {
         checkOnSave = {
-          command = "clippy",
+          command = "clippyz",
         },
       },
     },
