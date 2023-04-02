@@ -26,14 +26,14 @@
 	keepBackup = false
 
 [mergetool "vimdiff"]
-	cmd = nvim -d $BASE $LOCAL $REMOTE $MERGED -c '$wincmd w' -c 'wincmd J'
+	cmd = lvim -d $BASE $LOCAL $REMOTE $MERGED -c '$wincmd w' -c 'wincmd J'
 
 [init]
 	defaultBranch = main
 
 [core]
 	excludesfile = /home/mh/.dotfiles/config/git/gitignore-global
-	editor = nvim
+	editor = lvim
   autocrlf = input
   pager = delta
 

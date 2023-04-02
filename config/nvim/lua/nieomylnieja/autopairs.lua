@@ -11,7 +11,7 @@ M.config = {
   fast_wrap = {
     map = "<M-e>",
     chars = { "{", "[", "(", '"', "'" },
-    pattern = string.gsub([[ [%'%"%)%>%]%)%}%,] ]], "%s+", ""),
+    pattern = string.gsub([[ [%w%%%'%[%"%.] ]], "%s+", ""),
     offset = 0, -- Offset from pattern match
     end_key = "$",
     keys = "qwertyuiopzxcvbnmasdfghjkl",
@@ -36,7 +36,7 @@ M.setup = function()
   autopairs.add_rules {
     rule("$$", "$$", "tex"),
     rule("$", "$", { "tex", "latex" }) -- don't add a pair if the next character is %
-      :with_pair(cond.not_after_regex_check "%%") -- don't add a pair if  the previous character is xxx
+      :with_pair(cond.not_after_regex_check "%%") -- don't add a pair if the previous character is xxx
       :with_pair(cond.not_before_regex_check("xxx", 3)) -- don't move right when repeat character
       :with_move(cond.none()) -- don't delete if the next character is xx
       :with_del(cond.not_after_regex_check "xx") -- disable  add newline when press <cr>
@@ -58,9 +58,9 @@ M.setup = function()
   -- tressitter
   require("nvim-treesitter.configs").setup { autopairs = { enable = true } }
   local ts_conds = require "nvim-autopairs.ts-conds"
-  -- press % => %% is only inside comment or string
+  -- press % => %% is only inside comment.
   autopairs.add_rules {
-    rule("%", "%", "lua"):with_pair(ts_conds.is_ts_node { "string", "comment" }),
+    rule("%", "%", "lua"):with_pair(ts_conds.is_ts_node { "comment" }),
     rule("$", "$", "lua"):with_pair(ts_conds.is_not_ts_node { "function" }),
   }
 end

@@ -24,6 +24,7 @@ keys = [
     ),
     Key([mod], "e", lazy.spawn("emacsclient -nc"), desc="Launch emacs"),
     Key([mod], "b", lazy.spawn(browser), desc="Launch browser"),
+    Key([mod, "shift"], "b", lazy.spawn("bluetooth.sh"), desc="Launch bluetooth manager."),
     Key([mod], "s", lazy.spawn("xautolock -locknow"), desc="Lock the screen"),
     Key([mod], "Tab", lazy.next_layout(), desc="Toggle through layouts"),
     Key([mod], "d", lazy.window.kill(), desc="Kill active window"),
@@ -46,13 +47,17 @@ keys = [
     Key([mod, "shift"], "p", lazy.spawn(
         "flameshot gui"), desc="Take a screenshot"),
     Key(
-        [mod],
+        [mod, "shift"],
         "c",
         lazy.spawn(
             "rofi -show calc -modi calc -no-show-match -no-sort "
             + "-calc-command \"echo -n '{result}' | xclip -sel c\""
         ),
         desc="Open calculator",
+    ),
+    Key([mod],"c",
+        lazy.spawn("rofi -modi \"clipboard:greenclip print\" -show clipboard -run-command '{cmd}'"),
+        desc="Browse clipboard history.",
     ),
     # Switch between windows
     Key([mod], "h", lazy.layout.left(), desc="Move focus to left"),
@@ -271,34 +276,24 @@ widgets = [
     widget.Clock(**widget_defaults, format="%H:%M %a %Y-%m-%d"),
 ]
 
-keys.extend(
-    [
-        Key(
-            [mod],
-            "Insert",
-            lazy.function(lambda _: music_widget.cmd_play_pause()),
-            desc="Play/Pause playback",
-        ),
-        Key(
-            [mod],
-            "Home",
-            lazy.function(lambda _: music_widget.cmd_next()),
-            desc="Next track",
-        ),
-        Key(
-            [mod],
-            "End",
-            lazy.function(lambda _: music_widget.cmd_previous()),
-            desc="Previous track",
-        ),
-        Key(
-            [mod],
-            "Delete",
-            lazy.function(lambda _: music_widget.cmd_stop()),
-            desc="Stop playback",
-        ),
-    ]
-)
+keys.extend([
+    Key([],"XF86AudioPlay",
+        lazy.function(lambda _: music_widget.cmd_play_pause()),
+        desc="Play/Pause playback",
+    ),
+    Key([],"XF86AudioNext",
+        lazy.function(lambda _: music_widget.cmd_next()),
+        desc="Next track",
+    ),
+    Key([],"XF86AudioPrev",
+        lazy.function(lambda _: music_widget.cmd_previous()),
+        desc="Previous track",
+    ),
+    Key([],"XF86AudioStop",
+        lazy.function(lambda _: music_widget.cmd_stop()),
+        desc="Stop playback",
+    ),
+])
 
 screens = [
     Screen(

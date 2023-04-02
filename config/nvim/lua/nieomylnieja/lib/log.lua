@@ -2,15 +2,6 @@
 local Log = {}
 local home_path = os.getenv "HOME"
 
-Log.levels = {
-  TRACE = 1,
-  DEBUG = 2,
-  INFO = 3,
-  WARN = 4,
-  ERROR = 5,
-}
-vim.tbl_add_reverse_lookup(Log.levels)
-
 local notify_opts = {}
 
 function Log:init()
@@ -22,7 +13,7 @@ function Log:init()
   local log_level = Log.levels["INFO"]
   local log = {
     nieomylnieja = {
-      sinks = {
+      pipelines = {
         -- TODO: Clean this up, If I prefer notifications go with them, oterwise remove notifications.
         -- I should only use one at the end of the day.
         -- structlog.sinks.Console(log_level, {
@@ -38,11 +29,13 @@ function Log:init()
         --     { level = structlog.formatters.FormatColorizer.color_level() }
         --   ),
         -- }),
+        level = log_level,
+        processors = {
+          structlog.processors.StackWriter({ "line", "file" }, { max_parents = 3, stack_level = 2 }),
+          structlog.processors.Timestamper "%F %H:%M:%S",
+        },
         structlog.sinks.File(log_level, self:get_path(), {
           processors = {
-            structlog.processors.Namer(),
-            structlog.processors.StackWriter({ "line", "file" }, { max_parents = 3, stack_level = 2 }),
-            structlog.processors.Timestamper "%F %H:%M:%S",
           },
           formatter = structlog.formatters.Format( --
             "%s [%-5s] %s: %-30s",
@@ -83,11 +76,6 @@ function Log:configure_notifications(notify_handle)
     return
   end
 
-  local default_namer = function(logger, entry)
-    entry["title"] = logger.name
-    return entry
-  end
-
   local notify_opts_injecter = function(_, entry)
     for key, value in pairs(notify_opts) do
       entry[key] = value
@@ -98,7 +86,6 @@ function Log:configure_notifications(notify_handle)
 
   local sink = structlog.sinks.NvimNotify(Log.levels.INFO, {
     processors = {
-      default_namer,
       notify_opts_injecter,
     },
     formatter = structlog.formatters.Format( --

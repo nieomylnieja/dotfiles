@@ -43,7 +43,11 @@ link/doom:
 	ln -s "$$DOTFILES/config/doom" "$$HOME/.doom.d"
 
 link/picom:
-	ln -s "$$DOTFILES/config/picom" "$$HOME/.config/picom"
+	ln -s "$$DOTFILES/config/picom" "$$XDG_CONFIG_HOME/picom"
+
+link/lvim:
+	rm -rf "$$XDG_CONFIG_HOME/lvim"
+	ln -s "$$DOTFILES/.dotfiles/config/lvim" "$$XDG_CONFIG_HOME/lvim"
 
 xdg/defaults:
 	xdg-mime default org.pwmt.zathura.desktop application/pdf
@@ -81,6 +85,9 @@ install/slock:
 	@if grep 'replace-me-.*' build/slock/config.h > /dev/null; then \
 		echo "set your user and group manually in config.h" && exit 1; fi
 	sudo make -C build/slock install
+
+install/lvim:
+	LV_BRANCH='release-1.2/neovim-0.8' bash <(curl -s https://raw.githubusercontent.com/lunarvim/lunarvim/fc6873809934917b470bff1b072171879899a36b/utils/installer/install.sh)
 
 update/nvim/plugins:
 	nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync' -c 'MasonToolsUpdate'

@@ -14,7 +14,7 @@ shopt -s extglob
 shopt -s direxpand
 
 # Set VIM prompt
-alias vim='nvim'
+alias vim='lvim'
 set -o vi
 
 #ignore upper and lowercase when TAB completion
@@ -89,8 +89,9 @@ if [ -x "$(command -v kubectl)" ]; then
 fi
 
 # krew path
-if [ -x "$(command -v krew)" ]; then
+if kubectl krew >&/dev/null; then
 	export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+	source <(kubectl krew completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
 fi
 
 # Avoid duplicates

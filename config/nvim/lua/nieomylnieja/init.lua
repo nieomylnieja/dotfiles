@@ -45,6 +45,8 @@ opt.wrap = false -- Don't wrap long lines (good for vsplits, bad otherwise?)
 opt.foldmethod = "manual"
 opt.foldexpr = "nvim_treesitter#foldexpr()"
 
+vim.cmd[[colorscheme nord]]
+
 -- Setup {{{1
 
 local function req(name)
@@ -113,7 +115,7 @@ req "autocmd"
 -- Manager
 req "packer"
 -- Looks
-req("colors").setup()
+-- req("colors").setup()
 req "web-devicons"
 req "dressing"
 req "lualine"

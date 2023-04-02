@@ -22,6 +22,7 @@ return packer.startup(function(use)
   use "Tastyep/structlog.nvim"
 
   -- Color scheme and the looks
+  use "shaunsingh/nord.nvim"
   use "kyazdani42/nvim-web-devicons"
   use "stevearc/dressing.nvim"
   use "nvim-lualine/lualine.nvim"
