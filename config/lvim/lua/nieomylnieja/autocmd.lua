@@ -5,7 +5,6 @@ vim.cmd([[
     autocmd TextYankPost * silent!lua require('vim.highlight').on_yank({higroup = 'Visual', timeout = 200})
     autocmd BufWinEnter * :set formatoptions-=cro
     autocmd FileType qf set nobuflisted
-    autocmd VimLeave * call system('xsel -ib', getreg('+'))
   augroup end
   augroup _git
     autocmd!
@@ -34,3 +33,13 @@ vim.cmd([[
     autocmd FileType zsh silent!lua require("nvim-treesitter.highlight").attach(0, "bash")
   augroup end
 ]])
+
+local gs = vim.api.nvim_create_augroup("GeneralSettings", { clear = true })
+
+vim.api.nvim_create_autocmd("VimLeave", {
+  group = gs,
+  pattern = "*",
+  callback = function()
+    vim.fn("system('xsel -ib', getreg('+'))")
+  end
+})
