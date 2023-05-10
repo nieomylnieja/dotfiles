@@ -86,6 +86,7 @@ if [ -x "$(command -v kubectl)" ]; then
 	alias k=kubectl
 	# extend completion to work with the alias
 	complete -F __start_kubectl k
+  export KUBE_EDITOR=lvim
 fi
 
 # krew path
