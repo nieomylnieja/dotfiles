@@ -33,14 +33,12 @@ require("nieomylnieja.lsp")
 -- -- set a formatter, this will override the language server formatting capabilities (if it exists)
 local formatters = require "lvim.lsp.null-ls.formatters"
 formatters.setup {
-  { name = "terraform_fmt" },
-  { name = "taplo", args = { "format", --[[ "--config", "",  ]]"-" }, }
+  { name = "taplo", args = { "format", --[[ "--config", "",  ]] "-" }, }
 }
 
 -- -- set additional linters
 local linters = require "lvim.lsp.null-ls.linters"
 linters.setup {
-  { name = "terraform_validate" },
   { name = "shellcheck" }
 }
 
@@ -50,7 +48,6 @@ lvim.plugins = {
     "folke/trouble.nvim",
     cmd = "TroubleToggle",
   },
-  { "shaunsingh/nord.nvim" },
   {
     "karb94/neoscroll.nvim",
     config = function()
@@ -61,3 +58,6 @@ lvim.plugins = {
 
 -- Autocommands (https://neovim.io/doc/user/autocmd.html)
 require("nieomylnieja.autocmd")
+
+-- Color scheme
+require("nieomylnieja.colors").setup()

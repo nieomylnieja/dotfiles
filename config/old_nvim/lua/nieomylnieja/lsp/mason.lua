@@ -4,7 +4,7 @@ M.path = table.concat({ vim.fn.stdpath "data", "mason" }, "/")
 
 M.setup = function()
   local lp = require("nieomylnieja.lib.functions").load_plugin
-  local mason = lp "mason"
+  local mason = require("mason")
   local mason_lsp = lp "mason-lspconfig"
   local mason_installer = lp "mason-tool-installer"
   if not (mason and mason_lsp and mason_installer) then

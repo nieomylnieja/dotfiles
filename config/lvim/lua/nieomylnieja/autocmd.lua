@@ -4,7 +4,6 @@ vim.cmd([[
     autocmd FileType qf,help,man,lspinfo,spectre_panel,toggleterm nnoremap <silent> <buffer> q :close<CR>
     autocmd TextYankPost * silent!lua require('vim.highlight').on_yank({higroup = 'Visual', timeout = 200})
     autocmd BufWinEnter * :set formatoptions-=cro
-    autocmd FileType qf set nobuflisted
   augroup end
   augroup _git
     autocmd!
@@ -34,10 +33,10 @@ vim.cmd([[
   augroup end
 ]])
 
-local gs = vim.api.nvim_create_augroup("GeneralSettings", { clear = true })
+local general_settings = vim.api.nvim_create_augroup("GeneralSettings", { clear = true })
 
 vim.api.nvim_create_autocmd("VimLeave", {
-  group = gs,
+  group = general_settings,
   pattern = "*",
   callback = function()
     vim.fn("system('xsel -ib', getreg('+'))")
