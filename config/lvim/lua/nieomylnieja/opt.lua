@@ -3,7 +3,6 @@ vim.opt.clipboard = { "unnamed", "unnamedplus" } -- Allows neovim to access the 
 vim.opt.scrolloff = 9999 -- Center the view
 vim.opt.number = true -- Set numbered lines
 vim.opt.relativenumber = true -- Set relative numbered lines
-vim.opt.termguicolors = true -- Required by bufferline!
 vim.opt.hidden = true -- Otherwise terminals managed by toggleterm are discarded.
 vim.opt.splitbelow = true -- Force all horizontal splits to go below current window
 vim.opt.splitright = true -- Force all vertical splits to go to the right of current window

@@ -3,7 +3,6 @@ local theme = {}
 local nord = require "nieomylnieja.colors.nord"
 
 theme.loadSyntax = function()
-  -- Syntax highlight groups
   return {
     Type = { fg = nord.glacier },                                          -- int, long, char, etc.
     StorageClass = { fg = nord.glacier },                                  -- static, register, volatile, etc.
@@ -58,8 +57,7 @@ theme.loadSyntax = function()
 end
 
 theme.loadEditor = function()
-  -- Editor highlight groups
-  local editor = {
+  return {
     NormalFloat = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
     FloatBorder = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
     ColorColumn = { fg = nord.none, bg = nord.dark_gray },                    --  used for the columns set with 'colorcolumn'
@@ -169,39 +167,18 @@ theme.loadEditor = function()
     LeapMatch = { style = "underline,nocombine", fg = nord.yellow },
     LeapLabelPrimary = { style = "nocombine", fg = nord.black, bg = nord.yellow },
     LeapLabelSecondary = { style = "nocombine", fg = nord.black, bg = nord.purple },
+
+    Normal = { fg = nord.darkest_white, bg = nord.black }, -- normal text and background color
+    SignColumn = { fg = nord.darkest_white, bg = nord.black },
+
+    -- Remove window split borders
+    VertSplit = { fg = nord.gray },
+
+    DiffAdd = { fg = nord.green, bg = nord.dark_gray },     -- diff mode: Added line
+    DiffChange = { fg = nord.yellow, bg = nord.dark_gray }, --  diff mode: Changed line
+    DiffDelete = { fg = nord.red, bg = nord.dark_gray },    -- diff mode: Deleted line
+    DiffText = { fg = nord.purple, bg = nord.dark_gray },   -- diff mode: Changed text within a changed line
   }
-
-  -- Options:
-
-  --Set transparent background
-  if vim.g.nord_disable_background then
-    editor.Normal = { fg = nord.darkest_white, bg = nord.none } -- normal text and background color
-    editor.SignColumn = { fg = nord.darkest_white, bg = nord.none }
-  else
-    editor.Normal = { fg = nord.darkest_white, bg = nord.black } -- normal text and background color
-    editor.SignColumn = { fg = nord.darkest_white, bg = nord.black }
-  end
-
-  -- Remove window split borders
-  if vim.g.nord_borders then
-    editor.VertSplit = { fg = nord.gray }
-  else
-    editor.VertSplit = { fg = nord.black }
-  end
-
-  if vim.g.nord_uniform_diff_background then
-    editor.DiffAdd = { fg = nord.green, bg = nord.dark_gray }                   -- diff mode: Added line
-    editor.DiffChange = { fg = nord.yellow, bg = nord.dark_gray }               --  diff mode: Changed line
-    editor.DiffDelete = { fg = nord.red, bg = nord.dark_gray }                  -- diff mode: Deleted line
-    editor.DiffText = { fg = nord.purple, bg = nord.dark_gray }                 -- diff mode: Changed text within a changed line
-  else
-    editor.DiffAdd = { fg = nord.green, bg = nord.none, style = "reverse" }     -- diff mode: Added line
-    editor.DiffChange = { fg = nord.yellow, bg = nord.none, style = "reverse" } --  diff mode: Changed line
-    editor.DiffDelete = { fg = nord.red, bg = nord.none, style = "reverse" }    -- diff mode: Deleted line
-    editor.DiffText = { fg = nord.purple, bg = nord.none, style = "reverse" }   -- diff mode: Changed text within a changed line
-  end
-
-  return editor
 end
 
 theme.loadTerminal = function()
@@ -224,38 +201,9 @@ theme.loadTerminal = function()
 end
 
 theme.loadTreeSitter = function()
-  -- TreeSitter highlight groups
-  local treesitter = {
-    TSConstructor = { fg = nord.glacier },                                          -- For constructor calls and definitions: `= { }` in Lua, and Java constructors.
-    TSConstant = { fg = nord.yellow },                                              -- For constants
-    TSFloat = { fg = nord.purple },                                                 -- For floats
-    TSNumber = { fg = nord.purple },                                                -- For all number
-    TSAttribute = { fg = nord.purple },                                             -- (unstable) TODO: docs
-    TSError = { fg = nord.red },                                                    -- For syntax/parser errors.
-    TSException = { fg = nord.purple },                                             -- For exception related keywords.
-    TSFuncMacro = { fg = nord.teal },                                               -- For macro defined fuctions (calls and definitions): each `macro_rules` in Rust.
-    TSInclude = { fg = nord.glacier },                                              -- For includes: `#include` in C, `use` or `extern crate` in Rust, or `require` in Lua.
-    TSLabel = { fg = nord.purple },                                                 -- For labels: `label:` in C and `:label:` in Lua.
-    TSOperator = { fg = nord.glacier },                                             -- For any operator: `+`, but also `->` and `*` in C.
-    TSParameter = { fg = nord.blue },                                               -- For parameters of a function.
-    TSParameterReference = { fg = nord.blue },                                      -- For references to parameters of a function.
-    TSPunctDelimiter = { fg = nord.off_blue },                                      -- For delimiters ie: `.`
-    TSPunctBracket = { fg = nord.off_blue },                                        -- For brackets and parens.
-    TSPunctSpecial = { fg = nord.off_blue },                                        -- For special punctutation that does not fall in the catagories before.
-    TSSymbol = { fg = nord.purple },                                                -- For identifiers referring to symbols or atoms.
-    TSType = { fg = nord.glacier },                                                 -- For types.
-    TSTypeBuiltin = { fg = nord.glacier },                                          -- For builtin types.
-    TSTag = { fg = nord.darkest_white },                                            -- Tags like html tag names.
-    TSTagDelimiter = { fg = nord.purple },                                          -- Tag delimiter like `<` `>` `/`
-    TSText = { fg = nord.darkest_white },                                           -- For strings considered text in a markup language.
-    TSTextReference = { fg = nord.purple },                                         -- FIXME
-    TSEmphasis = { fg = nord.blue },                                                -- For text to be represented with emphasis.
-    TSUnderline = { fg = nord.darkest_white, bg = nord.none, style = "underline" }, -- For text to be represented with an underline.
-    TSLiteral = { fg = nord.darkest_white },                                        -- Literal text.
-    TSURI = { fg = nord.green },                                                    -- Any URI like a link or email.
-    TSAnnotation = { fg = nord.red },                                               -- For C++/Dart attributes, annotations that can be attached to the code to denote some kind of meta information.
+  return {
     ["@constructor"] = { fg = nord.glacier },
-    ["@constant"] = { fg = nord.yellow },
+    ["@constant"] = { fg = nord.darkest_white, style = "bold" },
     ["@float"] = { fg = nord.purple },
     ["@number"] = { fg = nord.purple },
     ["@attribute"] = { fg = nord.purple },
@@ -265,13 +213,13 @@ theme.loadTreeSitter = function()
     ["@include"] = { fg = nord.glacier },
     ["@label"] = { fg = nord.purple },
     ["@operator"] = { fg = nord.glacier },
-    ["@parameter"] = { fg = nord.blue },
-    ["@punctuation.delimiter"] = { fg = nord.off_blue },
-    ["@punctuation.bracket"] = { fg = nord.off_blue },
-    ["@punctuation.special"] = { fg = nord.off_blue },
+    ["@parameter"] = { fg = nord.darkest_white },
+    ["@punctuation.delimiter"] = { fg = nord.white },
+    ["@punctuation.bracket"] = { fg = nord.white },
+    ["@punctuation.special"] = { fg = nord.white },
     ["@symbol"] = { fg = nord.purple },
-    ["@type"] = { fg = nord.glacier },
-    ["@type.builtin"] = { fg = nord.glacier },
+    ["@type"] = { fg = nord.teal },
+    ["@type.builtin"] = { fg = nord.teal },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
     ["@text"] = { fg = nord.darkest_white },
@@ -294,71 +242,57 @@ theme.loadTreeSitter = function()
     -- @text.danger
     -- @tag.attribute
     -- @string.special
+
+    ["@variable"] = { fg = nord.darkest_white },
+    ["@variable.builtin"] = { fg = nord.darkest_white, style = "bold" },
+    ["@variable.global"] = { fg = nord.darkest_white, style = "bold" },
+    ["@boolean"] = { fg = nord.glacier },
+    ["@constant.builtin"] = { fg = nord.glacier, style = "bold" },
+    ["@constant.macro"] = { fg = nord.glacier, style = "bold" },
+    ["@text.title"] = { fg = nord.blue, bg = nord.none, style = "bold" },
+    ["@text.strong"] = { fg = nord.blue, bg = nord.none, style = "bold" },
+
+    ["@comment"] = { fg = nord.light_gray_bright, style = "italic" },
+    ["@conditional"] = { fg = nord.glacier },
+    ["@function"] = { fg = nord.off_blue },
+    ["@method"] = { fg = nord.off_blue },
+    ["@function.builtin"] = { fg = nord.off_blue },
+    ["@namespace"] = { fg = nord.darkest_white },
+    ["@field"] = { fg = nord.darkest_white },
+    ["@property"] = { fg = nord.darkest_white },
+    ["@keyword"] = { fg = nord.glacier },
+    ["@keyword.function"] = { fg = nord.glacier },
+    ["@keyword.return"] = { fg = nord.glacier },
+    ["@keyword.operator"] = { fg = nord.glacier },
+    ["@repeat"] = { fg = nord.glacier },
+    ["@string"] = { fg = nord.green },
+    ["@string.regex"] = { fg = nord.teal },
+    ["@string.escape"] = { fg = nord.yellow },
+    ["@character"] = { fg = nord.green },
   }
+end
 
-  treesitter.TSVariableBuiltin = { fg = nord.darkest_white, style = "bold" }
-  treesitter.TSBoolean = { fg = nord.glacier, style = "bold" }
-  treesitter.TSConstBuiltin = { fg = nord.teal, style = "bold" }
-  treesitter.TSConstMacro = { fg = nord.teal, style = "bold" }
-  treesitter.TSVariable = { fg = nord.darkest_white, style = "bold" }
-  treesitter.TSTitle = { fg = nord.blue, bg = nord.none, style = "bold" }
-  treesitter["@variable"] = { fg = nord.darkest_white, style = "bold" }
-  treesitter["@variable.builtin"] = { fg = nord.darkest_white, style = "bold" }
-  treesitter["@variable.global"] = { fg = nord.darkest_white, style = "bold" }
-  treesitter["@boolean"] = { fg = nord.glacier, style = "bold" }
-  treesitter["@constant.builtin"] = { fg = nord.teal, style = "bold" }
-  treesitter["@constant.macro"] = { fg = nord.teal, style = "bold" }
-  treesitter["@text.title"] = { fg = nord.blue, bg = nord.none, style = "bold" }
-  treesitter["@text.strong"] = { fg = nord.blue, bg = nord.none, style = "bold" }
-  -- Comments
-  treesitter.TSComment = { fg = nord.light_gray_bright, style = "italic" }
-  -- Conditionals
-  treesitter.TSConditional = { fg = nord.glacier, style = "italic" } -- For keywords related to conditionnals.
-  -- Function names
-  treesitter.TSFunction = { fg = nord.off_blue, style = "italic" }   -- For fuction (calls and definitions).
-  treesitter.TSMethod = { fg = nord.teal, style = "italic" }         -- For method calls and definitions.
-  treesitter.TSFuncBuiltin = { fg = nord.off_blue, style = "italic" }
-  -- Namespaces and property accessors
-  treesitter.TSNamespace = { fg = nord.darkest_white, style = "italic" } -- For identifiers referring to modules and namespaces.
-  treesitter.TSField = { fg = nord.darkest_white, style = "italic" }     -- For fields.
-  treesitter.TSProperty = { fg = nord.blue, style = "italic" }           -- Same as `TSField`, but when accessing, not declaring.
-  -- Language keywords
-  treesitter.TSKeyword = { fg = nord.glacier, style = "italic" }         -- For keywords that don't fall in other categories.
-  treesitter.TSKeywordFunction = { fg = nord.off_blue, style = "italic" }
-  treesitter.TSKeywordReturn = { fg = nord.off_blue, style = "italic" }
-  treesitter.TSKeywordOperator = { fg = nord.off_blue, style = "italic" }
-  treesitter.TSRepeat = { fg = nord.glacier, style = "italic" }      -- For keywords related to loops.
-  -- Strings
-  treesitter.TSString = { fg = nord.green, style = "italic" }        -- For strings.
-  treesitter.TSStringRegex = { fg = nord.teal, style = "italic" }    -- For regexes.
-  treesitter.TSStringEscape = { fg = nord.purple, style = "italic" } -- For escape characters within a string.
-  treesitter.TSCharacter = { fg = nord.green, style = "italic" }     -- For characters.
-
-  treesitter["@comment"] = { fg = nord.light_gray_bright, style = "italic" }
-  treesitter["@conditional"] = { fg = nord.glacier, style = "italic" }
-  treesitter["@function"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@method"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@function.builtin"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@namespace"] = { fg = nord.darkest_white, style = "italic" }
-  treesitter["@field"] = { fg = nord.darkest_white, style = "italic" }
-  treesitter["@property"] = { fg = nord.blue, style = "italic" }
-  treesitter["@keyword"] = { fg = nord.glacier, style = "italic" }
-  treesitter["@keyword.function"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@keyword.return"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@keyword.operator"] = { fg = nord.off_blue, style = "italic" }
-  treesitter["@repeat"] = { fg = nord.glacier, style = "italic" }
-  treesitter["@string"] = { fg = nord.green, style = "italic" }
-  treesitter["@string.regex"] = { fg = nord.teal, style = "italic" }
-  treesitter["@string.escape"] = { fg = nord.purple, style = "italic" }
-  treesitter["@character"] = { fg = nord.green, style = "italic" }
-
-  return treesitter
+theme.loadSemanitcTokens = function(ts)
+  return {
+    ["@lsp.type.class"] = { fg = nord.off_blue },
+    ["@lsp.type.enum"] = { fg = nord.off_blue },
+    ["@lsp.type.decorator"] = { fg = nord.yellow },
+    ["@lsp.type.enumMember"] = { fg = nord.yellow },
+    ["@lsp.type.function"] = ts["@function"],
+    ["@lsp.type.interface"] = { fg = nord.yellow },
+    ["@lsp.type.macro"] = ts["@funtion.macro"],
+    ["@lsp.type.method"] = { fg = nord.off_blue },
+    ["@lsp.type.namespace"] = ts["@namespace"],
+    ["@lsp.type.parameter"] = ts["@parameter"],
+    ["@lsp.type.property"] = ts["@property"],
+    ["@lsp.type.struct"] = { fg = nord.off_blue },
+    ["@lsp.type.type"] = ts["@type"],
+    ["@lsp.type.variable"] = ts["@variable"],
+  }
 end
 
 theme.loadFiletypes = function()
-  -- Filetype-specific highlight groups
-
-  local ft = {
+  return {
     -- yaml
     yamlBlockMappingKey = { fg = nord.teal },
     yamlBool = { link = "Boolean" },
@@ -368,14 +302,10 @@ theme.loadFiletypes = function()
     yamlTSPunctSpecial = { link = "Keyword" },
     yamlKey = { fg = nord.teal }, -- stephpy/vim-yaml
   }
-
-  return ft
 end
 
 theme.loadLSP = function()
-  -- Lsp highlight groups
-
-  local lsp = {
+  return {
     LspDiagnosticsDefaultError = { fg = nord.red },                               -- used for "Error" diagnostic virtual text
     LspDiagnosticsSignError = { fg = nord.red },                                  -- used for "Error" diagnostic signs in sign column
     LspDiagnosticsFloatingError = { fg = nord.red },                              -- used for "Error" diagnostic messages in the diagnostics float
@@ -421,14 +351,10 @@ theme.loadLSP = function()
     DiagnosticFloatingHint = { link = "LspDiagnosticsFloatingHint" },
     DiagnosticSignHint = { link = "LspDiagnosticsSignHint" },
   }
-
-  return lsp
 end
 
 theme.loadPlugins = function()
-  -- Plugins highlight groups
-
-  local plugins = {
+  return {
     -- LspTrouble
     LspTroubleText = { fg = nord.darkest_white },
     LspTroubleCount = { fg = nord.glacier, bg = nord.blue },
@@ -483,6 +409,7 @@ theme.loadPlugins = function()
     NeoTreeTabActive = { fg = nord.teal, bg = nord.gray },
 
     -- NvimTree
+    NvimTreeNormal = { fg = nord.darkest_white, bg = nord.none },
     NvimTreeRootFolder = { fg = nord.teal, style = "bold" },
     NvimTreeGitDirty = { fg = nord.purple },
     NvimTreeGitNew = { fg = nord.green },
@@ -583,22 +510,6 @@ theme.loadPlugins = function()
     StatusLineDull = { fg = nord.light_gray, bg = nord.dark_gray },
     StatusLineAccent = { fg = nord.black, bg = nord.yellow },
   }
-  -- Options:
-
-  -- Disable nvim-tree background
-  if vim.g.nord_disable_background then
-    plugins.NvimTreeNormal = { fg = nord.darkest_white, bg = nord.none }
-  else
-    plugins.NvimTreeNormal = { fg = nord.darkest_white, bg = nord.sidebar }
-  end
-
-  if vim.g.nord_enable_sidebar_background then
-    plugins.NvimTreeNormal = { fg = nord.darkest_white, bg = nord.sidebar }
-  else
-    plugins.NvimTreeNormal = { fg = nord.darkest_white, bg = nord.none }
-  end
-
-  return plugins
 end
 
 return theme

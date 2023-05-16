@@ -33,7 +33,8 @@ require("nieomylnieja.lsp")
 -- -- set a formatter, this will override the language server formatting capabilities (if it exists)
 local formatters = require "lvim.lsp.null-ls.formatters"
 formatters.setup {
-  { name = "taplo", args = { "format", --[[ "--config", "",  ]] "-" }, }
+  { name = "terraform_fmt", filetypes = { "terraform", "tf", "hcl", "terraform-vars" } },
+  { name = "taplo",         args = { "format", --[[ "--config", "",  ]] "-" }, }
 }
 
 -- -- set additional linters
@@ -54,6 +55,7 @@ lvim.plugins = {
       require('neoscroll').setup()
     end
   },
+  { "nvim-treesitter/playground" },
 }
 
 -- Autocommands (https://neovim.io/doc/user/autocmd.html)
