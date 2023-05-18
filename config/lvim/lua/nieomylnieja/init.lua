@@ -30,18 +30,8 @@ lvim.builtin.treesitter.highlight.enable = true
 -- LSP settings
 require("nieomylnieja.lsp")
 
--- -- set a formatter, this will override the language server formatting capabilities (if it exists)
-local formatters = require "lvim.lsp.null-ls.formatters"
-formatters.setup {
-  { name = "terraform_fmt", filetypes = { "terraform", "tf", "hcl", "terraform-vars" } },
-  { name = "taplo",         args = { "format", --[[ "--config", "",  ]] "-" }, }
-}
-
--- -- set additional linters
-local linters = require "lvim.lsp.null-ls.linters"
-linters.setup {
-  { name = "shellcheck" }
-}
+-- Null-ls
+require("nieomylnieja.null-ls").setup()
 
 -- Additional Plugins
 lvim.plugins = {
@@ -56,6 +46,8 @@ lvim.plugins = {
     end
   },
   { "nvim-treesitter/playground" },
+  { "jay-babu/mason-null-ls.nvim" },
+  { "jay-babu/mason-nvim-dap.nvim" },
 }
 
 -- Autocommands (https://neovim.io/doc/user/autocmd.html)
@@ -63,3 +55,6 @@ require("nieomylnieja.autocmd")
 
 -- Color scheme
 require("nieomylnieja.colors").setup()
+
+-- Keys
+require("nieomylnieja.keymap")

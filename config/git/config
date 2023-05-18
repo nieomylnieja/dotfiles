@@ -38,7 +38,8 @@
   pager = delta
 
 [alias]
-  pushf = push --force-with-lease
+	pushf = push --force-with-lease
+	subup = submodule update --init --recursive
   tree = log --graph --pretty=format:'%Cblue%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%ar) %C(cyan)<%an>%Creset' --abbrev-commit
 	pc = !"f() { remote=\"${1:-origin}\"; git push -u \"$remote\" $(git rev-parse --abbrev-ref HEAD); }; f"
 
