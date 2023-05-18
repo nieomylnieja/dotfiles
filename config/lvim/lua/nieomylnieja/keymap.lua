@@ -1,34 +1,39 @@
--- keymappings [view all the defaults by pressing <leader>Lk]
 lvim.leader = "space"
--- add your own keymapping
+
 lvim.keys.normal_mode["<C-s>"] = ":w<cr>"
 lvim.keys.normal_mode["<S-l>"] = ":BufferLineCycleNext<CR>"
 lvim.keys.normal_mode["<S-h>"] = ":BufferLineCyclePrev<CR>"
--- unmap a default keymapping
--- vim.keymap.del("n", "<C-Up>")
--- override a default keymapping
--- lvim.keys.normal_mode["<C-q>"] = ":q<cr>" -- or vim.keymap.set("n", "<C-q>", ":q<cr>" )
 
--- Change Telescope navigation to use j and k for navigation and n and p for history in both input and normal mode.
--- we use protected-mode (pcall) just in case the plugin wasn't loaded yet.
--- local _, actions = pcall(require, "telescope.actions")
--- lvim.builtin.telescope.defaults.mappings = {
---   -- for input mode
---   i = {
---     ["<C-j>"] = actions.move_selection_next,
---     ["<C-k>"] = actions.move_selection_previous,
---     ["<C-n>"] = actions.cycle_history_next,
---     ["<C-p>"] = actions.cycle_history_prev,
---   },
---   -- for normal mode
---   n = {
---     ["<C-j>"] = actions.move_selection_next,
---     ["<C-k>"] = actions.move_selection_previous,
---   },
--- }
+local telescope = require "telescope.builtin"
 
--- Use which-key to add extra bindings with the leader-key prefix
--- lvim.builtin.which_key.mappings["P"] = { "<cmd>Telescope projects<CR>", "Projects" }
+-- LSP
+for key, func in pairs({
+  ["gd"] = telescope.lsp_definitions,
+  ["gI"] = telescope.lsp_implementations,
+  ["gr"] = telescope.lsp_references,
+}) do
+  lvim.lsp.buffer_mappings.normal_mode[key][1] = func
+end
+
+-- Telescope
+lvim.builtin.which_key.mappings["s"] = {} -- Clear the old mapping
+lvim.builtin.which_key.mappings["f"] = {
+  name = "Find",
+  b = { telescope.git_branches, "Checkout branch" },
+  c = { telescope.colorscheme, "Colorscheme" },
+  f = { telescope.find_files, "Find file" },
+  h = { telescope.help_tags, "Find help" },
+  H = { telescope.highlights, "Find highlight groups" },
+  M = { telescope.man_pages, "Man pages" },
+  r = { telescope.oldfiles, "Open recent file" },
+  R = { telescope.registers, "Registers" },
+  g = { telescope.live_grep, "Live grep" },
+  k = { telescope.keymaps, "Keymaps" },
+  C = { telescope.commands, "Commands" },
+  l = { telescope.resume, "Resume last search" },
+}
+
+-- Trouble
 lvim.builtin.which_key.mappings["t"] = {
   name = "+Trouble",
   r = { "<cmd>Trouble lsp_references<cr>", "References" },
