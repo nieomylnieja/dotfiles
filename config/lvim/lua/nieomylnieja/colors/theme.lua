@@ -60,7 +60,7 @@ theme.loadEditor = function()
   return {
     NormalFloat = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
     FloatBorder = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
-    ColorColumn = { fg = nord.none, bg = nord.dark_gray },                    --  used for the columns set with 'colorcolumn'
+    ColorColumn = { fg = nord.none, bg = nord.dark_gray },                    -- used for the columns set with 'colorcolumn'
     Conceal = { fg = nord.dark_gray },                                        -- placeholder characters substituted for concealed text (see 'conceallevel')
     Cursor = { fg = nord.darkest_white, bg = nord.none, style = "reverse" },  -- the character under the cursor
     CursorIM = { fg = nord.darker_white, bg = nord.none, style = "reverse" }, -- like Cursor, but used when in IME mode

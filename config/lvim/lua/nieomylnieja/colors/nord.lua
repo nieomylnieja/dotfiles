@@ -21,7 +21,7 @@ local nord = {
 
 -- Enable contrast sidebars, floating windows and popup menus
 nord.sidebar = nord.dark_gray
-nord.float = nord.dark_gray
+nord.float = nord.black
 
 nord.cursorlinefg = nord.dark_gray
 
