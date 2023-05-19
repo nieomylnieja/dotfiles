@@ -1,5 +1,7 @@
 local M = {}
 
+local registry = require("mason-registry")
+
 function M.setup()
   local sources = {
     linters = {
@@ -23,12 +25,48 @@ function M.setup()
   require "lvim.lsp.null-ls.formatters".setup(sources.formatters)
   require "lvim.lsp.null-ls.code_actions".setup(sources.code_actions)
 
-  -- TODO: right now mason-null-ls is lacking... once it fully handles all the renames
-  -- this can be done automatically.
   local ensure_installed = {
-    "shellcheck", "ansible-lint", "taplo"
+    "shellcheck",
+    "ansible-lint",
+    "taplo",
+    "flake8",
   }
-  require "mason-null-ls".setup({ ensure_installed = ensure_installed })
+
+  -- No need to run again:
+  -- 	 registry.refresh(vim.schedule_wrap(ensure_installed))
+  -- It's already done by lvim core code, it's enough to just wait for the
+  -- API to load, thus the schedule_wrap.
+  vim.schedule_wrap(function()
+    for _, pkg_name in pairs(ensure_installed) do
+      M._ensure_installed(pkg_name)
+    end
+  end)()
+end
+
+---@param pkg_name string
+function M._ensure_installed(pkg_name)
+  if not registry.has_package(pkg_name) then
+    vim.notify(
+      string.format("[null-ls] %s is not supported for Mason installation", pkg_name),
+      vim.log.levels.ERROR)
+    return
+  end
+  local ok, pkg = pcall(registry.get_package, pkg_name)
+  if not ok then
+    vim.notify(
+      string.format("[null-ls] error encountered when getting the %s pkg for Mason installation", pkg_name),
+      vim.log.levels.ERROR)
+    return
+  end
+  if pkg:is_installed() then
+    return
+  end
+  vim.notify(("[null-ls] installing %s"):format(pkg.name))
+  pkg:install():once("closed", vim.schedule_wrap(function()
+    if pkg:is_installed() then
+      vim.notify(("[null-ls] %s was installed"):format(pkg.name))
+    end
+  end))
 end
 
 return M

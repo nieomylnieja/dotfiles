@@ -3,6 +3,9 @@ lvim.plugins = {
   {
     "folke/trouble.nvim",
     cmd = "TroubleToggle",
+    config = function()
+      require("trouble").setup({ auto_close = true })
+    end
   },
   -- Smooth scroll effect, idk If I'm even using it.
   {
@@ -11,10 +14,6 @@ lvim.plugins = {
   },
   -- Usefull for colorscheme related work, mostly due to TSHighlightCapturesUnderCursor.
   { "nvim-treesitter/playground" },
-  -- These both bridge the gap between Mason and null-ls/dap...
-  -- They are not perfect though and I might end up doing sth on my own eventually.
-  { "jay-babu/mason-null-ls.nvim" },
-  { "jay-babu/mason-nvim-dap.nvim" },
   -- Makes all the windows and stuff like lsp rename look so much better.
   {
     "stevearc/dressing.nvim",
@@ -27,4 +26,11 @@ lvim.plugins = {
       require("colorizer").setup({ "css", "scss", "html", "javascript", "lua" })
     end
   },
+  -- Higlight and easily manage TODO comments.
+  {
+    "folke/todo-comments.nvim",
+    config = function()
+      require("todo-comments").setup()
+    end
+  }
 }
