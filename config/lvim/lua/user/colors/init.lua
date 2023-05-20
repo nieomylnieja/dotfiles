@@ -1,6 +1,6 @@
 local M = {}
 
-local nord = require "nieomylnieja.colors.theme"
+local nord = require "user.colors.theme"
 
 -- Go trough the table and highlight the group with the color values
 M.highlight = function(group, color)

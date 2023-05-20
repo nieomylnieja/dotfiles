@@ -1,6 +1,6 @@
 local theme = {}
 
-local nord = require "nieomylnieja.colors.nord"
+local nord = require "user.colors.nord"
 
 theme.loadSyntax = function()
   return {

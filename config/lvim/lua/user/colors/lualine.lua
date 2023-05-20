@@ -1,6 +1,6 @@
 local theme = {}
 
-local colors = require "nieomylnieja.colors.nord"
+local colors = require "user.colors.nord"
 
 theme.normal = {
   a = { fg = colors.dark_gray, bg = colors.glacier },

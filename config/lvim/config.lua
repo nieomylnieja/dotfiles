@@ -1,2 +1,2 @@
--- Import the whole module located at ./lua/nieomylnieja.
-require("nieomylnieja")
+-- Import the whole module located at ./lua/user.
+require("user")

@@ -3,7 +3,7 @@ lvim.log.level = "warn"
 lvim.format_on_save.enabled = false
 lvim.colorscheme = "nord"
 -- Options
-require("nieomylnieja.opt")
+require("user.opt")
 
 -- After changing plugin config exit and reopen LunarVim, Run :PackerInstall :PackerCompile
 lvim.builtin.alpha.active = true
@@ -15,14 +15,14 @@ lvim.builtin.treesitter.ensure_installed = "all"
 lvim.builtin.treesitter.highlight.enable = true
 
 -- Plugins
-require("nieomylnieja.plugins")
+require("user.plugins")
 -- LSP settings
-require("nieomylnieja.lsp")
+require("user.lsp")
 -- Null-ls
-require("nieomylnieja.null-ls").setup()
+require("user.null-ls").setup()
 -- Autocommands (https://neovim.io/doc/user/autocmd.html)
-require("nieomylnieja.autocmd")
+require("user.autocmd")
 -- Color scheme
-require("nieomylnieja.colors").setup()
+require("user.colors").setup()
 -- Keys
-require("nieomylnieja.keymap")
+require("user.keymap")

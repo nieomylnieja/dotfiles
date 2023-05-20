@@ -47,7 +47,7 @@
   diffFilter = delta --color-only
 
 [diff "sopsdiffer"]
-        textconv = "sops -d"
+  textconv = "sops -d"
 
 [delta]
   features = side-by-side line-numbers decorations

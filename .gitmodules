@@ -1,3 +1,7 @@
 [submodule "config/gtk/Nordic"]
 	path = config/gtk/Nordic
 	url = git@github.com:EliverLara/Nordic.git
+[submodule "dotbot"]
+	path = dotbot
+	url = https://github.com/anishathalye/dotbot
+	ignore = dirty
