@@ -219,7 +219,7 @@ theme.loadTreeSitter = function()
     ["@punctuation.special"] = { fg = nord.white },
     ["@symbol"] = { fg = nord.purple },
     ["@type"] = { fg = nord.glacier },
-    ["@type.builtin"] = { fg = nord.teal },
+    ["@type.builtin"] = { fg = nord.glacier },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
     ["@text"] = { fg = nord.darkest_white },
