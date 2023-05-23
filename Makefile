@@ -10,9 +10,6 @@ install/rust:
 		--component clippy,rust-analyzer-preview
 	rustup default nightly
 
-install/go:
-	go install github.com/go-delve/delve/cmd/dlv@latest
-
 install/doomemacs:
 	git clone https://github.com/hlissner/doom-emacs ~/.emacs.d
 	doom install
@@ -28,19 +25,5 @@ install/slock:
 	sudo make -C build/slock install
 
 install/lvim:
-	LV_BRANCH='release-1.2/neovim-0.8' bash <(curl -s https://raw.githubusercontent.com/lunarvim/lunarvim/fc6873809934917b470bff1b072171879899a36b/utils/installer/install.sh)
-
-install/astronvim:
-	git clone --depth 1 https://github.com/AstroNvim/AstroNvim ~/.config/nvim
-	ln -s "$$DOTFILES/config/astronvim" "$$XDG_CONFIG_HOME/nvim/lua/user"
-
-update/nvim/plugins:
-	nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync' -c 'MasonToolsUpdate'
-
-# nvim/helptags:
-# 	fd --type f -a -p 'config/nvim/pack/plugins/.*/doc/.*txt' --exec dirname |\
-# 		sort | uniq |\
-# 		xargs -I '{}' nvim --headless --noplugin -c ":helptags {}" -c "qa"
-
-install/fmt-tools:
-	yay -S prettier stylua
+	LV_BRANCH='release-1.3/neovim-0.9' \
+	  bash <(curl -s https://raw.githubusercontent.com/LunarVim/LunarVim/release-1.3/neovim-0.9/utils/installer/install.sh)

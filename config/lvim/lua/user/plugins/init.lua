@@ -1,3 +1,5 @@
+require("user.plugins.builtin")
+
 lvim.plugins = {
   -- Better diagnoscitcs.
   {
@@ -32,5 +34,19 @@ lvim.plugins = {
     config = function()
       require("todo-comments").setup()
     end
-  }
+  },
+  -- Leap helps you move faster :)
+  {
+    "ggandor/leap.nvim",
+    config = function()
+      require("leap").add_default_mappings()
+    end,
+  },
+  -- DAP
+  "leoluz/nvim-dap-go",
+  "mfussenegger/nvim-dap-python",
+  -- Awesome test runners :)
+  "nvim-neotest/neotest",
+  "nvim-neotest/neotest-go",
+  "nvim-neotest/neotest-python",
 }

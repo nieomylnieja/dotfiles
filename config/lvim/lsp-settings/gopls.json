@@ -1,0 +1,11 @@
+{
+  "gopls": {
+    "ui.diagnostic.analyses": {
+      "fieldalignment": true,
+      "nilness": true,
+      "unusedparams": true,
+      "unusedwrite": true
+    },
+    "ui.completion.usePlaceholders": true
+  }
+}
