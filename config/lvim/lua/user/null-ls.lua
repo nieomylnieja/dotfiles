@@ -1,7 +1,5 @@
 local M = {}
 
-local registry = require("mason-registry")
-
 function M.setup()
   local sources = {
     linters = {
@@ -17,9 +15,13 @@ function M.setup()
       { name = "taplo",    args = { "format", "-" } },
       { name = "autoflake" },
       { name = "isort" },
+      { name = "gofumpt" },
+      { name = "goimports" },
     },
     code_actions = {
       { name = "shellcheck" },
+      { name = "gomodifytags" },
+      { name = "impl" },
     }
   }
 
@@ -28,13 +30,17 @@ function M.setup()
   require "lvim.lsp.null-ls.code_actions".setup(sources.code_actions)
 
   local installer = require("user.mason")
-  vim.tbl_extend("keep", installer.ensure_installed, {
+  vim.list_extend(installer.ensure_installed, {
     "shellcheck",
     "ansible-lint",
     "taplo",
     "flake8",
     "autoflake",
     "isort",
+    "gomodifytags",
+    "impl",
+    "gofumpt",
+    "goimports",
   })
 end
 

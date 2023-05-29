@@ -11,14 +11,13 @@ lvim.lsp.installer.setup.ensure_installed = {
   "dockerls",
   "tsserver",
   "taplo",
-  "ansiblels"
+  "ansiblels",
 }
 
 -- Configure a server manually. !!Requires `:LvimCacheReset` to take effect!!
 local manager = require("lvim.lsp.manager")
 local server_overrides = {
   ["taplo"] = { filetypes = { "toml" } }
-  -- ["terraformls"] = { filetypes = { "terraform", "terraform-vars", "hcl" } }
 }
 for server, opts in pairs(server_overrides) do
   table.insert(lvim.lsp.automatic_configuration.skipped_servers, server)

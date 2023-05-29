@@ -18,3 +18,5 @@ require("user.colors").setup()
 require("user.keymap")
 -- Ensure Mason sources are installed
 require("user.mason").setup()
+-- DAP
+require("user.dap").setup()

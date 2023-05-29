@@ -174,10 +174,10 @@ theme.loadEditor = function()
     -- Remove window split borders
     VertSplit = { fg = nord.gray },
 
-    DiffAdd = { fg = nord.green, bg = nord.dark_gray },     -- diff mode: Added line
-    DiffChange = { fg = nord.yellow, bg = nord.dark_gray }, --  diff mode: Changed line
-    DiffDelete = { fg = nord.red, bg = nord.dark_gray },    -- diff mode: Deleted line
-    DiffText = { fg = nord.purple, bg = nord.dark_gray },   -- diff mode: Changed text within a changed line
+    DiffAdd = { fg = nord.green, bg = nord.dark_gray },       -- diff mode: Added line
+    DiffChange = { fg = nord.off_blue, bg = nord.dark_gray }, -- diff mode: Changed line
+    DiffDelete = { fg = nord.red, bg = nord.dark_gray },      -- diff mode: Deleted line
+    DiffText = { fg = nord.teal, bg = nord.dark_gray },       -- diff mode: Changed text within a changed line
   }
 end
 
@@ -218,8 +218,9 @@ theme.loadTreeSitter = function()
     ["@punctuation.bracket"] = { fg = nord.white },
     ["@punctuation.special"] = { fg = nord.white },
     ["@symbol"] = { fg = nord.purple },
-    ["@type"] = { fg = nord.glacier },
+    ["@type"] = { fg = nord.teal },
     ["@type.builtin"] = { fg = nord.glacier },
+    ["@type.definition"] = { fg = nord.teal },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
     ["@text"] = { fg = nord.darkest_white },
@@ -229,35 +230,20 @@ theme.loadTreeSitter = function()
     ["@text.literal"] = { fg = nord.darkest_white },
     ["@text.uri"] = { fg = nord.green },
     ["@text.strike"] = { fg = nord.darkest_white, style = "strikethrough" },
-
-    -- @todo Missing highlights
-    -- @function.call
-    -- @method.call
-    -- @type.qualifier
-    -- @text.math (e.g. for LaTeX math environments)
-    -- @text.environment (e.g. for text environments of markup languages)
-    -- @text.environment.name (e.g. for the name/the string indicating the type of text environment)
-    -- @text.note
-    -- @text.warning
-    -- @text.danger
-    -- @tag.attribute
-    -- @string.special
-
+    ["@text.title"] = { fg = nord.blue, bg = nord.none, style = "bold" },
+    ["@text.strong"] = { fg = nord.blue, bg = nord.none, style = "bold" },
     ["@variable"] = { fg = nord.darkest_white },
     ["@variable.builtin"] = { fg = nord.darkest_white, style = "bold" },
     ["@variable.global"] = { fg = nord.darkest_white, style = "bold" },
     ["@boolean"] = { fg = nord.glacier },
     ["@constant.builtin"] = { fg = nord.glacier, style = "bold" },
     ["@constant.macro"] = { fg = nord.glacier, style = "bold" },
-    ["@text.title"] = { fg = nord.blue, bg = nord.none, style = "bold" },
-    ["@text.strong"] = { fg = nord.blue, bg = nord.none, style = "bold" },
-
     ["@comment"] = { fg = nord.light_gray_bright, style = "italic" },
     ["@conditional"] = { fg = nord.glacier },
-    ["@function"] = { fg = nord.off_blue },
-    ["@method"] = { fg = nord.off_blue },
-    ["@function.builtin"] = { fg = nord.off_blue },
     ["@namespace"] = { fg = nord.darkest_white },
+    ["@method"] = { fg = nord.off_blue },
+    ["@function"] = { fg = nord.off_blue },
+    ["@function.builtin"] = { fg = nord.off_blue },
     ["@field"] = { fg = nord.darkest_white },
     ["@property"] = { fg = nord.darkest_white },
     ["@keyword"] = { fg = nord.glacier },
@@ -364,7 +350,7 @@ theme.loadPlugins = function()
     diffAdded = { fg = nord.green },
     diffRemoved = { fg = nord.red },
     diffChanged = { fg = nord.purple },
-    diffOldFile = { fg = nord.yelow },
+    diffOldFile = { fg = nord.yellow },
     diffNewFile = { fg = nord.orange },
     diffFile = { fg = nord.teal },
     diffLine = { fg = nord.light_gray },
@@ -509,6 +495,18 @@ theme.loadPlugins = function()
     -- Statusline
     StatusLineDull = { fg = nord.light_gray, bg = nord.dark_gray },
     StatusLineAccent = { fg = nord.black, bg = nord.yellow },
+
+    -- Neotest
+    NeotestFailed = { fg = nord.red },
+    NeotestDir = { fg = nord.off_blue },
+    NeotestFile = { fg = nord.off_blue },
+    NeotestTarget = { fg = nord.purple },
+    NeotestRunning = { fg = nord.yellow },
+    NeotestPassed = { fg = nord.green },
+    NeotestSkipped = { fg = nord.glacier },
+    NeotestMakred = { fg = nord.orange },
+    NeotestNamespace = { fg = nord.glacier },
+    NeotestAdapterName = { fg = nord.glacier },
   }
 end
 

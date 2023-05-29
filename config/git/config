@@ -19,14 +19,11 @@
   rebase = false
 
 [merge]
-  conflictstyle = diff3
-
-[mergetool]
+	tool = "vimdiff"
 	prompt = false
-	keepBackup = false
 
 [mergetool "vimdiff"]
-	cmd = lvim -d $BASE $LOCAL $REMOTE $MERGED -c '$wincmd w' -c 'wincmd J'
+	cmd = lvim -d $LOCAL $BASE $REMOTE $MERGED -c '$wincmd w' -c 'wincmd J'
 
 [init]
 	defaultBranch = main

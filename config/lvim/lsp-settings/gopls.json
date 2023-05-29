@@ -1,7 +1,6 @@
 {
   "gopls": {
     "ui.diagnostic.analyses": {
-      "fieldalignment": true,
       "nilness": true,
       "unusedparams": true,
       "unusedwrite": true

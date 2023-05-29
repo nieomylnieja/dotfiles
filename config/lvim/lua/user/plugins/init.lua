@@ -46,7 +46,22 @@ lvim.plugins = {
   "leoluz/nvim-dap-go",
   "mfussenegger/nvim-dap-python",
   -- Awesome test runners :)
-  "nvim-neotest/neotest",
+  {
+    "nvim-neotest/neotest",
+    config = require("user.plugins.neotest").setup
+  },
   "nvim-neotest/neotest-go",
   "nvim-neotest/neotest-python",
+  -- Git
+  {
+    "sindrets/diffview.nvim",
+    event = "BufRead"
+  },
+  -- Notifications UI
+  {
+    "rcarriga/nvim-notify",
+    config = function()
+      vim.notify = require("notify")
+    end
+  },
 }
