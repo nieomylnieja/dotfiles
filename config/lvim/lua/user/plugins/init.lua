@@ -61,6 +61,7 @@ lvim.plugins = {
   {
     "rcarriga/nvim-notify",
     config = function()
+      require("notify").setup({ minimum_width = 15 })
       vim.notify = require("notify")
     end
   },

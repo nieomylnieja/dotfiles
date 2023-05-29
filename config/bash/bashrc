@@ -189,5 +189,8 @@ if [ -x "$(command -v starship)" ]; then
 	eval "$(starship init bash)"
 fi
 
-
+# Some lua bs...
 alias luamake=/home/mh/.dotfiles/clones/lua-language-server/3rd/luamake/luamake
+
+# OCaml
+test -r /home/mh/.opam/opam-init/init.sh && . /home/mh/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true

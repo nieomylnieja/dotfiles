@@ -12,6 +12,7 @@ lvim.lsp.installer.setup.ensure_installed = {
   "tsserver",
   "taplo",
   "ansiblels",
+  "ocamllsp",
 }
 
 -- Configure a server manually. !!Requires `:LvimCacheReset` to take effect!!
