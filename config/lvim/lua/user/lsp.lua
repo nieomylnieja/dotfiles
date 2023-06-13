@@ -12,7 +12,7 @@ lvim.lsp.installer.setup.ensure_installed = {
   "tsserver",
   "taplo",
   "ansiblels",
-  "ocamllsp",
+  -- "ocamllsp", -- It's better to get one manually for prefered opam switch.
 }
 
 -- Configure a server manually. !!Requires `:LvimCacheReset` to take effect!!

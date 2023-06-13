@@ -1,4 +1,5 @@
 {
+  "ChatGPT.nvim": { "branch": "main", "commit": "b32003f351e330b9985078989b60e70406d63973" },
   "Comment.nvim": { "branch": "master", "commit": "a89339ffbee677ab0521a483b6dac7e2e67c907e" },
   "LuaSnip": { "branch": "master", "commit": "a6355b12a3b7da0aef71f02560e17ff480182b97" },
   "alpha-nvim": { "branch": "main", "commit": "dafa11a6218c2296df044e00f88d9187222ba6b0" },
@@ -8,6 +9,8 @@
   "cmp-nvim-lsp": { "branch": "main", "commit": "0e6b2ed705ddcff9738ec4ea838141654f12eeef" },
   "cmp-path": { "branch": "main", "commit": "91ff86cd9c29299a64f968ebb45846c485725f23" },
   "cmp_luasnip": { "branch": "master", "commit": "18095520391186d634a0045dacaa346291096566" },
+  "copilot-cmp": { "branch": "master", "commit": "c2cdb3c0f5078b0619055af192295830a7987790" },
+  "copilot.lua": { "branch": "master", "commit": "77e3a4907928f0813024e573b882dc879dfc0c6b" },
   "diffview.nvim": { "branch": "main", "commit": "bff58a6ea3e081ca50049700f9848b2f84ea57be" },
   "dressing.nvim": { "branch": "master", "commit": "66e4990240f92e31b0d5e4df6deb6bb0160ae832" },
   "friendly-snippets": { "branch": "main", "commit": "b1b78a6433268fc172adb5a843e165035e83861e" },
@@ -26,6 +29,7 @@
   "neotest-go": { "branch": "main", "commit": "4e7a87967e45f2b357fd546b0b7877774191772e" },
   "neotest-python": { "branch": "master", "commit": "6c06041cfb45f45e276068020baa06c06fe20d5c" },
   "nlsp-settings.nvim": { "branch": "main", "commit": "41a855c3bfb9d5a2120707e315a432e74931f80f" },
+  "nui.nvim": { "branch": "main", "commit": "f008972ac7d24f7188521a7f8d158aac2fb0b07e" },
   "null-ls.nvim": { "branch": "main", "commit": "f8ffcd7cb8fb3325c711d459152ef132b5b65aed" },
   "nvim-autopairs": { "branch": "master", "commit": "58985de5eeab159462bc262de5cc1b9c9b375595" },
   "nvim-cmp": { "branch": "main", "commit": "777450fd0ae289463a14481673e26246b5e38bf2" },

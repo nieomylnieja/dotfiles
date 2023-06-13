@@ -221,8 +221,10 @@ theme.loadTreeSitter = function()
     ["@type"] = { fg = nord.teal },
     ["@type.builtin"] = { fg = nord.glacier },
     ["@type.definition"] = { fg = nord.teal },
+    ["@type.qualifier"] = { fg = nord.light_gray },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
+    ["@tag.attribute"] = { fg = nord.light_gray },
     ["@text"] = { fg = nord.darkest_white },
     ["@text.reference"] = { fg = nord.purple },
     ["@text.emphasis"] = { fg = nord.blue },
@@ -232,6 +234,7 @@ theme.loadTreeSitter = function()
     ["@text.strike"] = { fg = nord.darkest_white, style = "strikethrough" },
     ["@text.title"] = { fg = nord.blue, bg = nord.none, style = "bold" },
     ["@text.strong"] = { fg = nord.blue, bg = nord.none, style = "bold" },
+    ["@text.note"] = { fg = nord.light_gray },
     ["@variable"] = { fg = nord.darkest_white },
     ["@variable.builtin"] = { fg = nord.darkest_white, style = "bold" },
     ["@variable.global"] = { fg = nord.darkest_white, style = "bold" },
@@ -315,6 +318,11 @@ theme.loadLSP = function()
     LspReferenceText = { fg = nord.darkest_white, bg = nord.dark_gray },          -- used for highlighting "text" references
     LspReferenceRead = { fg = nord.darkest_white, bg = nord.dark_gray },          -- used for highlighting "read" references
     LspReferenceWrite = { fg = nord.darkest_white, bg = nord.dark_gray },         -- used for highlighting "write" references
+    LspCodeLens = { fg = nord.light_gray, style = "italic" },
+    LspDiagnosticsError = { fg = nord.red },
+    LspDiagnosticsWarning = { fg = nord.purple },
+    LspDiagnosticsInformation = { fg = nord.blue },
+    LspDiagnosticsHint = { fg = nord.glacier },
 
     DiagnosticError = { link = "LspDiagnosticsDefaultError" },
     DiagnosticWarn = { link = "LspDiagnosticsDefaultWarning" },
@@ -365,11 +373,6 @@ theme.loadPlugins = function()
     NeogitDiffDeleteHighlight = { fg = nord.red, style = "reverse" },
     NeogitDiffAddHighlight = { fg = nord.green, style = "reverse" },
 
-    -- GitGutter
-    GitGutterAdd = { fg = nord.green },     -- diff mode: Added line |diff.txt|
-    GitGutterChange = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitGutterDelete = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-
     -- GitSigns
     GitSignsAdd = { fg = nord.green },       -- diff mode: Added line |diff.txt|
     GitSignsAddNr = { fg = nord.green },     -- diff mode: Added line |diff.txt|
@@ -406,10 +409,6 @@ theme.loadPlugins = function()
     NvimTreeEmptyFolderName = { fg = nord.dark_gray },
     NvimTreeFolderIcon = { fg = nord.darkest_white },
     NvimTreeIndentMarker = { fg = nord.dark_gray },
-    LspDiagnosticsError = { fg = nord.red },
-    LspDiagnosticsWarning = { fg = nord.purple },
-    LspDiagnosticsInformation = { fg = nord.blue },
-    LspDiagnosticsHint = { fg = nord.glacier },
 
     -- WhichKey
     WhichKey = { fg = nord.darkest_white, style = "bold" },
@@ -418,33 +417,6 @@ theme.loadPlugins = function()
     WhichKeySeperator = { fg = nord.darkest_white },
     WhichKeyFloating = { bg = nord.float },
     WhichKeyFloat = { bg = nord.float },
-
-    -- LspSaga
-    DiagnosticError = { fg = nord.red },
-    DiagnosticWarning = { fg = nord.purple },
-    DiagnosticInformation = { fg = nord.blue },
-    DiagnosticHint = { fg = nord.glacier },
-    DiagnosticTruncateLine = { fg = nord.darkest_white },
-    LspFloatWinNormal = { bg = nord.gray },
-    LspFloatWinBorder = { fg = nord.glacier },
-    LspSagaBorderTitle = { fg = nord.off_blue },
-    LspSagaHoverBorder = { fg = nord.blue },
-    LspSagaRenameBorder = { fg = nord.green },
-    LspSagaDefPreviewBorder = { fg = nord.green },
-    LspSagaCodeActionBorder = { fg = nord.teal },
-    LspSagaFinderSelection = { fg = nord.green },
-    LspSagaCodeActionTitle = { fg = nord.blue },
-    LspSagaCodeActionContent = { fg = nord.glacier },
-    LspSagaSignatureHelpBorder = { fg = nord.yellow },
-    ReferencesCount = { fg = nord.glacier },
-    DefinitionCount = { fg = nord.glacier },
-    DefinitionIcon = { fg = nord.teal },
-    ReferencesIcon = { fg = nord.teal },
-    TargetWord = { fg = nord.off_blue },
-
-    -- Sneak
-    Sneak = { fg = nord.black, bg = nord.darkest_white },
-    SneakScope = { bg = nord.dark_gray },
 
     -- Cmp
     CmpItemKind = { fg = nord.purple },

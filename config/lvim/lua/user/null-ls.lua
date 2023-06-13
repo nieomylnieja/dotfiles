@@ -1,6 +1,16 @@
 local M = {}
 
+local null_ls = require("null-ls")
+
+M._custom_sources = {
+  M._split_parameters_code_action,
+}
+
 function M.setup()
+  for _, src in pairs(M._custom_sources) do
+    null_ls.register(src)
+  end
+
   local sources = {
     linters = {
       -- { name = "shellcheck" }, -- already handled by bashls
@@ -23,6 +33,7 @@ function M.setup()
       { name = "shellcheck" },
       { name = "gomodifytags" },
       { name = "impl" },
+
     }
   }
 
@@ -44,5 +55,33 @@ function M.setup()
     "goimports",
   })
 end
+
+M._split_parameters_code_action = {
+  method = null_ls.methods.DIAGNOSTICS,
+  filetypes = { "markdown", "text" },
+  generator = {
+    fn = function(params)
+      local diagnostics = {}
+      -- sources have access to a params object
+      -- containing info about the current file and editor state
+      for i, line in ipairs(params.content) do
+        local col, end_col = line:find("really")
+        if col and end_col then
+          -- null-ls fills in undefined positions
+          -- and converts source diagnostics into the required format
+          table.insert(diagnostics, {
+            row = i,
+            col = col,
+            end_col = end_col + 1,
+            source = "split_parameters",
+            message = "Split parameters!",
+            severity = vim.diagnostic.severity.WARN,
+          })
+        end
+      end
+      return diagnostics
+    end,
+  },
+}
 
 return M

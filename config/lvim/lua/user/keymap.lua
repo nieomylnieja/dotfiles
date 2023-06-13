@@ -74,3 +74,18 @@ lvim.builtin.which_key.mappings["dF"] = {
     end
   end,
   "Debug Class" }
+
+-- ChatGPT
+lvim.builtin.which_key.mappings["o"] = {
+  name = "ChatGPT",
+  i = { "<cmd>ChatGPTEditWithInstructions<cr>", "Edit With Instructions" },
+  a = { "<cmd>ChatGPTActAs<cr>", "Act As Prompt" },
+  c = { "<cmd>ChatGPTCompleteCode<cr>", "Complete Code" },
+  g = { "<cmd>ChatGPTRun grammar_correction<cr>", "Correct Grammar" },
+  t = { "<cmd>ChatGPTRun add_tests<cr>", "Add Tests" },
+  o = { "<cmd>ChatGPTRun optimize_code<cr>", "Optimize Code" },
+  f = { "<cmd>ChatGPTRun fix_bugs<cr>", "Fix Bugs" },
+  e = { "<cmd>ChatGPTRun explain_code<cr>", "Explain Code" },
+  d = { "<cmd>ChatGPTRun docstring<cr>", "Document Code" },
+  r = { "<cmd>ChatGPTRun code_readability_analysis<cr>", "Code Readability Analysis" },
+}

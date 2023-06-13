@@ -21,7 +21,5 @@ vim.opt.expandtab = true   -- Insert tabs as spaces
 vim.opt.wrapscan = true    -- Wrap searches
 vim.opt.ignorecase = true  -- Ignore search term case...
 vim.opt.smartcase = true   -- ... unless term contains an uppercase character
-vim.opt.textwidth = 80     -- Hard-wrap text at nth column
-vim.opt.wrap = false       -- Don't wrap long lines (good for vsplits, bad otherwise?)
 vim.opt.foldmethod = "manual"
 vim.opt.foldexpr = "nvim_treesitter#foldexpr()"

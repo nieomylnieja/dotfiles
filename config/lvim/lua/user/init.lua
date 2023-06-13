@@ -20,3 +20,5 @@ require("user.keymap")
 require("user.mason").setup()
 -- DAP
 require("user.dap").setup()
+-- Library of copied or cutom made stuff
+require("user.lib")
