@@ -16,6 +16,7 @@ function M.setup()
       -- { name = "shellcheck" }, -- already handled by bashls
       { name = "ansiblelint" },
       { name = "flake8" },
+      { name = "statix" },
     },
     formatters = {
       {
@@ -28,6 +29,7 @@ function M.setup()
       { name = "gofumpt" },
       { name = "goimports" },
       { name = "ocamlformat" }, -- Already installed.
+      { name = "cue_fmt" },
     },
     code_actions = {
       { name = "shellcheck" },

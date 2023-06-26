@@ -70,7 +70,9 @@ alias gc="git branch --remotes --list | grep -v '^\* ' | tr -d ' ' | sed 's/orig
 alias yayd='pacman -Qq | fzf --multi --preview "pacman -Qi {1}" | xargs -ro sudo pacman -Rns'
 
 # Completion
-source /usr/share/bash-completion/bash_completion
+if [[ $PS1 && -f /usr/share/bash-completion/bash_completion ]]; then
+  source /usr/share/bash-completion/bash_completion
+fi
 
 # FZF configuration
 source "$DOTFILES/config/fzf/config.sh"

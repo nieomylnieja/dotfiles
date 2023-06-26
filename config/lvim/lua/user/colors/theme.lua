@@ -221,7 +221,7 @@ theme.loadTreeSitter = function()
     ["@type"] = { fg = nord.teal },
     ["@type.builtin"] = { fg = nord.glacier },
     ["@type.definition"] = { fg = nord.teal },
-    ["@type.qualifier"] = { fg = nord.light_gray },
+    ["@type.qualifier"] = { fg = nord.yellow },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
     ["@tag.attribute"] = { fg = nord.light_gray },

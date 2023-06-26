@@ -65,6 +65,6 @@ symbol = "☁️ "
 # Nobl9 specific
 [custom.sloctl]
 description = 'provides current sloctl context'
-command = "awk '/^defaultContext/ {gsub(\"\\\"\", \"\"); print $3}' < ~/.config/nobl9/config.toml"
+command = "sloctl config current-context"
 format = '[|](#4c566a) [N9](#5E81AC) [$output](#8FBCBB) '
 when = 'true'

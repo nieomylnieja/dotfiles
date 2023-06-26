@@ -2,6 +2,7 @@
 lvim.builtin.alpha.mode = "dashboard"
 lvim.builtin.nvimtree.setup.view.side = "left"
 lvim.builtin.nvimtree.setup.renderer.icons.show.git = false
+lvim.builtin.nvimtree.setup.notify.threshold = vim.log.levels.WARN
 lvim.builtin.treesitter.ensure_installed = "all"
 lvim.builtin.dap.breakpoint_rejected.text = ""
 lvim.builtin.dap.on_config_done = function(dap)

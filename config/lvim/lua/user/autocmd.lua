@@ -42,11 +42,3 @@ vim.api.nvim_create_autocmd("VimLeave", {
     vim.fn("system('xsel -ib', getreg('+'))")
   end
 })
-
--- vim.api.nvim_create_autocmd("FileType", {
---   group = general_settings,
---   pattern = { "qf", "help", "man", "lspinfo", "spectre_panel", "toggleterm" },
---   callback = function()
---     vim.fn("")
---   end
--- })

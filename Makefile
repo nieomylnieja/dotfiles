@@ -1,5 +1,11 @@
-xdg/defaults:
-	xdg-mime default org.pwmt.zathura.desktop application/pdf
+install/nix:
+	sh <(curl -L https://nixos.org/nix/install) --daemon
+
+install/home-manager:
+	nix-channel --add https://github.com/nix-community/home-manager/archive/release-23.05.tar.gz home-manager
+	nix-channel --update
+	nix-shell '<home-manager>' -A install
+	home-manager switch --flake ~/.dotfiles/config/home-manager#mh
 
 install/rust:
 	# I don't know yet how to make it auto add the bins to the path though...
@@ -9,11 +15,6 @@ install/rust:
 		--profile minimal \
 		--component clippy,rust-analyzer-preview
 	rustup default nightly
-
-install/doomemacs:
-	git clone https://github.com/hlissner/doom-emacs ~/.emacs.d
-	doom install
-	doom doctor
 
 install/slock:
 	@if ! [ -d build/slock ]; then \
@@ -27,3 +28,9 @@ install/slock:
 install/lvim:
 	LV_BRANCH='release-1.3/neovim-0.9' \
 	  bash <(curl -s https://raw.githubusercontent.com/LunarVim/LunarVim/release-1.3/neovim-0.9/utils/installer/install.sh)
+
+xdg/defaults:
+	xdg-mime default org.pwmt.zathura.desktop application/pdf
+
+update-modules:
+	git submodule update --remote --recursive

@@ -1,6 +1,6 @@
 vim.opt.lazyredraw = true                        -- Do not redraw screen in the middle of a macro. Makes them complete faster.
 vim.opt.clipboard = { "unnamed", "unnamedplus" } -- Allows neovim to access the system clipboard
-vim.opt.scrolloff = 9999                         -- Center the view
+vim.opt.scrolloff = 999                          -- Center the view
 vim.opt.number = true                            -- Set numbered lines
 vim.opt.relativenumber = true                    -- Set relative numbered lines
 vim.opt.hidden = true                            -- Otherwise terminals managed by toggleterm are discarded.
