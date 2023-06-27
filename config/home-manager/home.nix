@@ -15,6 +15,7 @@
       bat
       bash-completion
       bottom
+      browserpass
       cachix
       delta
       docker
@@ -23,10 +24,11 @@
       dunst
       exa
       fd
-      flameshot
+      flatpak
       fzf
       gh
       git
+      gnupg
       httpie
       jq
       lesspipe
@@ -38,6 +40,7 @@
       moreutils
       nitrogen
       pamixer
+      pass
       pavucontrol
       picom
       ripgrep

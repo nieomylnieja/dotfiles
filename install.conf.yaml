@@ -6,6 +6,9 @@
     shell:
       stdout: true
       stderr: true
+    flatpak:
+      remote: flathub
+      host: com
 
 - link:
   ~/.bashrc: ./config/bash/bashrc
@@ -36,3 +39,13 @@
   ~/.config/alacritty: ./config/alacritty
   ~/.config/qt5ct: ./config/qt5ct
   ~/.config/picom: ./config/picom
+
+- shell:
+  - [make setup-flatpak, Setting up flatpak]
+
+- flatpak:
+  - jetbrains.GoLand
+  - slack.Slack
+  - brave.Browser
+  - app: flameshot.Flameshot
+    host: org

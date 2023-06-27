@@ -7,6 +7,9 @@ install/home-manager:
 	nix-shell '<home-manager>' -A install
 	home-manager switch --flake ~/.dotfiles/config/home-manager#mh
 
+setup-flatpak:
+  flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
 install/rust:
 	# I don't know yet how to make it auto add the bins to the path though...
 	# So for now just use rust-anaylzer from arch repo.

@@ -261,22 +261,35 @@ theme.loadTreeSitter = function()
   }
 end
 
-theme.loadSemanitcTokens = function(ts)
+theme.loadSemanitcTokens = function()
   return {
     ["@lsp.type.class"] = { fg = nord.off_blue },
-    ["@lsp.type.enum"] = { fg = nord.off_blue },
     ["@lsp.type.decorator"] = { fg = nord.yellow },
-    ["@lsp.type.enumMember"] = { fg = nord.teal },
-    ["@lsp.type.function"] = ts["@function"],
-    ["@lsp.type.interface"] = { fg = nord.yellow },
-    ["@lsp.type.macro"] = ts["@funtion.macro"],
+    ["@lsp.type.function"] = { link = "@function"},
+    ["@lsp.type.macro"] = { link = "@funtion.macro"},
     ["@lsp.type.method"] = { fg = nord.off_blue },
-    ["@lsp.type.namespace"] = ts["@namespace"],
-    ["@lsp.type.parameter"] = ts["@parameter"],
-    ["@lsp.type.property"] = ts["@property"],
     ["@lsp.type.struct"] = { fg = nord.off_blue },
-    ["@lsp.type.type"] = ts["@type"],
-    ["@lsp.type.variable"] = ts["@variable"],
+    ["@lsp.type.type"] = { link = "@type"},
+    ["@lsp.type.boolean"] = { link = "@boolean" },
+    ["@lsp.type.builtinType"] = { link = "@type.builtin" },
+    ["@lsp.type.comment"] = { link = "@comment" },
+    ["@lsp.type.enum"] = { link = "@type" },
+    ["@lsp.type.enumMember"] = { link = "@constant" },
+    ["@lsp.type.escapeSequence"] = { link = "@string.escape" },
+    ["@lsp.type.formatSpecifier"] = { link = "@punctuation.special" },
+    ["@lsp.type.interface"] = { fg = nord.teal, style = "bold" },
+    ["@lsp.type.keyword"] = { link = "@keyword" },
+    ["@lsp.type.namespace"] = { link = "@namespace" },
+    ["@lsp.type.number"] = { link = "@number" },
+    ["@lsp.type.operator"] = { link = "@operator" },
+    ["@lsp.type.parameter"] = { link = "@parameter" },
+    ["@lsp.type.property"] = { link = "@property" },
+    ["@lsp.type.selfKeyword"] = { link = "@variable.builtin" },
+    ["@lsp.type.string.rust"] = { link = "@string" },
+    ["@lsp.type.typeAlias"] = { link = "@type.definition" },
+    ["@lsp.type.unresolvedReference"] = { undercurl = true, sp = nord.red },
+    ["@lsp.type.variable"] = {}, -- use treesitter styles for regular variables
+    ["@lsp.typemod.variable.readonly"] = { fg = nord.darkest_white, style = "bold" },
   }
 end
 

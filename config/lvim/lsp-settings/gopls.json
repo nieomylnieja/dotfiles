@@ -5,6 +5,8 @@
       "unusedparams": true,
       "unusedwrite": true
     },
-    "ui.completion.usePlaceholders": true
+    "build.buildFlags": [
+      "-tags=unit_test"
+    ]
   }
 }
