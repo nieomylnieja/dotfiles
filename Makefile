@@ -7,8 +7,12 @@ install/home-manager:
 	nix-shell '<home-manager>' -A install
 	home-manager switch --flake ~/.dotfiles/config/home-manager#mh
 
-setup-flatpak:
+setup/flatpak:
   flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+setup/gtk:
+	gsettings set org.gnome.desktop.interface gtk-theme "Nordic"
+	gsettings set org.gnome.desktop.wm.preferences theme "Nordic"
 
 install/rust:
 	# I don't know yet how to make it auto add the bins to the path though...

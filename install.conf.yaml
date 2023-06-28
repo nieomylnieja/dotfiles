@@ -11,20 +11,20 @@
       host: com
 
 - link:
-  ~/.bashrc: ./config/bash/bashrc
-  ~/.bash_logout: ./config/bash/bash_logout
-  ~/.bash_profile: ./config/bash/bash_profile
-  ~/.xprofile: ./config/xorg/xprofile
-  ~/.xinitrc: ./config/xorg/xinitrc
-  ~/.Xresources: ./config/xorg/Xresources
-  ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
+    ~/.bashrc: ./config/bash/bashrc
+    ~/.bash_logout: ./config/bash/bash_logout
+    ~/.bash_profile: ./config/bash/bash_profile
+    ~/.xprofile: ./config/xorg/xprofile
+    ~/.xinitrc: ./config/xorg/xinitrc
+    ~/.Xresources: ./config/xorg/Xresources
+    ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
 
 - shell:
   - [make install/nix, Installing nix manager]
   - [make install/home-manager, Installing home manager]
 
 - link:
-  ~/.config/nix: ./config/nix
+    ~/.config/nix: ./config/nix
 
 - shell:
   - [make install/lvim, Installing LunarVim]
@@ -32,16 +32,19 @@
   - [make xdg/defaults, Setting xdg-mime defaults]
 
 - link:
-  ~/.config/starship.toml: ./config/starship/starship.toml
-  ~/.config/qtile: ./config/qtile
-  ~/.config/rofi: ./config/rofi
-  ~/.config/lvim: ./config/lvim
-  ~/.config/alacritty: ./config/alacritty
-  ~/.config/qt5ct: ./config/qt5ct
-  ~/.config/picom: ./config/picom
+    ~/.config/starship.toml: ./config/starship/starship.toml
+    ~/.config/qtile: ./config/qtile
+    ~/.config/rofi: ./config/rofi
+    ~/.config/lvim: ./config/lvim
+    ~/.config/alacritty: ./config/alacritty
+    ~/.config/qt5ct: ./config/qt5ct
+    ~/.config/picom: ./config/picom
+    ~/.local/share/themes/Nordic: ./config/gtk/Nordic
+    ~/.config/gtk-3.0/settings.ini: ./config/gtk/settings.ini
 
 - shell:
-  - [make setup-flatpak, Setting up flatpak]
+  - [make setup/flatpak, Setting up flatpak]
+  - [make setup/gtk, Setting up GTK]
 
 - flatpak:
   - jetbrains.GoLand
