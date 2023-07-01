@@ -4,8 +4,8 @@ if [ -f $XDG_CONFIG_HOME/fzf/fzf.bash ]; then
 fi
 
 # Source key bindings like CTR+R and completion.
-source /usr/share/fzf/key-bindings.bash
-source /usr/share/fzf/completion.bash
+source ~/.nix-profile/share/fzf/key-bindings.bash
+source ~/.nix-profile/share/fzf/completion.bash
 
 # Env variables.
 export FZF_DEFAULT_COMMAND='fd --type f'

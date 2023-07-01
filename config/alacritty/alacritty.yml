@@ -453,7 +453,7 @@ shell:
    program: /bin/bash
    args:
     - -c
-    - 'pfetch ; bash'
+    - 'neofetch ; bash'
 
 # Startup directory
 #

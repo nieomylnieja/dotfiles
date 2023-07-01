@@ -26,7 +26,7 @@ class Flatpak(dotbot.Plugin):
                 app = source.get("app", "")
             try:
                 subprocess.run(
-                    ["flatpak install --noninteractive" +
+                    ["flatpak install --noninteractive " +
                      f"{remote} {host}.{app}"],
                     shell=True,
                     check=True)

@@ -1,6 +1,6 @@
 [submodule "config/gtk/Nordic"]
 	path = config/gtk/Nordic
-	url = git@github.com:EliverLara/Nordic.git
+	url = https://github.com/EliverLara/Nordic
 [submodule "dotbot"]
 	path = dotbot
 	url = https://github.com/anishathalye/dotbot

@@ -8,7 +8,7 @@
     homeDirectory = "/home/mh";
     stateVersion = "23.05";
 
-    packages = with pkgs; {
+    packages = with pkgs; [
       apg
       alacritty
       arandr
@@ -25,37 +25,46 @@
       exa
       fd
       flatpak
+      fnm
       fzf
+      gcc_multi
       gh
       git
       gnupg
+      go
       httpie
       jq
       lesspipe
       luajitPackages.luarocks
       neofetch
       neovim
+      nodePackages.npm
       man
       man-pages
+      mesa
       moreutils
       nitrogen
       pamixer
       pass
       pavucontrol
       picom
+      pinentry-rofi
       ripgrep
       ripgrep-all
       rofi
       rofi-calc
-      starship
       sops
+      starship
+      statix
       qtile
       zoxide
-      xclip
       xautolock
+      xclip
+      xorg.xrandr
+      xorg.xset
       yarn
       yq
-    };
+    ];
   }; 
 
   nixpkgs.config = {

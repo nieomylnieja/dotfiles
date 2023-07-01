@@ -2,6 +2,10 @@
 
 export DOTFILES="$HOME/.dotfiles"
 
+if [ -e "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then 
+  . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+fi
+
 if ! [ -d "$DOTFILES" ] || [ -z "$BASH_VERSION" ]; then
   echo "dotfiles are not present, nothing to load"
   exit 0

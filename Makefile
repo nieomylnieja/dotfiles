@@ -1,5 +1,8 @@
+submodule:
+	git submodule update --init --recursive
+
 install/nix:
-	sh <(curl -L https://nixos.org/nix/install) --daemon
+	sh <(curl -L https://nixos.org/nix/install) --no-daemon && . ~/.nix-profile/etc/profile.d/nix.sh
 
 install/home-manager:
 	nix-channel --add https://github.com/nix-community/home-manager/archive/release-23.05.tar.gz home-manager
@@ -7,12 +10,20 @@ install/home-manager:
 	nix-shell '<home-manager>' -A install
 	home-manager switch --flake ~/.dotfiles/config/home-manager#mh
 
+# There's no easy way to run alacritty right now while it's installed by nixpkgs.
+install/nixgl:
+	nix-channel --add https://github.com/guibou/nixGL/archive/main.tar.gz nixgl && nix-channel --update
+	nix-env -iA nixgl.auto.nixGLDefault
+
 setup/flatpak:
-  flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+	flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
 setup/gtk:
 	gsettings set org.gnome.desktop.interface gtk-theme "Nordic"
 	gsettings set org.gnome.desktop.wm.preferences theme "Nordic"
+
+install/node:
+	fnm install --latest
 
 install/rust:
 	# I don't know yet how to make it auto add the bins to the path though...
@@ -35,9 +46,6 @@ install/slock:
 install/lvim:
 	LV_BRANCH='release-1.3/neovim-0.9' \
 	  bash <(curl -s https://raw.githubusercontent.com/LunarVim/LunarVim/release-1.3/neovim-0.9/utils/installer/install.sh)
-
-xdg/defaults:
-	xdg-mime default org.pwmt.zathura.desktop application/pdf
 
 update-modules:
 	git submodule update --remote --recursive

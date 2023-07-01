@@ -13,25 +13,33 @@
 - link:
     ~/.bashrc: ./config/bash/bashrc
     ~/.bash_logout: ./config/bash/bash_logout
-    ~/.bash_profile: ./config/bash/bash_profile
     ~/.xprofile: ./config/xorg/xprofile
     ~/.xinitrc: ./config/xorg/xinitrc
+    ~/.profile: ~/.xinitrc # Some X11 environments, like Fedora disregard local xinitrc.
     ~/.Xresources: ./config/xorg/Xresources
     ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
+    ~/.gnupg/gpg-agent.conf: ./config/gpg/gpg-agent.conf
 
 - shell:
   - [make install/nix, Installing nix manager]
-  - [make install/home-manager, Installing home manager]
+  - [. ~/.nix-profile/etc/profile.d/nix.sh, Initializing nix]
+  - [. ~/.xprofile, Sourcing xprofile]
 
 - link:
     ~/.config/nix: ./config/nix
 
 - shell:
+  - [make install/home-manager, Installing home manager]
+
+- shell:
   - [make install/lvim, Installing LunarVim]
   - [make install/slock, Installing slock lock screen]
   - [make xdg/defaults, Setting xdg-mime defaults]
+  - [make install/node, Installing latest Node version]
+  - [make install/nixgl, Installing nixGL wrapper]
 
 - link:
+    ~/.config/git/config: ./config/git/config 
     ~/.config/starship.toml: ./config/starship/starship.toml
     ~/.config/qtile: ./config/qtile
     ~/.config/rofi: ./config/rofi
@@ -41,6 +49,7 @@
     ~/.config/picom: ./config/picom
     ~/.local/share/themes/Nordic: ./config/gtk/Nordic
     ~/.config/gtk-3.0/settings.ini: ./config/gtk/settings.ini
+    /usr/share/xsessions/qtile.desktop: ./config/qtile/qtile.desktop
 
 - shell:
   - [make setup/flatpak, Setting up flatpak]
@@ -52,3 +61,7 @@
   - brave.Browser
   - app: flameshot.Flameshot
     host: org
+
+- shell:
+  - [. ~/.bashrc, Sourcing bashrc]
+  - [gpg-connect-agent reloadagent /bye, Reloading GPG agent]

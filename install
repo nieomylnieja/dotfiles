@@ -17,4 +17,5 @@ git submodule update --init --recursive "${DOTBOT_DIR}"
   -d "${BASEDIR}" \
   -c "${CONFIG}" \
   --plugin-dir "${BASEDIR}/${DOTBOT_PLUGINS_DIR}" \
+  --exit-on-failure \
   "${@}"
