@@ -44,6 +44,7 @@
       mesa
       moreutils
       nitrogen
+      (nerdfonts.override { fonts = ["Mononoki"]; })
       pamixer
       pass
       pavucontrol
@@ -66,6 +67,8 @@
       yq
     ];
   }; 
+
+  fonts.fontconfig.enable = true;
 
   nixpkgs.config = {
     allowUnfree = true;
