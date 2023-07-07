@@ -16,6 +16,7 @@
       bash-completion
       bottom
       browserpass
+      brave
       cachix
       delta
       docker
@@ -30,11 +31,14 @@
       gcc_multi
       gh
       git
+      glibcLocales
       gnupg
       go
       httpie
+      jetbrains.goland
       jq
       lesspipe
+      libsForQt5.qt5ct
       luajitPackages.luarocks
       neofetch
       neovim
@@ -49,11 +53,11 @@
       pass
       pavucontrol
       picom
-      pinentry-rofi
       ripgrep
       ripgrep-all
       rofi
       rofi-calc
+      flameshot
       sops
       starship
       statix
@@ -61,6 +65,7 @@
       zoxide
       xautolock
       xclip
+      xorg.libXrandr # Required by slock.
       xorg.xrandr
       xorg.xset
       yarn
@@ -76,4 +81,14 @@
   };
 
   programs.home-manager.enable = true;
+
+  programs.browserpass = {
+    enable = true;
+    browsers = ["brave"];
+  };
+
+  services.gpg-agent = {
+    enable = true;
+    pinentryFlavor = "gnome3";
+  };
 }

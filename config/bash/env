@@ -7,7 +7,7 @@ export GDK_BACKEND=x11
 export DESKTOP_SESSION=qtile
 # Defailt programs
 export BROWSER=brave
-export EDITOR=nvim
+export EDITOR=lvim
 # Adhere to xdg specification
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
@@ -16,7 +16,7 @@ export XDG_CACHE_HOME="$HOME/.cache"
 # SSH
 export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 # Set language
-export LANG=en_GB.UTF-8
+export LANG=en_GB.utf8
 export LC_ALL=$LANG
 # Qt
 export QT_QPA_PLATFORMTHEME=qt5ct

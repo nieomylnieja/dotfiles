@@ -41,7 +41,7 @@ install/slock:
 		cp sources/slock/config.h build/slock/config.h; fi
 	@if grep 'replace-me-.*' build/slock/config.h > /dev/null; then \
 		echo "set your user and group manually in config.h" && exit 1; fi
-	sudo make -C build/slock install
+	make -C build/slock install
 
 install/lvim:
 	LV_BRANCH='release-1.3/neovim-0.9' \

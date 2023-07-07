@@ -4,6 +4,7 @@ export DOTFILES="$HOME/.dotfiles"
 
 if [ -e "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then 
   . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+  export XDG_DATA_DIRS="$HOME/.nix-profile/share:$XDG_DATA_DIRS"
 fi
 
 if ! [ -d "$DOTFILES" ] || [ -z "$BASH_VERSION" ]; then

@@ -18,7 +18,6 @@
     ~/.profile: ~/.xinitrc # Some X11 environments, like Fedora disregard local xinitrc.
     ~/.Xresources: ./config/xorg/Xresources
     ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
-    ~/.gnupg/gpg-agent.conf: ./config/gpg/gpg-agent.conf
 
 - shell:
   - [make install/nix, Installing nix manager]
@@ -49,6 +48,7 @@
     ~/.config/picom: ./config/picom
     ~/.local/share/themes/Nordic: ./config/gtk/Nordic
     ~/.config/gtk-3.0/settings.ini: ./config/gtk/settings.ini
+    ~/.config/flameshot/flameshot.ini: ./config/flameshot/flameshot.ini
     /usr/share/xsessions/qtile.desktop: ./config/qtile/qtile.desktop
 
 - shell:
@@ -56,11 +56,7 @@
   - [make setup/gtk, Setting up GTK]
 
 - flatpak:
-  - jetbrains.GoLand
   - slack.Slack
-  - brave.Browser
-  - app: flameshot.Flameshot
-    host: org
 
 - shell:
   - [. ~/.bashrc, Sourcing bashrc]

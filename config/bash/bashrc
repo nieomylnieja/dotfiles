@@ -23,11 +23,13 @@ bind "set completion-ignore-case on"
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
+# Reload nix home-manager
+alias hmr="home-manager switch --flake $DOTFILES/config/home-manager#mh"
+
 # those fancy rust speeders
 alias ls='exa --group-directories-first'
 alias du='dust'
 alias cat='bat'
-alias cd='z'
 
 # Alias definitions.
 alias cd..='cd ..'
@@ -170,14 +172,10 @@ if [ -x "$(command -v pyenv)" ]; then
 	eval "$(pyenv virtualenv-init -)"
 fi
 
-# any other custom files to be sourced
-if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
-	source "$HOME"/nobl9/nobl9rc.bash
-fi
-
 # Zoxide (cd replacement)
 if [ -x "$(command -v zoxide)" ]; then
 	eval "$(zoxide init bash)"
+  alias cd='z'
 fi
 
 # Run dircolors to set LS_COLORS in the envs
@@ -193,3 +191,8 @@ alias luamake=/home/mh/.dotfiles/clones/lua-language-server/3rd/luamake/luamake
 
 # OCaml
 test -r /home/mh/.opam/opam-init/init.sh && . /home/mh/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
+
+# any other custom files to be sourced
+if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
+	source "$HOME"/nobl9/nobl9rc.bash
+fi
