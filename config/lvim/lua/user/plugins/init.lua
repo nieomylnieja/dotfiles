@@ -66,21 +66,27 @@ lvim.plugins = {
     end
   },
   -- AI boosters
+  -- {
+  --   "zbirenbaum/copilot-cmp",
+  --   event = "InsertEnter",
+  --   dependencies = { "zbirenbaum/copilot.lua" },
+  --   config = function()
+  --     vim.defer_fn(function()
+  --       require("copilot").setup()
+  --       -- It is recommended to disable copilot.lua's suggestion and panel modules,
+  --       -- as they can interfere with completions properly appearing in copilot-cmp.
+  --       require("copilot_cmp").setup({
+  --         suggestion = { enabled = false },
+  --         panel = { enabled = false },
+  --       })
+  --     end, 100)
+  --   end,
+  -- },
   {
-    "zbirenbaum/copilot-cmp",
+    "tzachar/cmp-tabnine",
+    build = "./install.sh",
+    dependencies = "hrsh7th/nvim-cmp",
     event = "InsertEnter",
-    dependencies = { "zbirenbaum/copilot.lua" },
-    config = function()
-      vim.defer_fn(function()
-        require("copilot").setup()
-        -- It is recommended to disable copilot.lua's suggestion and panel modules,
-        -- as they can interfere with completions properly appearing in copilot-cmp.
-        require("copilot_cmp").setup({
-          suggestion = { enabled = false },
-          panel = { enabled = false },
-        })
-      end, 100)
-    end,
   },
   {
     "jackMort/ChatGPT.nvim",

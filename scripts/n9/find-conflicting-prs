@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -o pipefail
+
+PATH_TO_SEARCH="$1"
+
+if test -z "$PATH_TO_SEARCH"; then
+  echo >&2 "empty path to search input"
+  exit 1
+fi
+
+gh pr list \
+  --json=title,url,files \
+  --repo=github.com/nobl9/n9 \
+  --state=open |
+  jq '[
+      .[] |
+      select(.files[].path |
+      test("'"$PATH_TO_SEARCH"'")) |
+      del(.files)
+    ] | unique_by(.url)'

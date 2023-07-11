@@ -1,14 +1,11 @@
 #!/bin/bash
 
-AWS_PROFILE="$(
-  awk '
-    /^\[.*\]$/ { sub(/\[/, ""); sub(/\]/, ""); print }' \
-    ~/.aws/credentials | fzf)"
+AWS_PROFILE=$(aws-vault list --credentials | fzf)
 
-SERIAL_NUMBER="$(awk '
+SERIAL_NUMBER=$(awk '
   /\[.*\]/                            {start=0}
   /\[(profile\s)?'"$AWS_PROFILE"'\]/  {start=1}
   start && /mfa_serial/               {sub(/mfa_serial=/, ""); print}' \
-  ~/.aws/config)"
+  ~/.aws/config)
 
 ykman oath accounts code "$SERIAL_NUMBER" -s | xclip -sel clip
