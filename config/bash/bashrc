@@ -76,6 +76,9 @@ if [[ $PS1 && -f /usr/share/bash-completion/bash_completion ]]; then
   source /usr/share/bash-completion/bash_completion
 fi
 
+# Functions
+source "$DOTFILES/config/bash/functions"
+
 # FZF configuration
 source "$DOTFILES/config/fzf/config.sh"
 
@@ -131,33 +134,6 @@ export LESS_TERMCAP_us=$'\e[1;4;96m'
 # bash search history
 export HISTSIZE=10000
 export HISTFILESIZE=10000
-
-### ARCHIVE EXTRACTION
-# usage: ex <file>
-ex ()
-{
-  if [ -f $1 ] ; then
-    case $1 in
-      *.tar.bz2)   tar xjf $1   ;;
-      *.tar.gz)    tar xzf $1   ;;
-      *.bz2)       bunzip2 $1   ;;
-      *.rar)       unrar x $1   ;;
-      *.gz)        gunzip $1    ;;
-      *.tar)       tar xf $1    ;;
-      *.tbz2)      tar xjf $1   ;;
-      *.tgz)       tar xzf $1   ;;
-      *.zip)       unzip $1     ;;
-      *.Z)         uncompress $1;;
-      *.7z)        7z x $1      ;;
-      *.deb)       ar x $1      ;;
-      *.tar.xz)    tar xf $1    ;;
-      *.tar.zst)   unzstd $1    ;;
-      *)           echo "'$1' cannot be extracted via ex()" ;;
-    esac
-  else
-    echo "'$1' is not a valid file"
-  fi
-}
 
 # Spicetify -- an awesome spotify customization cli
 if [ -x "$(command -v spicetify-cli)" ]; then
