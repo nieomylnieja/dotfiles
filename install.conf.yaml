@@ -10,54 +10,55 @@
       remote: flathub
       host: com
 
+# - link:
+#     ~/.bashrc: ./config/bash/bashrc
+#     ~/.bash_logout: ./config/bash/bash_logout
+#     ~/.xprofile: ./config/xorg/xprofile
+#     ~/.xinitrc: ./config/xorg/xinitrc
+#     ~/.profile: ~/.xinitrc # Some X11 environments, like Fedora disregard local xinitrc.
+#     ~/.Xresources: ./config/xorg/Xresources
+#     ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
+
+# - shell:
+#   - [make install/nix, Installing nix manager]
+#   - [. ~/.nix-profile/etc/profile.d/nix.sh, Initializing nix]
+#   - [. ~/.xprofile, Sourcing xprofile]
+
+# - link:
+#     ~/.config/nix: ./config/nix
+
+# - shell:
+#   - [make install/home-manager, Installing home manager]
+
+# - shell:
+#   - [make install/lvim, Installing LunarVim]
+#   - [make install/slock, Installing slock lock screen]
+#   - [make xdg/defaults, Setting xdg-mime defaults]
+#   - [make install/node, Installing latest Node version]
+#   - [make install/nixgl, Installing nixGL wrapper]
+
 - link:
-    ~/.bashrc: ./config/bash/bashrc
-    ~/.bash_logout: ./config/bash/bash_logout
-    ~/.xprofile: ./config/xorg/xprofile
-    ~/.xinitrc: ./config/xorg/xinitrc
-    ~/.profile: ~/.xinitrc # Some X11 environments, like Fedora disregard local xinitrc.
-    ~/.Xresources: ./config/xorg/Xresources
-    ~/.config/systemd/user/ssh-agent.service: ./config/systemd/ssh-agent.service
+    # ~/.config/git/config: ./config/git/config 
+    # ~/.config/starship.toml: ./config/starship/starship.toml
+    # ~/.config/qtile: ./config/qtile
+    # ~/.config/rofi: ./config/rofi
+    # ~/.config/lvim: ./config/lvim
+    # ~/.config/alacritty: ./config/alacritty
+    # ~/.config/qt5ct: ./config/qt5ct
+    # ~/.config/picom: ./config/picom
+    # ~/.local/share/themes/Nordic: ./config/gtk/Nordic
+    # ~/.config/gtk-3.0/settings.ini: ./config/gtk/settings.ini
+    # ~/.config/flameshot/flameshot.ini: ./config/flameshot/flameshot.ini
+    # /usr/share/xsessions/qtile.desktop: ./config/qtile/qtile.desktop
+    ~/.config/ideavim: ./config/ideavim
 
-- shell:
-  - [make install/nix, Installing nix manager]
-  - [. ~/.nix-profile/etc/profile.d/nix.sh, Initializing nix]
-  - [. ~/.xprofile, Sourcing xprofile]
+# - shell:
+#   - [make setup/flatpak, Setting up flatpak]
+#   - [make setup/gtk, Setting up GTK]
 
-- link:
-    ~/.config/nix: ./config/nix
+# - flatpak:
+#   - slack.Slack
 
-- shell:
-  - [make install/home-manager, Installing home manager]
-
-- shell:
-  - [make install/lvim, Installing LunarVim]
-  - [make install/slock, Installing slock lock screen]
-  - [make xdg/defaults, Setting xdg-mime defaults]
-  - [make install/node, Installing latest Node version]
-  - [make install/nixgl, Installing nixGL wrapper]
-
-- link:
-    ~/.config/git/config: ./config/git/config 
-    ~/.config/starship.toml: ./config/starship/starship.toml
-    ~/.config/qtile: ./config/qtile
-    ~/.config/rofi: ./config/rofi
-    ~/.config/lvim: ./config/lvim
-    ~/.config/alacritty: ./config/alacritty
-    ~/.config/qt5ct: ./config/qt5ct
-    ~/.config/picom: ./config/picom
-    ~/.local/share/themes/Nordic: ./config/gtk/Nordic
-    ~/.config/gtk-3.0/settings.ini: ./config/gtk/settings.ini
-    ~/.config/flameshot/flameshot.ini: ./config/flameshot/flameshot.ini
-    /usr/share/xsessions/qtile.desktop: ./config/qtile/qtile.desktop
-
-- shell:
-  - [make setup/flatpak, Setting up flatpak]
-  - [make setup/gtk, Setting up GTK]
-
-- flatpak:
-  - slack.Slack
-
-- shell:
-  - [. ~/.bashrc, Sourcing bashrc]
-  - [gpg-connect-agent reloadagent /bye, Reloading GPG agent]
+# - shell:
+#   - [. ~/.bashrc, Sourcing bashrc]
+#   - [gpg-connect-agent reloadagent /bye, Reloading GPG agent]

@@ -10,12 +10,17 @@ if test -z "$PATH_TO_SEARCH"; then
 fi
 
 gh pr list \
+  --limit 1000 \
   --json=title,url,files \
   --repo=github.com/nobl9/n9 \
   --state=open |
-  jq '[
-      .[] |
-      select(.files[].path |
-      test("'"$PATH_TO_SEARCH"'")) |
-      del(.files)
-    ] | unique_by(.url)'
+  jq '
+[
+  .[] |
+  select(
+    .files[].path |
+    test("'"$PATH_TO_SEARCH"'")
+  ) |
+  del(.files)
+] |
+unique_by(.url)'
