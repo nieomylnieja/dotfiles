@@ -9,7 +9,7 @@ from libqtile.command import lazy
 from widgets.volume import Volume, VolumeCommands
 
 mod = "mod4"
-terminal = "nixGL alacritty"
+terminal = "alacritty"
 browser = "brave"
 
 keys = [
