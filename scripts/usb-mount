@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 mountusb(){ \
   chosen=$(echo "$usbdrives" | rofi -dmenu -show run -lines 5 -opacity "85" -bw 0 -width 30 -padding 20 -i -p "Mount which drive?" | awk '{print $1}')

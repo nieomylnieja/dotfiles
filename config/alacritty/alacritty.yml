@@ -450,7 +450,7 @@ live_config_reload: true
 #   - (Linux/BSD) user login shell
 #   - (Windows) powershell
 shell:
-   program: /bin/bash
+   program: /usr/bin/env bash
    args:
     - -c
     - 'neofetch ; bash'

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 profile=$(aws configure list-profiles | fzf)
 export AWS_ACCESS_KEY_ID="$(aws configure get aws_access_key_id --profile="$profile")"

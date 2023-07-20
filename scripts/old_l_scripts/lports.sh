@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 PORT_CONFIG_FILE="$HOME/lerta/developer-tools/port-forwarder/configuration.local.json"
 

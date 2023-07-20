@@ -71,7 +71,29 @@
       yarn
       yq
     ];
-  }; 
+
+    file = {
+      ".bashrc".source = ../bash/bashrc;
+      ".bash_logout".source = ../bash/bash_logout;
+      ".xprofile".source = ../xorg/xprofile;
+      ".xinitrc".source = ../xorg/xinitrc;
+      ".profile".source = ../xorg/xinitrc;
+      ".Xresources".source = ../xorg/Xresources;
+      ".config/git/config".source = ../git/config;
+      ".config/starship.toml".source = ../starship/starship.toml;
+      ".config/rofi".source = ../rofi;
+      ".config/lvim".source = ../lvim;
+      ".config/dunst".source = ../dunst;
+      ".config/alacritty".source = ../alacritty;
+      ".config/picom".source = ../picom;
+      ".config/flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
+      ".config/ideavim".source = ../ideavim;
+    };
+  };
+
+  xdg.configFile = {
+    "qtile".source = ../qtile;
+  };
 
   fonts.fontconfig.enable = true;
 

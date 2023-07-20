@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 MONGO_SECRETS_PATH="$INFRA_PATH/k8s/mongodb"
 EXT=.secret.enc.yaml

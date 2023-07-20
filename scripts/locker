@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 lockDisabledInputs=(chrome firefox brave zoom vlc)
 
