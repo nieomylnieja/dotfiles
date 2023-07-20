@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # env contains all essential enviornment settings which should be visible asap
 
 # Session config
