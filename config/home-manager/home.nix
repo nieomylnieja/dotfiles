@@ -109,10 +109,6 @@
     browsers = ["brave" "firefox"];
   };
 
-  programs.fzf = {
-    enable = true;
-  };
-
   services.gpg-agent = {
     enable = true;
     pinentryFlavor = "gnome3";
