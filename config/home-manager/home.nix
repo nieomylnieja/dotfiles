@@ -64,6 +64,7 @@
     sops
     starship
     statix
+    unzip
     qtile
     zoxide
     xautolock
