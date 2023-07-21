@@ -1,6 +1,9 @@
 submodule:
 	git submodule update --init --recursive
 
+rebuild:
+	sudo nixos-rebuild switch --flake .#mh
+
 install/nix:
 	sh <(curl -L https://nixos.org/nix/install) --no-daemon && . ~/.nix-profile/etc/profile.d/nix.sh
 

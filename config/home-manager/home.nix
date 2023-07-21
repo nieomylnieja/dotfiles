@@ -33,6 +33,7 @@
     gh
     git
     glibcLocales
+    gnumake
     gnupg
     go
     httpie
