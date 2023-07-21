@@ -97,6 +97,10 @@
     "ideavim".source = ../ideavim;
   };
 
+  home.sessionPath = [
+    "$HOME/.local/bin"
+  ];
+
   fonts.fontconfig.enable = true;
 
   nixpkgs.config = {
