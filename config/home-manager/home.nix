@@ -15,6 +15,7 @@
     arandr
     bat
     bash-completion
+    bashmount
     bottom
     browserpass
     brave
