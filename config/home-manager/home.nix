@@ -52,6 +52,7 @@
     moreutils
     nitrogen
     (nerdfonts.override { fonts = ["Mononoki"]; })
+    nodejs
     pamixer
     pass
     pavucontrol
