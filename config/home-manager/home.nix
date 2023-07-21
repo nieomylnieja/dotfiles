@@ -64,6 +64,7 @@
     sops
     starship
     statix
+    udisks
     qtile
     zoxide
     xautolock
