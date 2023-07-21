@@ -84,6 +84,11 @@ in
   # Enable printing
   services.printing.enable = true;
 
+  # External drives and filesystems
+  services.udisks2.enable = true;
+  services.devmon.enable = true;
+  services.gvfs.enable = true;
+
   # Sound
   sound = {
     enable = true;
@@ -103,7 +108,7 @@ in
   users.users.${user} = {
     isNormalUser = true;
     description = "Mateusz Hawrus";
-    extraGroups = [ "wheel" "networkmanager" "video" "audio" "lp" "scanner" ];
+    extraGroups = [ "wheel" "networkmanager" "storage" "video" "audio" "lp" "scanner" ];
     packages = with pkgs; [];
   };
 
