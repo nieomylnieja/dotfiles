@@ -90,16 +90,16 @@ in
   services.gvfs.enable = true;
 
   # Sound
-  sound = {
+  sound.mediaKeys.enable = true;
+  services.pipewire = {
     enable = true;
-    mediaKeys.enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
   };
   
   # Bluetooth
-  hardware.bluetooth = {
-    enable = true;
-    hsphfpd.enable = true;
-  };
+  hardware.bluetooth.enable = true;
 
   # Configure console keymap
   console.keyMap = "pl2";
@@ -108,7 +108,15 @@ in
   users.users.${user} = {
     isNormalUser = true;
     description = "Mateusz Hawrus";
-    extraGroups = [ "wheel" "networkmanager" "storage" "video" "audio" "lp" "scanner" ];
+    extraGroups = [ 
+      "wheel"
+      "networkmanager"
+      "storage"
+      "video"
+      "audio"
+      "lp"
+      "scanner"
+    ];
     packages = with pkgs; [];
   };
 
