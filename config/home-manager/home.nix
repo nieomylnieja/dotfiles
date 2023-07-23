@@ -67,6 +67,7 @@
     sops
     starship
     statix
+    tabnine
     unzip
     qtile
     zoxide
