@@ -138,6 +138,9 @@ in
     wget
     git
   ];
+  
+  # Support unpached dynamic binaries out of the box.
+  programs.nix-ld.enable = true;
 
   # Always enable shell system wide, othwerise it won't source the neccessary stuff.
   users.defaultUserShell = pkgs.bash;
