@@ -38,6 +38,7 @@
     gnupg
     go
     httpie
+    i3lock-color
     jetbrains.goland
     jq
     lesspipe
@@ -50,7 +51,6 @@
     man-pages
     mesa
     moreutils
-    nitrogen
     (nerdfonts.override { fonts = ["Mononoki"]; })
     nodejs
     pamixer
@@ -61,6 +61,7 @@
     ripgrep-all
     rofi
     rofi-calc
+    feh
     flameshot
     sops
     starship
@@ -70,7 +71,6 @@
     zoxide
     xautolock
     xclip
-    xorg.libXrandr # Required by slock.
     xorg.xrandr
     xorg.xset
     yarn

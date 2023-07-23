@@ -6,6 +6,8 @@
 
 let
   user="mh";
+  # Will vary based on machine.
+  luks-disk="db203a15-1291-4e05-9912-d199aefb9d0d";
 in
 {
   imports =
@@ -35,8 +37,8 @@ in
   };
 
   # Enable swap on luks
-  boot.initrd.luks.devices."luks-db203a15-1291-4e05-9912-d199aefb9d0d".device = "/dev/disk/by-uuid/db203a15-1291-4e05-9912-d199aefb9d0d";
-  boot.initrd.luks.devices."luks-db203a15-1291-4e05-9912-d199aefb9d0d".keyFile = "/crypto_keyfile.bin";
+  boot.initrd.luks.devices."luks-${luks-disk}".device = "/dev/disk/by-uuid/${luks-disk}";
+  boot.initrd.luks.devices."luks-${luks-disk}".keyFile = "/crypto_keyfile.bin";
 
   networking.hostName = "nixos"; # Define your hostname.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -100,6 +102,16 @@ in
   
   # Bluetooth
   hardware.bluetooth.enable = true;
+  environment.etc = {
+  	"wireplumber/bluetooth.lua.d/51-bluez-config.lua".text = ''
+  		bluez_monitor.properties = {
+  			["bluez5.enable-sbc-xq"] = true,
+  			["bluez5.enable-msbc"] = true,
+  			["bluez5.enable-hw-volume"] = true,
+  			["bluez5.headset-roles"] = "[ hsp_hs hsp_ag hfp_hf hfp_ag ]"
+  		}
+  	'';
+  };
 
   # Configure console keymap
   console.keyMap = "pl2";
@@ -161,5 +173,4 @@ in
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "23.05"; # Did you read the comment?
-
 }
