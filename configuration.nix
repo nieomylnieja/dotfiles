@@ -142,6 +142,9 @@ in
   # Support unpached dynamic binaries out of the box.
   programs.nix-ld.enable = true;
 
+  # Execute shebangs which assume hard coded locations.
+  services.envfs.enable = true;
+
   # Always enable shell system wide, othwerise it won't source the neccessary stuff.
   users.defaultUserShell = pkgs.bash;
   environment.shells = with pkgs; [ bash ];
