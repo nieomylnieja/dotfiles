@@ -16,6 +16,7 @@
     bat
     bash-completion
     bashmount
+    binutils
     bottom
     browserpass
     brave
