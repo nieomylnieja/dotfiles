@@ -16,7 +16,6 @@
     bat
     bash-completion
     bashmount
-    binutils
     bottom
     browserpass
     brave
@@ -28,6 +27,7 @@
     dunst
     exa
     fd
+    file
     flatpak
     fnm
     fzf
