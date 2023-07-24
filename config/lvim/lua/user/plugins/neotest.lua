@@ -16,6 +16,7 @@ function M.setup()
           test_table = true,
         },
       }),
+      require('neotest-jest')({}),
     },
     quickfix = {
       open = false,

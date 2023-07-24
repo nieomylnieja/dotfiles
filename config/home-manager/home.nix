@@ -53,6 +53,7 @@
       pass
       pavucontrol
       picom
+      pipx
       ripgrep
       ripgrep-all
       rofi
