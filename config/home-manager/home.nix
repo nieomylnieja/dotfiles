@@ -120,7 +120,11 @@
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
-    plugins = [ pkgs.rofi-calc ];
+    plugins = with pkgs; [
+      rofi-calc
+      rofi-power-menu
+      rofi-bluetooth
+    ];
     pass.enable = true;
   };
 
