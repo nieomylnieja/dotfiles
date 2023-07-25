@@ -45,15 +45,15 @@
     lesspipe
     libsForQt5.qt5ct
     luajitPackages.luarocks
-    neofetch
-    neovim
-    nodePackages.npm
     man
     man-pages
     mesa
     moreutils
     (nerdfonts.override { fonts = ["Mononoki"]; })
+    neofetch
+    neovim
     nodejs
+    nodePackages.npm
     pamixer
     pass
     pavucontrol
@@ -61,7 +61,6 @@
     ripgrep
     ripgrep-all
     rofi
-    rofi-calc
     feh
     flameshot
     sops
@@ -117,6 +116,12 @@
   programs.browserpass = {
     enable = true;
     browsers = ["brave" "firefox"];
+  };
+
+  programs.rofi = {
+    enable = true;
+    plugins = [ pkgs.rofi-calc ];
+    pass.enable = true;
   };
 
   services.gpg-agent = {
