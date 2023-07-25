@@ -60,6 +60,9 @@
     picom
     ripgrep
     ripgrep-all
+    # These are not rofi plugins per se, rather separate programs which call rofi!
+    rofi-power-menu
+    rofi-bluetooth
     feh
     flameshot
     sops
@@ -120,11 +123,7 @@
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
-    plugins = with pkgs; [
-      rofi-calc
-      rofi-power-menu
-      rofi-bluetooth
-    ];
+    plugins = with pkgs; [ rofi-calc ];
     pass.enable = true;
   };
 
