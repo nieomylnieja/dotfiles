@@ -60,7 +60,6 @@
     picom
     ripgrep
     ripgrep-all
-    rofi
     feh
     flameshot
     sops
@@ -118,6 +117,7 @@
     browsers = ["brave" "firefox"];
   };
 
+  # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
     plugins = [ pkgs.rofi-calc ];
