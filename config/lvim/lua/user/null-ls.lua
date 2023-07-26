@@ -23,19 +23,22 @@ function M.setup()
         name = "terraform_fmt",
         filetypes = { "terraform", "tf", "hcl", "terraform-vars" }
       },
-      { name = "taplo",      args = { "format", "-" } },
+      {
+        name = "taplo",
+        args = { "format", "-" }
+      },
       { name = "autoflake" },
       { name = "isort" },
       { name = "gofumpt" },
       { name = "goimports" },
       { name = "ocamlformat" }, -- Already installed.
       { name = "cue_fmt" },
+      { name = "alejandra" },
     },
     code_actions = {
       { name = "shellcheck" },
       { name = "gomodifytags" },
       { name = "impl" },
-
     }
   }
 
