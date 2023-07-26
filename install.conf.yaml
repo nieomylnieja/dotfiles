@@ -32,7 +32,6 @@
 
 - shell:
   - [make install/lvim, Installing LunarVim]
-  - [make install/slock, Installing slock lock screen]
   - [make xdg/defaults, Setting xdg-mime defaults]
   - [make install/node, Installing latest Node version]
   - [make install/nixgl, Installing nixGL wrapper]

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 LAYOUTS_DIR="$DOTFILES/config/xrandr"
 

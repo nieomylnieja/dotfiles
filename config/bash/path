@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # path contains all essential path extensions which should be loaded for some of
 # the programs to be visible early on.
 

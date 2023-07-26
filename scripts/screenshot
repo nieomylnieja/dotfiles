@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # screenshot is a utility for quickly moving the screenshots from ~/Pictures
 # to the destination the script is run from and changing their generic name to a
 # new one.

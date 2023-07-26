@@ -6,9 +6,15 @@ run() {
   fi
 }
 
-run picom --experimental-backends
-run emacs --daemon
-run nitrogen --restore
+wallpapers() {
+  dir="${DOTFILES}/config/wallpapers"
+  if ! test -n "$(find "$dir" -maxdepth 1 -name "*.jpg" -print -quit)" 2>/dev/null; then
+    unzip -d "$dir" "$dir/wallpapers.zip"
+  fi
+  run feh --bg-fill --randomize "$dir/"*.jpg
+}
+
+run picom
 run xautolock -time 5 \
   -locker locker \
   -notify 15 \
@@ -17,4 +23,4 @@ run xautolock -time 5 \
   -killtime 20 \
   -killer "systemctl suspend"
 run flameshot
-run greenclip daemon
+wallpapers

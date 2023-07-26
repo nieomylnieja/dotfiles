@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Device ids might change to figure out what's right follow these steps:
 # xinput list               --> List the devices
