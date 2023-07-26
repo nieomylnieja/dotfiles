@@ -52,6 +52,7 @@ lvim.plugins = {
   },
   "nvim-neotest/neotest-go",
   "nvim-neotest/neotest-python",
+  "nvim-neotest/neotest-jest",
   -- Git
   {
     "sindrets/diffview.nvim",
