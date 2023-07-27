@@ -66,9 +66,7 @@
     picom
     ripgrep
     ripgrep-all
-    # These are not rofi plugins per se, rather separate programs which call rofi!
     rofi-power-menu
-    rofi-bluetooth
     feh
     flameshot
     sops
@@ -184,5 +182,12 @@
     enable = true;
     plugins = with pkgs; [rofi-calc];
     pass.enable = true;
+  };
+
+  # GPG
+  services.gpg-agent = {
+    enable = true;
+    enableSshSupport = true;
+    pinentryFlavor = "qt";
   };
 }
