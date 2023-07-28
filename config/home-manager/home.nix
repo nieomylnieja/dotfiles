@@ -55,6 +55,7 @@
     man-pages
     mesa
     moreutils
+    cinnamon.nemo-with-extensions
     (nerdfonts.override {fonts = ["Mononoki"];})
     neofetch
     neovim
@@ -72,7 +73,6 @@
     sops
     starship
     statix
-    tabnine
     unzip
     qtile
     zoxide
@@ -91,7 +91,6 @@
     ".xprofile".source = ../xorg/xprofile;
     ".xinitrc".source = ../xorg/xinitrc;
     ".profile".source = ../xorg/xinitrc;
-    ".Xresources".source = ../xorg/Xresources;
   };
 
   xdg.configFile = {
@@ -99,7 +98,6 @@
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
     "rofi".source = ../rofi;
-    "lvim".source = ../lvim;
     "dunst".source = ../dunst;
     "alacritty".source = ../alacritty;
     "picom".source = ../picom;
@@ -188,6 +186,34 @@
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryFlavor = "qt";
+    pinentryFlavor = "gtk2";
+  };
+
+  # UI
+  home.pointerCursor = {
+    package = pkgs.nordzy-cursor-theme;
+    name = "Nordzy-cursors";
+    gtk.enable = true;
+    x11.enable = true;
+  };
+  gtk = {
+    enable = true;
+    theme = {
+      package = pkgs.nordic;
+      name = "Nordic";
+    };
+    font = {
+      package = pkgs.mononoki;
+      name = "Mononoki";
+    };
+    iconTheme = {
+      package = pkgs.nordzy-icon-theme;
+      name = "Nordzy";
+    };
+  };
+  qt = {
+    enable = true;
+    platformTheme = "gtk";
+    style.name = "gtk2";
   };
 }
