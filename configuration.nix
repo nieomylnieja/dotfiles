@@ -132,11 +132,15 @@ in {
   nixpkgs.config.allowUnfree = true;
 
   # List packages installed in system profile. To search, run:
-  # $ nix search wget
   environment.systemPackages = with pkgs; [
     neovim
     wget
     git
+    # Nix-ld is only used by unpatched executables that use the link loader at /lib or /lib64.
+    (writeShellScriptBin "python" ''
+      export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
+      exec ${python3}/bin/python "$@"
+    '')
   ];
 
   # Support unpached dynamic binaries out of the box.

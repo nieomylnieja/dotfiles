@@ -7,14 +7,12 @@ from libqtile.lazy import lazy
 from widgets.volume import Volume, VolumeCommands
 
 mod = "mod4"
-terminal = "alacritty"
-browser = "brave"
 
 keys = [
     # The basics
     Key([mod],
         "Return",
-        lazy.spawn(terminal),
+        lazy.spawn(["bash -c ${TERM-alacritty}"]),
         desc="Launch terminal"),
     Key([mod],
         "v",
@@ -26,7 +24,7 @@ keys = [
         desc="Launch launcher"),
     Key([mod],
         "b",
-        lazy.spawn(browser),
+        lazy.spawn(["bash -c ${BROWSER-firefox}"]),
         desc="Launch browser"),
     Key([mod, "shift"],
         "b",
