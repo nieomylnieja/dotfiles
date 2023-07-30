@@ -1,0 +1,9 @@
+{
+  "pylsp.plugins.pycodestyle.enabled": false,
+  "pylsp.plugins.mccabe.enabled": false,
+  "pylsp.plugins.pyflakes.enabled": false,
+  "pylsp.plugins.flake8.enabled": true,
+  "pylsp.configurationSources": [
+    "flake8"
+  ]
+}

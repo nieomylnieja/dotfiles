@@ -81,6 +81,9 @@ in {
 
   # Enable printing
   services.printing.enable = true;
+  services.avahi.enable = true;
+  services.avahi.nssmdns = true;
+  services.avahi.openFirewall = true; # for a WiFi printer
 
   # External drives and filesystems
   services.udisks2.enable = true;

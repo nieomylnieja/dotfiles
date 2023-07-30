@@ -1,17 +1,40 @@
 #!/usr/bin/env bash
 
-lockDisabledInputs=(chrome firefox brave zoom vlc)
+BLANK='#2e3440'
+CLEAR='#4c566a'
+DEFAULT='#81a1c1'
+TEXT='#5e81ac'
+WRONG='#bf616a'
+INPUT='#a3be8c'
+VERIFYING='#8fbcbb'
 
-runningInputs="$(pactl -f json list sink-inputs |
-  jq -r '
-    .[].properties |
-    ."application.process.binary" + " " + ."application.name"')"
+dunstctl set-paused true
 
-for input in "${lockDisabledInputs[@]}"; do
-  if [[ "${runningInputs[*]}" =~ $input ]]; then
-    echo "$input is running, skipping lock"
-    exit 0
-  fi
-done
+i3lock \
+--insidever-color=$CLEAR     \
+--ringver-color=$VERIFYING   \
+\
+--insidewrong-color=$CLEAR   \
+--ringwrong-color=$WRONG     \
+\
+--inside-color=$BLANK        \
+--ring-color=$DEFAULT        \
+--line-color=$BLANK          \
+--separator-color=$DEFAULT   \
+\
+--verif-color=$TEXT          \
+--wrong-color=$TEXT          \
+--time-color=$TEXT           \
+--date-color=$TEXT           \
+--layout-color=$TEXT         \
+--keyhl-color=$INPUT         \
+--bshl-color=$WRONG          \
+\
+--screen 1                   \
+--blur 5                     \
+--clock                      \
+--indicator                  \
+--time-str="%H:%M:%S"        \
+--date-str="%A, %Y-%m-%d"    \
 
-i3lock-color
+dunstctl set-paused false

@@ -41,6 +41,7 @@
     gh
     git
     glibcLocales
+    gnome.simple-scan
     gnumake
     gnupg
     go
@@ -188,6 +189,31 @@
     enableSshSupport = true;
     pinentryFlavor = "gtk2";
   };
+
+  # Lock screen
+  services.xidlehook = {
+    enable = true;
+    not-when-audio = true;
+    detect-sleep = true;
+    timers = [
+      {
+        delay = 300;
+        command = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness .1";
+        canceller = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness 1";
+      }
+      {
+        delay = 10;
+        command = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness 1; locker";
+      }
+      {
+        delay = 3600;
+        command = "systemctl suspend";
+      }
+    ];
+  };
+
+  # Notifications
+  services.dunst.enable = true;
 
   # UI
   home.pointerCursor = {

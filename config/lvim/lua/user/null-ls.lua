@@ -13,9 +13,9 @@ function M.setup()
 
   local sources = {
     linters = {
-      -- { name = "shellcheck" }, -- already handled by bashls
+      -- { name = "shellcheck" }, -- handled by bashls
       { name = "ansiblelint" },
-      { name = "flake8" },
+      -- { name = "flake8" }, -- handled by pylsp
       { name = "statix" },
     },
     formatters = {
