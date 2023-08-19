@@ -3,6 +3,7 @@
   pkgs,
   ...
 }: {
+  programs.home-manager.enable = true;
   nixpkgs.config = {
     allowUnfree = true;
     allowUnfreePredicate = _: true;
@@ -27,6 +28,7 @@
     brave
     cachix
     delta
+    direnv
     docker
     docker-compose
     du-dust
@@ -72,6 +74,8 @@
     feh
     flameshot
     sops
+    spotifyd
+    spotify-tui
     starship
     statix
     unzip
@@ -104,15 +108,19 @@
     "picom".source = ../picom;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "ideavim".source = ../ideavim;
+    "spotifyd/spotifyd.conf".source = ../spotifyd/spotifyd.conf;
   };
 
   home.sessionPath = [
     "$HOME/.local/bin"
   ];
 
-  fonts.fontconfig.enable = true;
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
 
-  programs.home-manager.enable = true;
+  fonts.fontconfig.enable = true;
 
   programs.browserpass = {
     enable = true;

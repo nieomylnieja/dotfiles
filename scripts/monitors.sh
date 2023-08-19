@@ -64,4 +64,3 @@ SEL=$(gen_entries | rofi -dmenu -p "Monitor Setup:" -a 0 -no-custom | awk '{prin
 
 # Call xrandr
 eval "$(${COMMANDS[$SEL]})"
-nitrogen --restore &

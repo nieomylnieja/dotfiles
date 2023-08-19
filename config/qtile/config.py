@@ -292,7 +292,7 @@ music_widget = widget.Mpris2(
     display_metadata=["xesam:album", "xesam:artist"],
     scroll=True,
     width=150,
-    objname="org.mpris.MediaPlayer2.spotify",
+    objname="org.mpris.MediaPlayer2.spotifyd",
 )
 
 widgets = [

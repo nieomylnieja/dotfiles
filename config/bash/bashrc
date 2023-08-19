@@ -14,7 +14,6 @@ shopt -s extglob
 shopt -s direxpand
 
 # Set VIM prompt
-# In order for Mason installed programs to work on nixos.
 alias vim='lvim'
 set -o vi
 
@@ -104,7 +103,7 @@ if kubectl krew >&/dev/null; then
 fi
 
 # Avoid duplicates
-HISTCONTROL=ignoredups:erasedups  
+HISTCONTROL=ignoredups:erasedups
 # When the shell exits, append to the history file instead of overwriting it
 shopt -s histappend
 # After each command, append to the history file and reread it
@@ -156,7 +155,7 @@ if [ -x "$(command -v zoxide)" ]; then
 fi
 
 # Run dircolors to set LS_COLORS in the envs
-eval "$(dircolors)" 
+eval "$(dircolors)"
 
 # starship prompt init, should stay on the bottom
 if [ -x "$(command -v starship)" ]; then
