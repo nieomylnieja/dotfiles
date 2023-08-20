@@ -67,6 +67,7 @@
     pamixer
     pass
     pavucontrol
+    pdm
     picom
     ripgrep
     ripgrep-all
@@ -80,7 +81,6 @@
     unzip
     qtile
     zoxide
-    xautolock
     xclip
     xorg.xrandr
     xorg.xset
@@ -201,6 +201,9 @@
     enable = true;
     not-when-audio = true;
     detect-sleep = true;
+    environment = {
+      "PRIMARY_DISPLAY" = "$(xrandr | awk '/ primary/{print $1}')";
+    };
     timers = [
       {
         delay = 300;
@@ -213,7 +216,7 @@
       }
       {
         delay = 3600;
-        command = "systemctl suspend";
+        command = "systemctl hibernate || systemctl suspend";
       }
     ];
   };
