@@ -74,8 +74,7 @@
     feh
     flameshot
     sops
-    spotifyd
-    spotify-tui
+    spotify
     starship
     statix
     unzip
@@ -108,7 +107,6 @@
     "picom".source = ../picom;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "ideavim".source = ../ideavim;
-    "spotifyd/spotifyd.conf".source = ../spotifyd/spotifyd.conf;
   };
 
   home.sessionPath = [

@@ -1,5 +1,4 @@
 import os
-import re
 import subprocess
 
 from libqtile import bar, hook, layout, widget
@@ -9,12 +8,14 @@ from widgets.volume import Volume, VolumeCommands
 
 mod = "mod4"
 
+terminal = "alacritty"
+
 
 keys = [
     # The basics
     Key([mod],
         "Return",
-        lazy.spawn("alacritty"),
+        lazy.spawn(terminal),
         desc="Launch terminal"),
     Key([mod],
         "v",
@@ -55,7 +56,7 @@ keys = [
     Key([mod],
         "o",
         lazy.spawn("rofi-pass"),
-        desc="Launch bluetooth manager."),
+        desc="Launch password store"),
     Key([mod, "shift"],
         "r",
         lazy.restart(),
@@ -292,7 +293,7 @@ music_widget = widget.Mpris2(
     display_metadata=["xesam:album", "xesam:artist"],
     scroll=True,
     width=150,
-    objname="org.mpris.MediaPlayer2.spotifyd",
+    objname="org.mpris.MediaPlayer2.spotify",
 )
 
 widgets = [
