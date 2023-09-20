@@ -25,7 +25,7 @@
     docker-compose
     du-dust
     dunst
-    exa
+    eza
     fd
     file
     flatpak
@@ -59,7 +59,6 @@
     pavucontrol
     picom
     ripgrep
-    ripgrep-all
     # These are not rofi plugins per se, rather separate programs which call rofi!
     rofi-power-menu
     rofi-bluetooth
@@ -70,7 +69,6 @@
     statix
     tabnine
     unzip
-    qtile
     zoxide
     xautolock
     xclip

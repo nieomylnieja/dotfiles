@@ -1,5 +1,6 @@
 import os
 import subprocess
+import platform
 
 from libqtile import bar, hook, layout, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
@@ -7,7 +8,9 @@ from libqtile.lazy import lazy
 from widgets.volume import Volume, VolumeCommands
 
 mod = "mod4"
-terminal = "alacritty"
+terminal = "nixGL alacritty"
+if "nixos" in platform.freedesktop_os_release()["ID"]:
+    terminal = "alacritty"
 browser = "brave"
 
 keys = [
