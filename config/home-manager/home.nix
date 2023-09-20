@@ -37,7 +37,7 @@ in {
     docker-compose
     du-dust
     dunst
-    exa
+    eza
     fd
     file
     flatpak
@@ -85,7 +85,6 @@ in {
     starship
     statix
     unzip
-    qtile
     zoxide
     xclip
     xorg.xrandr

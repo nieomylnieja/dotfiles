@@ -10,7 +10,7 @@ curl -s "https://$domain/rest/api/2/search?jql=assignee=$user_id+and+project=$ji
   --user "$email:$token" |
   jq -r '.issues[] | (.key) + "-" + (.fields.summary | ascii_downcase | .)' |
   sed "s/[[]:^~,()']//g" |
-  sed 's/ /-/g' |
+  sed 's/[ .]/-/g' |
   sed -E 's/-{2,}/-/g' |
   sed 's/-*$//' |
   fzf | 
