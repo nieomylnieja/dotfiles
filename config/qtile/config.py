@@ -1,6 +1,5 @@
 import os
 import subprocess
-import platform
 
 from libqtile import bar, hook, layout, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
