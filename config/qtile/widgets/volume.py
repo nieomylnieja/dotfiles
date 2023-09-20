@@ -3,9 +3,9 @@ import subprocess
 from enum import Enum
 
 from libqtile import bar
-from libqtile.widget import base
-from libqtile.log_utils import logger
 from libqtile.lazy import lazy
+from libqtile.log_utils import logger
+from libqtile.widget import base
 
 __all__ = ["Volume", "VolumeCommands"]
 
@@ -108,13 +108,13 @@ class Volume(base._TextBox):
             self.drawer.ctx.paint()
         elif self.emoji:
             if self.volume <= 0:
-                self.text = f"\U0001f507"
+                self.text = "󰝟"
             elif self.volume <= 30:
-                self.text = f"\U0001f508 {self.volume}%"
+                self.text = f" {self.volume}%"
             elif self.volume < 80:
-                self.text = f"\U0001f509 {self.volume}%"
+                self.text = f" {self.volume}%"
             elif self.volume >= 80:
-                self.text = f"\U0001f50a {self.volume}%"
+                self.text = f" {self.volume}%"
 
     def setup_images(self):
         from libqtile import images

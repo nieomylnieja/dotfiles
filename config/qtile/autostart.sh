@@ -15,12 +15,5 @@ wallpapers() {
 }
 
 run picom
-run xautolock -time 5 \
-  -locker locker \
-  -notify 15 \
-  -notifier "notify-send 'Screen will lock in 15 s'" \
-  -detectsleep \
-  -killtime 20 \
-  -killer "systemctl suspend"
 run flameshot
 wallpapers

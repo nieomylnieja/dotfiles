@@ -24,7 +24,7 @@ bind "set completion-ignore-case on"
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
 # Reload nix home-manager
-alias hmr="home-manager switch --flake $DOTFILES/config/home-manager#mh"
+alias hmr='home-manager switch --flake $DOTFILES/config/home-manager#mh'
 
 # those fancy rust speeders
 alias ls='eza --group-directories-first'
@@ -103,7 +103,7 @@ if kubectl krew >&/dev/null; then
 fi
 
 # Avoid duplicates
-HISTCONTROL=ignoredups:erasedups  
+HISTCONTROL=ignoredups:erasedups
 # When the shell exits, append to the history file instead of overwriting it
 shopt -s histappend
 # After each command, append to the history file and reread it
@@ -155,7 +155,7 @@ if [ -x "$(command -v zoxide)" ]; then
 fi
 
 # Run dircolors to set LS_COLORS in the envs
-eval "$(dircolors)" 
+eval "$(dircolors)"
 
 # starship prompt init, should stay on the bottom
 if [ -x "$(command -v starship)" ]; then

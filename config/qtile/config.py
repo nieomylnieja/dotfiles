@@ -8,10 +8,9 @@ from libqtile.lazy import lazy
 from widgets.volume import Volume, VolumeCommands
 
 mod = "mod4"
-terminal = "nixGL alacritty"
-if "nixos" in platform.freedesktop_os_release()["ID"]:
-    terminal = "alacritty"
-browser = "brave"
+
+terminal = "alacritty"
+
 
 keys = [
     # The basics
@@ -29,7 +28,7 @@ keys = [
         desc="Launch launcher"),
     Key([mod],
         "b",
-        lazy.spawn(browser),
+        lazy.spawn(["bash", "-c", "${BROWSER-firefox}"]),
         desc="Launch browser"),
     Key([mod, "shift"],
         "b",
@@ -37,7 +36,7 @@ keys = [
         desc="Launch bluetooth manager."),
     Key([mod],
         "s",
-        lazy.spawn("xautolock -locknow"),
+        lazy.spawn("locker"),
         desc="Lock the screen"),
     Key([mod],
         "Tab",
@@ -58,7 +57,7 @@ keys = [
     Key([mod],
         "o",
         lazy.spawn("rofi-pass"),
-        desc="Launch bluetooth manager."),
+        desc="Launch password store"),
     Key([mod, "shift"],
         "r",
         lazy.restart(),
@@ -398,13 +397,8 @@ floating_layout = layout.Floating(
     float_rules=[
         # Run the utility of `xprop` to see the wm class and name of an X client.
         *layout.Floating.default_float_rules,
-        Match(wm_class="confirmreset"),  # gitk
-        Match(wm_class="makebranch"),  # gitk
-        Match(wm_class="maketag"),  # gitk
-        Match(wm_class="ssh-askpass"),  # ssh-askpass
-        Match(title="branchdialog"),  # gitk
-        Match(title="pinentry"),  # GPG key password entry
-        Match(role="GtkFileChooserDialog"),  # File picker dialog
+        Match(wm_class="ssh-askpass"),
+        Match(wm_class="pinentry"),
     ]
 )
 auto_fullscreen = True
@@ -446,8 +440,8 @@ def get_keys_description() -> str:
 keys.extend(
     [
         Key(
-            [mod],
-            "t",
+            [mod, "shift"],
+            "slash",
             lazy.spawn(
                 "sh -c 'echo \""
                 + get_keys_description()

@@ -1,19 +1,19 @@
 # Edit this configuration file to define what should be installed on
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
-
-{ config, pkgs, ... }:
-
-let
-  user="mh";
-  # Will vary based on machine.
-  luks-disk="db203a15-1291-4e05-9912-d199aefb9d0d";
-in
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
+  config,
+  pkgs,
+  ...
+}: let
+  user = "mh";
+  # Will vary based on machine.
+  luks-disk = "db203a15-1291-4e05-9912-d199aefb9d0d";
+in {
+  imports = [
+    # Include the results of the hardware scan.
+    ./hardware-configuration.nix
+  ];
 
   # nix
   nix = {
@@ -81,6 +81,9 @@ in
 
   # Enable printing
   services.printing.enable = true;
+  services.avahi.enable = true;
+  services.avahi.nssmdns = true;
+  services.avahi.openFirewall = true; # for a WiFi printer
 
   # External drives and filesystems
   services.udisks2.enable = true;
@@ -95,18 +98,18 @@ in
     alsa.support32Bit = true;
     pulse.enable = true;
   };
-  
+
   # Bluetooth
   hardware.bluetooth.enable = true;
   environment.etc = {
-  	"wireplumber/bluetooth.lua.d/51-bluez-config.lua".text = ''
-  		bluez_monitor.properties = {
-  			["bluez5.enable-sbc-xq"] = true,
-  			["bluez5.enable-msbc"] = true,
-  			["bluez5.enable-hw-volume"] = true,
-  			["bluez5.headset-roles"] = "[ hsp_hs hsp_ag hfp_hf hfp_ag ]"
-  		}
-  	'';
+    "wireplumber/bluetooth.lua.d/51-bluez-config.lua".text = ''
+      bluez_monitor.properties = {
+      	["bluez5.enable-sbc-xq"] = true,
+      	["bluez5.enable-msbc"] = true,
+      	["bluez5.enable-hw-volume"] = true,
+      	["bluez5.headset-roles"] = "[ hsp_hs hsp_ag hfp_hf hfp_ag ]"
+      }
+    '';
   };
 
   # Configure console keymap
@@ -116,7 +119,7 @@ in
   users.users.${user} = {
     isNormalUser = true;
     description = "Mateusz Hawrus";
-    extraGroups = [ 
+    extraGroups = [
       "wheel"
       "networkmanager"
       "storage"
@@ -132,13 +135,12 @@ in
   nixpkgs.config.allowUnfree = true;
 
   # List packages installed in system profile. To search, run:
-  # $ nix search wget
   environment.systemPackages = with pkgs; [
     neovim
     wget
     git
   ];
-  
+
   # Support unpached dynamic binaries out of the box.
   programs.nix-ld.enable = true;
 
@@ -147,10 +149,17 @@ in
 
   # Always enable shell system wide, othwerise it won't source the neccessary stuff.
   users.defaultUserShell = pkgs.bash;
-  environment.shells = with pkgs; [ bash ];
+  environment.shells = with pkgs; [bash];
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
+
+  # Yubikey support
+  services.udev.packages = [pkgs.yubikey-personalization];
+  services.pcscd.enable = true;
+
+  # Configure UI
+  programs.dconf.enable = true;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

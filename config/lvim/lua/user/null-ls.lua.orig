@@ -13,9 +13,9 @@ function M.setup()
 
   local sources = {
     linters = {
-      -- { name = "shellcheck" }, -- handled by bashls
+      -- { name = "shellcheck" }, -- already handled by bashls
       { name = "ansiblelint" },
-      -- { name = "flake8" }, -- handled by pylsp
+      { name = "flake8" },
       { name = "statix" },
     },
     formatters = {
@@ -27,15 +27,18 @@ function M.setup()
         name = "taplo",
         args = { "format", "-" }
       },
-      { name = "alejandra" },
       { name = "autoflake" },
       { name = "isort" },
       { name = "gofumpt" },
       { name = "goimports" },
       { name = "ocamlformat" }, -- Already installed.
       { name = "cue_fmt" },
+<<<<<<< HEAD
+      { name = "alejandra" },
+=======
       { name = "trim_whitespace" },
       { name = "trim_newlines" },
+>>>>>>> ba4465ed280c8d28b354b600754606bff9df5393
     },
     code_actions = {
       { name = "shellcheck" },
