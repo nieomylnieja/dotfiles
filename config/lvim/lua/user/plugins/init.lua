@@ -108,4 +108,8 @@ lvim.plugins = {
       "nvim-telescope/telescope.nvim"
     }
   },
+  {
+    "LhKipp/nvim-nu",
+    config = function() require('nu').setup{} end
+  },
 }

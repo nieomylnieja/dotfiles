@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 BLANK='#2e3440'
 CLEAR='#4c566a'

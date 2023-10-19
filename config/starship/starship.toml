@@ -67,4 +67,4 @@ symbol = "☁️ "
 description = 'provides current sloctl context'
 command = "sloctl config current-context"
 format = '[|](#4c566a) [N9](#5E81AC) [$output](#8FBCBB) '
-when = 'true'
+when = '[ -e ~/.config/nobl9/config.toml ]'

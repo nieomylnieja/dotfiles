@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 
-
 if [ "$#" -ne 2 ]; then
   echo >&2 "invalid number of arguments, provide exactly 2 --> <DIRECTION> <STEP>"
   exit 1
 fi
 
-# One of {up, down}
+# One of {up, down, set}
 DIRECTION="$1"
 # Step Up/Down brightnes by: 5 = ".05", 10 = ".10", etc.
 STEP="$2"
@@ -28,8 +27,9 @@ for monitor in $(xrandr -q | grep ' connected' | cut -d ' ' -f1); do
   case $DIRECTION in
     up) calculated=$(( calculated + STEP )) ;;
     down) calculated=$(( calculated - STEP )) ;;
+    set) calculated=$(( STEP )) ;;
     *)
-      echo "$DIRECTION is invalid value for DIRECTION, should be one of {up, down}"
+      echo "$DIRECTION is invalid value for DIRECTION, should be one of {up, down, set}"
       exit 1
       ;;
   esac
@@ -48,10 +48,9 @@ for monitor in $(xrandr -q | grep ' connected' | cut -d ' ' -f1); do
   xrandr --output "$monitor" --brightness "$current"
 
   # Display current brightness
-  echo "Monitor $monitor $( xrandr --verbose --current |
+  echo "Monitor $monitor $(xrandr --verbose --current |
     grep ^"$monitor" -A5 |
     tail -n1 )"
-
 done
 
 exit 0

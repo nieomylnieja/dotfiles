@@ -2,7 +2,10 @@
   config,
   pkgs,
   ...
-}: {
+}: let
+  homeDir = "/home/mh";
+  dotfilesDir = "${homeDir}/.dotfiles";
+in {
   programs.home-manager.enable = true;
   nixpkgs.config = {
     allowUnfree = true;
@@ -11,7 +14,7 @@
 
   home = {
     username = "mh";
-    homeDirectory = "/home/mh";
+    homeDirectory = homeDir;
     stateVersion = "23.05";
   };
 
@@ -27,6 +30,7 @@
     browserpass
     brave
     cachix
+    csvkit
     delta
     direnv
     docker
@@ -44,6 +48,7 @@
     git
     glibcLocales
     gnome.simple-scan
+    gnome.sushi
     gnumake
     gnupg
     go
@@ -64,13 +69,14 @@
     neovim
     nodejs
     nodePackages.npm
+    nushell
     pamixer
     pass
     pavucontrol
     pdm
+    pgadmin4-desktopmode
     picom
     ripgrep
-    ripgrep-all
     rofi-power-menu
     feh
     flameshot
@@ -86,6 +92,7 @@
     yarn
     yubikey-manager
     yq
+    vlc
   ];
 
   home.file = {
@@ -196,22 +203,33 @@
   };
 
   # Lock screen
-  services.xidlehook = {
+  services.xidlehook = let
+    paths = [
+      "$PATH"
+      "${pkgs.xorg.xrandr}/bin"
+      "${dotfilesDir}/scripts"
+      "${pkgs.i3lock-color}/bin"
+      "${pkgs.dunst}/bin"
+      "${pkgs.bash}/bin"
+      "${pkgs.gnugrep}/bin"
+      "${pkgs.coreutils-full}/bin"
+    ];
+  in {
     enable = true;
     not-when-audio = true;
     detect-sleep = true;
     environment = {
-      "PRIMARY_DISPLAY" = "$(xrandr | awk '/ primary/{print $1}')";
+      "PATH" = builtins.concatStringsSep ":" paths;
     };
     timers = [
       {
         delay = 300;
-        command = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness .1";
-        canceller = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness 1";
+        command = "brightness set 50";
+        canceller = "brightness set 100";
       }
       {
         delay = 10;
-        command = "xrandr --output \"$PRIMARY_DISPLAY\" --brightness 1; locker";
+        command = "brightness set 100; locker";
       }
       {
         delay = 3600;

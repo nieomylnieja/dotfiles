@@ -1,6 +1,9 @@
 submodule:
 	git submodule update --init --recursive
 
+update:
+	nix flake update --commit-lock-file
+
 rebuild:
 	sudo nixos-rebuild switch --flake .#mh
 
