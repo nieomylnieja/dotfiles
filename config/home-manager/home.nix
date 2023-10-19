@@ -69,6 +69,7 @@ in {
     neovim
     nodejs
     nodePackages.npm
+    nushell
     pamixer
     pass
     pavucontrol
@@ -76,7 +77,6 @@ in {
     pgadmin4-desktopmode
     picom
     ripgrep
-    ripgrep-all
     rofi-power-menu
     feh
     flameshot

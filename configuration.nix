@@ -74,9 +74,13 @@ in {
       lightdm.enable = true;
       defaultSession = "none+qtile";
     };
-    windowManager = {
-      qtile.enable = true;
-    };
+    windowManager.session = [{
+      name = "qtile";
+      start = ''
+        ${pkgs.stable.qtile-unwrapped}/bin/qtile start -b x11 &
+        waitPID=$!
+      '';
+    }];
   };
 
   # Enable printing

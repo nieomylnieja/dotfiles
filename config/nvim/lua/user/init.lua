@@ -1,0 +1,5 @@
+require("user.opt")
+require("user.colors").setup()
+require("user.lazy").setup()
+require("user.keymap")
+require("user.autocmd")
