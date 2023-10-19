@@ -195,7 +195,10 @@ return {
     event = "InsertEnter",
     dependencies = { "hrsh7th/nvim-cmp" },
     config = function()
-      require("nvim-autopairs").setup({})
+      require("nvim-autopairs").setup({
+        -- Use fast wrap with <M-e>
+        fast_wrap = {},
+      })
       local cmp_autopairs = require("nvim-autopairs.completion.cmp")
       local cmp = require("cmp")
       cmp.event:on(
@@ -210,6 +213,10 @@ return {
       indent = {
         char = "▏",
         tab_char = "▏",
+      },
+      scope = {
+        show_start = false,
+        show_end = false,
       },
       exclude = {
         buftypes = {
@@ -230,5 +237,41 @@ return {
       },
     },
     main = "ibl",
-  }
+  },
+  {
+    "RRethy/vim-illuminate",
+    config = function()
+      require("illuminate").configure({
+        providers = {
+          "lsp",
+          "treesitter",
+          "regex",
+        },
+        filetypes_denylist = {
+          "alpha",
+          "neo-tree",
+          "packer",
+          "neogitstatus",
+          "Trouble",
+          "Outline",
+          "spectre_panel",
+          "toggleterm",
+          "DressingSelect",
+          "TelescopePrompt",
+        },
+      })
+      local set_hl = vim.api.nvim_set_hl
+      set_hl(0, "IlluminatedWordText", { bold = true })
+      set_hl(0, "IlluminatedWordRead", { bold = true })
+      set_hl(0, "IlluminatedWordWrite", { bold = true })
+    end
+  },
+  {
+    "kylechui/nvim-surround",
+    version = "*",
+    event = "VeryLazy",
+    config = function()
+      require("nvim-surround").setup({})
+    end
+  },
 }
