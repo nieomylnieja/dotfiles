@@ -51,7 +51,7 @@ map("n", "<leader>e", "<cmd>Telescope file_browser<cr>", { noremap = true })
 
 wk.register({
   f = {
-    name = "Find",
+    name = "+Find",
     b = { "<cmd>Telescope buffers<cr>", "Buffers" },
     c = { "<cmd>Telescope git_branches<cr>", "Checkout branch" },
     f = { "<cmd>Telescope find_files<cr>", "Find file" },
@@ -66,4 +66,21 @@ wk.register({
     l = { "<cmd>Telescope resume<cr>", "Resume last search" },
     t = { "<cmd>TodoTelescope<cr>", "TODO comments" }
   },
+}, { prefix = "<leader>" })
+
+wk.register({
+  t = {
+    name = "+Trouble/Test",
+    r = { "<cmd>Trouble lsp_references<cr>", "References" },
+    q = { "<cmd>Trouble quickfix<cr>", "Quick Fix" },
+    l = { "<cmd>Trouble loclist<cr>", "Location List" },
+    d = { "<cmd>Trouble document_diagnostics<cr>", "Diagnostics" },
+    w = { "<cmd>Trouble workspace_diagnostics<cr>", "Workspace Diagnostics" },
+    t = { "<cmd>TodoTrouble<cr>", "TODO comments" },
+    m = { "<cmd>lua require('neotest').run.run()<cr>", "Test Method" },
+    f = { "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", "Test File" },
+    s = { "<cmd>lua require('neotest').summary.toggle()<cr>", "Test Summary" },
+    S = { "<cmd>lua require('neotest').output_panel.open()<cr>", "Test Summary panel" },
+    o = { "<cmd>lua require('neotest').output.open()<cr>", "Output Window" }
+  }
 }, { prefix = "<leader>" })

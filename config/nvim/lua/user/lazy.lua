@@ -8,8 +8,8 @@ local opts = {
       loaded = "",
       not_loaded = "",
     },
+    border = "rounded"
   },
-
   performance = {
     rtp = {
       disabled_plugins = {

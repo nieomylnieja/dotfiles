@@ -35,6 +35,10 @@ local servers = {
         },
         diagnostics = {
           globals = { "vim" },
+          disable = {
+            "missing-fields",
+            "incomplete-signature-doc",
+          },
         },
         workspace = {
           library = {
