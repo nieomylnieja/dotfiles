@@ -443,11 +443,9 @@ theme.loadPlugins = function()
     IndentBlanklineContextChar = { fg = nord.blue },
 
     -- Illuminate
-    illuminatedWord = { bg = nord.light_gray },
-    illuminatedCurWord = { bg = nord.light_gray },
-    IlluminatedWordText = { bg = nord.light_gray },
-    IlluminatedWordRead = { bg = nord.light_gray },
-    IlluminatedWordWrite = { bg = nord.light_gray },
+    IlluminatedWordText = { bg = nord.gray },
+    IlluminatedWordRead = { bg = nord.gray },
+    IlluminatedWordWrite = { bg = nord.gray },
 
     -- nvim-dap
     DapBreakpoint = { fg = nord.green },

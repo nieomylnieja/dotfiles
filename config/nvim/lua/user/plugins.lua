@@ -230,11 +230,12 @@ return {
           "DressingSelect",
           "TelescopePrompt",
         },
+        under_cursor = false,
       })
-      local set_hl = vim.api.nvim_set_hl
-      set_hl(0, "IlluminatedWordText", { bold = true })
-      set_hl(0, "IlluminatedWordRead", { bold = true })
-      set_hl(0, "IlluminatedWordWrite", { bold = true })
+      -- local set_hl = vim.api.nvim_set_hl
+      -- set_hl(0, "IlluminatedWordText", { bold = true, italic = true })
+      -- set_hl(0, "IlluminatedWordRead", { bold = true, italic = true  })
+      -- set_hl(0, "IlluminatedWordWrite", { bold = true, italic = true  })
     end
   },
   {
@@ -361,4 +362,10 @@ return {
     build = "./install.sh",
     dependencies = "hrsh7th/nvim-cmp",
   },
+  {
+    "NvChad/nvim-colorizer.lua",
+    config = function ()
+      require("colorizer").setup()
+    end
+  }
 }
