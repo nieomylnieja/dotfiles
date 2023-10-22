@@ -47,7 +47,7 @@ map("v", ">", ">gv")
 
 local wk = require("which-key")
 
-map("n", "<leader>e", "<cmd>Telescope file_browser<cr>", { noremap = true })
+map("n", "<leader>e", "<cmd>Telescope file_browser path=%:p:h<cr>", { noremap = true })
 
 wk.register({
   f = {
@@ -64,7 +64,8 @@ wk.register({
     k = { "<cmd>Telescope keymaps<cr>", "Keymaps" },
     C = { "<cmd>Telescope commands<cr>", "Commands" },
     l = { "<cmd>Telescope resume<cr>", "Resume last search" },
-    t = { "<cmd>TodoTelescope<cr>", "TODO comments" }
+    t = { "<cmd>TodoTelescope<cr>", "TODO comments" },
+    p = { "<Cmd>Telescope projects<CR>", "Projects" },
   },
 }, { prefix = "<leader>" })
 

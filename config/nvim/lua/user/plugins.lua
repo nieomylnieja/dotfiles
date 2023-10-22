@@ -79,7 +79,7 @@ return {
     cmd = "Mason",
     build = ":MasonUpdate",
     opts = {
-      ensure_installed = { "stylua", "luacheck" },
+      ensure_installed = { "stylua", "luacheck", "delve" },
       ui = { border = "rounded" }
     },
     ---@param opts MasonSettings | {ensure_installed: string[]}
@@ -88,7 +88,7 @@ return {
       local mr = require("mason-registry")
       mr:on("package:install:success", function()
         vim.defer_fn(function()
-          -- trigger FileType event to possibly load this newly installed LSP server
+          -- trigger FileType event to possibly load this newly installed programs.
           require("lazy.core.handler.event").trigger({
             event = "FileType",
             buf = vim.api.nvim_get_current_buf(),
@@ -232,10 +232,6 @@ return {
         },
         under_cursor = false,
       })
-      -- local set_hl = vim.api.nvim_set_hl
-      -- set_hl(0, "IlluminatedWordText", { bold = true, italic = true })
-      -- set_hl(0, "IlluminatedWordRead", { bold = true, italic = true  })
-      -- set_hl(0, "IlluminatedWordWrite", { bold = true, italic = true  })
     end
   },
   {
@@ -257,6 +253,20 @@ return {
     },
     config = function()
       require("user.neotest")
+    end
+  },
+  {
+    "mfussenegger/nvim-dap",
+    dependencies = {
+      "rcarriga/nvim-dap-ui",
+      {
+        "theHamsta/nvim-dap-virtual-text",
+        opts = {},
+      },
+      "leoluz/nvim-dap-go",
+    },
+    config = function()
+      require("user.dap")
     end
   },
   {
@@ -364,8 +374,17 @@ return {
   },
   {
     "NvChad/nvim-colorizer.lua",
-    config = function ()
+    config = function()
       require("colorizer").setup()
     end
+  },
+  {
+    "ahmedkhalf/project.nvim",
+    event = "VeryLazy",
+    dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
+    config = function()
+      require("project_nvim").setup({ manual_mode = true })
+      require("telescope").load_extension("projects")
+    end,
   }
 }

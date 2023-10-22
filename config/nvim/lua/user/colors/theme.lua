@@ -265,11 +265,11 @@ theme.loadSemanitcTokens = function()
   return {
     ["@lsp.type.class"] = { fg = nord.off_blue },
     ["@lsp.type.decorator"] = { fg = nord.yellow },
-    ["@lsp.type.function"] = { link = "@function"},
-    ["@lsp.type.macro"] = { link = "@funtion.macro"},
+    ["@lsp.type.function"] = { link = "@function" },
+    ["@lsp.type.macro"] = { link = "@funtion.macro" },
     ["@lsp.type.method"] = { fg = nord.off_blue },
     ["@lsp.type.struct"] = { fg = nord.off_blue },
-    ["@lsp.type.type"] = { link = "@type"},
+    ["@lsp.type.type"] = { link = "@type" },
     ["@lsp.type.boolean"] = { link = "@boolean" },
     ["@lsp.type.builtinType"] = { link = "@type.builtin" },
     ["@lsp.type.comment"] = { link = "@comment" },
@@ -363,133 +363,140 @@ end
 theme.loadPlugins = function()
   return {
     -- LspTrouble
-    LspTroubleText = { fg = nord.darkest_white },
-    LspTroubleCount = { fg = nord.glacier, bg = nord.blue },
-    LspTroubleNormal = { fg = nord.darkest_white, bg = nord.sidebar },
+    LspTroubleText               = { fg = nord.darkest_white },
+    LspTroubleCount              = { fg = nord.glacier, bg = nord.blue },
+    LspTroubleNormal             = { fg = nord.darkest_white, bg = nord.sidebar },
 
     -- Diff
-    diffAdded = { fg = nord.green },
-    diffRemoved = { fg = nord.red },
-    diffChanged = { fg = nord.purple },
-    diffOldFile = { fg = nord.yellow },
-    diffNewFile = { fg = nord.orange },
-    diffFile = { fg = nord.teal },
-    diffLine = { fg = nord.light_gray },
-    diffIndexLine = { fg = nord.glacier },
+    diffAdded                    = { fg = nord.green },
+    diffRemoved                  = { fg = nord.red },
+    diffChanged                  = { fg = nord.purple },
+    diffOldFile                  = { fg = nord.yellow },
+    diffNewFile                  = { fg = nord.orange },
+    diffFile                     = { fg = nord.teal },
+    diffLine                     = { fg = nord.light_gray },
+    diffIndexLine                = { fg = nord.glacier },
 
     -- Neogit
-    NeogitBranch = { fg = nord.blue },
-    NeogitRemote = { fg = nord.glacier },
-    NeogitHunkHeader = { fg = nord.off_blue },
-    NeogitHunkHeaderHighlight = { fg = nord.off_blue, bg = nord.dark_gray },
-    NeogitDiffContextHighlight = { bg = nord.dark_gray },
-    NeogitDiffDeleteHighlight = { fg = nord.red, style = "reverse" },
-    NeogitDiffAddHighlight = { fg = nord.green, style = "reverse" },
+    NeogitBranch                 = { fg = nord.blue },
+    NeogitRemote                 = { fg = nord.glacier },
+    NeogitHunkHeader             = { fg = nord.off_blue },
+    NeogitHunkHeaderHighlight    = { fg = nord.off_blue, bg = nord.dark_gray },
+    NeogitDiffContextHighlight   = { bg = nord.dark_gray },
+    NeogitDiffDeleteHighlight    = { fg = nord.red, style = "reverse" },
+    NeogitDiffAddHighlight       = { fg = nord.green, style = "reverse" },
 
     -- GitSigns
-    GitSignsAdd = { fg = nord.green },       -- diff mode: Added line |diff.txt|
-    GitSignsAddNr = { fg = nord.green },     -- diff mode: Added line |diff.txt|
-    GitSignsAddLn = { fg = nord.green },     -- diff mode: Added line |diff.txt|
-    GitSignsChange = { fg = nord.purple },   -- diff mode: Changed line |diff.txt|
-    GitSignsChangeNr = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitSignsChangeLn = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitSignsDelete = { fg = nord.red },      -- diff mode: Deleted line |diff.txt|
-    GitSignsDeleteNr = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-    GitSignsDeleteLn = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-    GitSignsCurrentLineBlame = { fg = nord.light_gray_bright, style = "bold" },
+    GitSignsAdd                  = { fg = nord.green },  -- diff mode: Added line |diff.txt|
+    GitSignsAddNr                = { fg = nord.green },  -- diff mode: Added line |diff.txt|
+    GitSignsAddLn                = { fg = nord.green },  -- diff mode: Added line |diff.txt|
+    GitSignsChange               = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsChangeNr             = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsChangeLn             = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsDelete               = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
+    GitSignsDeleteNr             = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
+    GitSignsDeleteLn             = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
+    GitSignsCurrentLineBlame     = { fg = nord.light_gray_bright, style = "bold" },
 
     -- Telescope
-    TelescopePromptBorder = { fg = nord.off_blue },
-    TelescopeResultsBorder = { fg = nord.glacier },
-    TelescopePreviewBorder = { fg = nord.green },
-    TelescopeSelectionCaret = { fg = nord.glacier },
-    TelescopeSelection = { fg = nord.glacier },
-    TelescopeMatching = { fg = nord.off_blue },
+    TelescopePromptBorder        = { fg = nord.off_blue },
+    TelescopeResultsBorder       = { fg = nord.glacier },
+    TelescopePreviewBorder       = { fg = nord.green },
+    TelescopeSelectionCaret      = { fg = nord.glacier },
+    TelescopeSelection           = { fg = nord.glacier },
+    TelescopeMatching            = { fg = nord.off_blue },
 
     -- Neotree
-    NeoTreeTabInactive = { fg = nord.light_gray, bg = nord.dark_gray },
-    NeoTreeTabActive = { fg = nord.teal, bg = nord.gray },
+    NeoTreeTabInactive           = { fg = nord.light_gray, bg = nord.dark_gray },
+    NeoTreeTabActive             = { fg = nord.teal, bg = nord.gray },
 
     -- NvimTree
-    NvimTreeNormal = { fg = nord.darkest_white, bg = nord.none },
-    NvimTreeRootFolder = { fg = nord.teal, style = "bold" },
-    NvimTreeGitDirty = { fg = nord.purple },
-    NvimTreeGitNew = { fg = nord.green },
-    NvimTreeImageFile = { fg = nord.purple },
-    NvimTreeExecFile = { fg = nord.green },
-    NvimTreeSpecialFile = { fg = nord.glacier, style = "underline" },
-    NvimTreeFolderName = { fg = nord.blue },
-    NvimTreeEmptyFolderName = { fg = nord.dark_gray },
-    NvimTreeFolderIcon = { fg = nord.darkest_white },
-    NvimTreeIndentMarker = { fg = nord.dark_gray },
+    NvimTreeNormal               = { fg = nord.darkest_white, bg = nord.none },
+    NvimTreeRootFolder           = { fg = nord.teal, style = "bold" },
+    NvimTreeGitDirty             = { fg = nord.purple },
+    NvimTreeGitNew               = { fg = nord.green },
+    NvimTreeImageFile            = { fg = nord.purple },
+    NvimTreeExecFile             = { fg = nord.green },
+    NvimTreeSpecialFile          = { fg = nord.glacier, style = "underline" },
+    NvimTreeFolderName           = { fg = nord.blue },
+    NvimTreeEmptyFolderName      = { fg = nord.dark_gray },
+    NvimTreeFolderIcon           = { fg = nord.darkest_white },
+    NvimTreeIndentMarker         = { fg = nord.dark_gray },
 
     -- WhichKey
-    WhichKey = { fg = nord.darkest_white, style = "bold" },
-    WhichKeyGroup = { fg = nord.darkest_white },
-    WhichKeyDesc = { fg = nord.teal, style = "italic" },
-    WhichKeySeperator = { fg = nord.darkest_white },
-    WhichKeyFloating = { bg = nord.float },
-    WhichKeyFloat = { bg = nord.float },
+    WhichKey                     = { fg = nord.darkest_white, style = "bold" },
+    WhichKeyGroup                = { fg = nord.darkest_white },
+    WhichKeyDesc                 = { fg = nord.teal, style = "italic" },
+    WhichKeySeperator            = { fg = nord.darkest_white },
+    WhichKeyFloating             = { bg = nord.float },
+    WhichKeyFloat                = { bg = nord.float },
 
     -- Cmp
-    CmpItemKind = { fg = nord.purple },
-    CmpItemAbbrMatch = { fg = nord.darker_white, style = "bold" },
-    CmpItemAbbrMatchFuzzy = { fg = nord.darker_white, style = "bold" },
-    CmpItemAbbr = { fg = nord.darkest_white },
-    CmpItemMenu = { fg = nord.green },
+    CmpItemKind                  = { fg = nord.purple },
+    CmpItemAbbrMatch             = { fg = nord.darker_white, style = "bold" },
+    CmpItemAbbrMatchFuzzy        = { fg = nord.darker_white, style = "bold" },
+    CmpItemAbbr                  = { fg = nord.darkest_white },
+    CmpItemMenu                  = { fg = nord.green },
 
     -- Indent Blankline
-    IndentBlanklineChar = { fg = nord.light_gray },
-    IndentBlanklineContextChar = { fg = nord.blue },
+    IndentBlanklineChar          = { fg = nord.light_gray },
+    IndentBlanklineContextChar   = { fg = nord.blue },
 
     -- Illuminate
-    IlluminatedWordText = { bg = nord.gray },
-    IlluminatedWordRead = { bg = nord.gray },
-    IlluminatedWordWrite = { bg = nord.gray },
+    IlluminatedWordText          = { bg = nord.gray },
+    IlluminatedWordRead          = { bg = nord.gray },
+    IlluminatedWordWrite         = { bg = nord.gray },
 
     -- nvim-dap
-    DapBreakpoint = { fg = nord.green },
-    DapStopped = { fg = nord.purple },
+    DapBreakpoint                = { fg = nord.green },
+    DapStopped                   = { fg = nord.purple },
 
     -- nvim-dap-ui
-    DapUIVariable = { fg = nord.darkest_white },
-    DapUIScope = { fg = nord.off_blue },
-    DapUIType = { fg = nord.glacier },
-    DapUIValue = { fg = nord.darkest_white },
-    DapUIModifiedValue = { fg = nord.off_blue },
-    DapUIDecoration = { fg = nord.off_blue },
-    DapUIThread = { fg = nord.off_blue },
-    DapUIStoppedThread = { fg = nord.off_blue },
-    DapUIFrameName = { fg = nord.darkest_white },
-    DapUISource = { fg = nord.glacier },
-    DapUILineNumber = { fg = nord.off_blue },
-    DapUIFloatBorder = { fg = nord.off_blue },
-    DapUIWatchesEmpty = { fg = nord.red },
-    DapUIWatchesValue = { fg = nord.off_blue },
-    DapUIWatchesError = { fg = nord.red },
-    DapUIBreakpointsPath = { fg = nord.off_blue },
-    DapUIBreakpointsInfo = { fg = nord.off_blue },
-    DapUIBreakpointsCurrentLine = { fg = nord.off_blue },
-    DapUIBreakpointsLine = { fg = nord.off_blue },
+    DapUIVariable                = { fg = nord.yellow },
+    DapUIScope                   = { fg = nord.off_blue },
+    DapUIType                    = { fg = nord.light_gray_bright },
+    DapUIModifiedValue           = { fg = nord.off_blue },
+    DapUIDecoration              = { fg = nord.off_blue },
+    DapUIThread                  = { fg = nord.off_blue },
+    DapUIStoppedThread           = { fg = nord.off_blue },
+    DapUISource                  = { fg = nord.glacier },
+    DapUILineNumber              = { fg = nord.off_blue },
+    DapUIFloatBorder             = { fg = nord.off_blue },
+    DapUIWatchesEmpty            = { fg = nord.red },
+    DapUIWatchesValue            = { fg = nord.off_blue },
+    DapUIWatchesError            = { fg = nord.red },
+    DapUIBreakpointsPath         = { fg = nord.off_blue },
+    DapUIBreakpointsInfo         = { fg = nord.off_blue },
+    DapUIBreakpointsCurrentLine  = { fg = nord.off_blue },
+    DapUIBreakpointsDisabledLine = { fg = nord.dark_gray },
+    DapUIStepOver                = { fg = nord.white },
+    DapUIStepInto                = { fg = nord.white },
+    DapUIStepBack                = { fg = nord.white },
+    DapUIStepOut                 = { fg = nord.white },
+    DapUIStop                    = { fg = nord.red },
+    DapUIPlayPause               = { fg = nord.green },
+    DapUIRestart                 = { fg = nord.green },
+    DapUIUnavailable             = { fg = nord.dark_gray },
+    DapUIWinSelect               = { fg = nord.white },
 
     -- copilot
-    CopilotLabel = { fg = nord.light_gray, bg = nord.none },
+    CopilotLabel                 = { fg = nord.light_gray, bg = nord.none },
 
     -- Statusline
-    StatusLineDull = { fg = nord.light_gray, bg = nord.dark_gray },
-    StatusLineAccent = { fg = nord.black, bg = nord.yellow },
+    StatusLineDull               = { fg = nord.light_gray, bg = nord.dark_gray },
+    StatusLineAccent             = { fg = nord.black, bg = nord.yellow },
 
     -- Neotest
-    NeotestFailed = { fg = nord.red },
-    NeotestDir = { fg = nord.off_blue },
-    NeotestFile = { fg = nord.off_blue },
-    NeotestTarget = { fg = nord.purple },
-    NeotestRunning = { fg = nord.yellow },
-    NeotestPassed = { fg = nord.green },
-    NeotestSkipped = { fg = nord.glacier },
-    NeotestMakred = { fg = nord.orange },
-    NeotestNamespace = { fg = nord.glacier },
-    NeotestAdapterName = { fg = nord.glacier },
+    NeotestFailed                = { fg = nord.red },
+    NeotestDir                   = { fg = nord.off_blue },
+    NeotestFile                  = { fg = nord.off_blue },
+    NeotestTarget                = { fg = nord.purple },
+    NeotestRunning               = { fg = nord.yellow },
+    NeotestPassed                = { fg = nord.green },
+    NeotestSkipped               = { fg = nord.glacier },
+    NeotestMakred                = { fg = nord.orange },
+    NeotestNamespace             = { fg = nord.glacier },
+    NeotestAdapterName           = { fg = nord.glacier },
   }
 end
 
