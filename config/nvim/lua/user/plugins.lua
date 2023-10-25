@@ -10,8 +10,8 @@ return {
       },
       sections = {
         lualine_a = { "mode" },
-        lualine_b = {},
-        lualine_c = { "filename" },
+        lualine_b = { "branch", "diff", "diagnostics" },
+        lualine_c = {},
         lualine_x = {},
         lualine_y = { "progress" },
         lualine_z = { "location" },
@@ -66,9 +66,13 @@ return {
       "hrsh7th/cmp-nvim-lsp",
       -- Adds a number of user-friendly snippets
       "rafamadriz/friendly-snippets",
-      -- Read y to go LSP symbols
+      -- Ready to go LSP symbols
       "onsails/lspkind.nvim",
+      -- Other
       "hrsh7th/cmp-path",
+      "hrsh7th/cmp-cmdline",
+      "hrsh7th/cmp-buffer",
+      "rcarriga/cmp-dap",
     },
     config = function()
       require("user.cmp")
@@ -170,11 +174,9 @@ return {
         -- Use fast wrap with <M-e>
         fast_wrap = {},
       })
-      local cmp_autopairs = require("nvim-autopairs.completion.cmp")
-      local cmp = require("cmp")
-      cmp.event:on(
+      require("cmp").event:on(
         "confirm_done",
-        cmp_autopairs.on_confirm_done()
+        require("nvim-autopairs.completion.cmp").on_confirm_done()
       )
     end
   },
@@ -358,7 +360,7 @@ return {
     config = function()
       require("tabnine").setup({
         disable_auto_comment = true,
-        accept_keymap = "<Tab>",
+        accept_keymap = "<M-Tab>",
         dismiss_keymap = "<C-]>",
         debounce_ms = 800,
         -- suggestion_color = { gui = "#808080", cterm = 244 },
@@ -386,5 +388,16 @@ return {
       require("project_nvim").setup({ manual_mode = true })
       require("telescope").load_extension("projects")
     end,
+  },
+  {
+    "sindrets/diffview.nvim",
+  },
+  {
+    "akinsho/bufferline.nvim",
+    version = "*",
+    dependencies = 'nvim-tree/nvim-web-devicons',
+    opts = {
+      highlights = require("user.colors.bufferline").highlights
+    }
   }
 }

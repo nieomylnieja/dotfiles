@@ -19,7 +19,9 @@ local _notif_consumer = function(client)
   return {}
 end
 
-require("neotest").setup({
+local neotest = require("neotest")
+
+neotest.setup({
   adapters = {
     require("neotest-go")({
       experimental = {
@@ -29,5 +31,8 @@ require("neotest").setup({
   },
   consumers = {
     notify = _notif_consumer,
+  },
+  output = {
+    open_on_run = false,
   },
 })

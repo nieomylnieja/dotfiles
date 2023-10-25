@@ -27,8 +27,6 @@ map("v", "<A-k>", ":m '<-2<cr>gv=gv", { desc = "Move up" })
 -- buffers
 map("n", "<S-h>", "<cmd>bprevious<cr>", { desc = "Prev buffer" })
 map("n", "<S-l>", "<cmd>bnext<cr>", { desc = "Next buffer" })
-map("n", "[b", "<cmd>bprevious<cr>", { desc = "Prev buffer" })
-map("n", "]b", "<cmd>bnext<cr>", { desc = "Next buffer" })
 
 -- Clear search with <esc>
 map({ "i", "n" }, "<esc>", "<cmd>noh<cr><esc>", { desc = "Escape and clear hlsearch" })
@@ -47,7 +45,7 @@ map("v", ">", ">gv")
 
 local wk = require("which-key")
 
-map("n", "<leader>e", "<cmd>Telescope file_browser path=%:p:h<cr>", { noremap = true })
+map("n", "<leader>e", "<cmd>Telescope file_browser path=%:p:h select_buffer=true<cr>", { noremap = true })
 
 wk.register({
   f = {
@@ -80,8 +78,71 @@ wk.register({
     t = { "<cmd>TodoTrouble<cr>", "TODO comments" },
     m = { "<cmd>lua require('neotest').run.run()<cr>", "Test Method" },
     f = { "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", "Test File" },
+    a = { "<cmd>lua require('neotest').run.run({vim.fn.getcwd()})<cr>", "Test Whole Project" },
+    p = { "<cmd>lua require('neotest').run.run({vim.fn.fnamemodify(vim.fn.expand('%:p'),':h')})<cr>", "Test Directory" },
     s = { "<cmd>lua require('neotest').summary.toggle()<cr>", "Test Summary" },
     S = { "<cmd>lua require('neotest').output_panel.open()<cr>", "Test Summary panel" },
-    o = { "<cmd>lua require('neotest').output.open()<cr>", "Output Window" }
+    o = { "<cmd>lua require('neotest').output.open({enter=true})<cr>", "Output Window" }
   }
 }, { prefix = "<leader>" })
+
+-- Common kill function for bdelete and bwipeout
+-- credits: based LunarVim which in turn is based on bbye and nvim-bufdel
+local function buf_kill()
+  local kill_command = "bd"
+  local force = false
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local bufname = vim.api.nvim_buf_get_name(bufnr)
+
+  local choice
+  if vim.bo[bufnr].modified then
+    choice = vim.fn.confirm(string.format([[Save changes to "%s"?]], bufname), "&Yes\n&No\n&Cancel")
+    if choice == 1 then
+      vim.api.nvim_buf_call(bufnr, function()
+        vim.cmd("w")
+      end)
+    elseif choice == 2 then
+      force = true
+    else
+      return
+    end
+  end
+
+  -- Get list of windows IDs with the buffer to close
+  local windows = vim.tbl_filter(function(win)
+    return vim.api.nvim_win_get_buf(win) == bufnr
+  end, vim.api.nvim_list_wins())
+
+  if force then
+    kill_command = kill_command .. "!"
+  end
+
+  -- Get list of active buffers
+  local buffers = vim.tbl_filter(function(buf)
+    return vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted
+  end, vim.api.nvim_list_bufs())
+
+  -- If there is only one buffer (which has to be the current one), vim will
+  -- create a new buffer on :bd.
+  -- For more than one buffer, pick the previous buffer (wrapping around if necessary)
+  if #buffers > 1 and #windows > 0 then
+    for i, v in ipairs(buffers) do
+      if v == bufnr then
+        local prev_buf_idx = i == 1 and #buffers or (i - 1)
+        local prev_buffer = buffers[prev_buf_idx]
+        for _, win in ipairs(windows) do
+          vim.api.nvim_win_set_buf(win, prev_buffer)
+        end
+      end
+    end
+  end
+
+  -- Check if buffer still exists, to ensure the target buffer wasn't killed
+  -- due to options like bufhidden=wipe.
+  if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buflisted then
+    vim.cmd(string.format("%s %d", kill_command, bufnr))
+  end
+end
+
+map("n", "<leader>q", buf_kill, { desc = "Close Buffer", silent = true })

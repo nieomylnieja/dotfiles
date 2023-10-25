@@ -14,7 +14,7 @@ shopt -s extglob
 shopt -s direxpand
 
 # Set VIM prompt
-alias vim='lvim'
+alias vim='nvim'
 set -o vi
 
 #ignore upper and lowercase when TAB completion
@@ -93,7 +93,7 @@ if [ -x "$(command -v kubectl)" ]; then
 	alias k=kubectl
 	# extend completion to work with the alias
 	complete -F __start_kubectl k
-  export KUBE_EDITOR=lvim
+  export KUBE_EDITOR=nvim
 fi
 
 # krew path

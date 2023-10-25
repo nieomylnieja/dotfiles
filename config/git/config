@@ -23,14 +23,14 @@
 	prompt = false
 
 [mergetool "vimdiff"]
-	cmd = lvim -d $LOCAL $BASE $REMOTE $MERGED -c '$wincmd w' -c 'wincmd J'
+	cmd = nvim -c DiffviewOpen
 
 [init]
 	defaultBranch = main
 
 [core]
 	excludesfile = /home/mh/.dotfiles/config/git/gitignore-global
-	editor = lvim
+	editor = nvim
   autocrlf = input
   pager = delta
 

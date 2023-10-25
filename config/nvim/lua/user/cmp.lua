@@ -8,13 +8,6 @@ tabnine:setup({
   max_num_results = 3,
 })
 
-local source_mapping = {
-	nvim_lsp = "[LSP]",
-	luasnip = "[Snip]",
-	cmp_tabnine = "[TN]",
-	path = "[Path]",
-}
-
 cmp.setup({
   snippet = {
     expand = function(args)
@@ -62,23 +55,56 @@ cmp.setup({
     { name = "path" },
   },
   formatting = {
+    fields = { "kind", "abbr", "menu" },
     format = function(entry, vim_item)
       vim_item.kind = require("lspkind").symbolic(vim_item.kind, { mode = "symbol_text" })
-      vim_item.menu = source_mapping[entry.source.name]
+      local strings = vim.split(vim_item.kind, "%s", { trimempty = true })
+      local kind, menu = strings[1], strings[2]
       if entry.source.name == "cmp_tabnine" then
         local detail = (entry.completion_item.labelDetails or {}).detail
-        vim_item.kind = ""
+        kind = "󱙺"
         if detail and detail:find('.*%%.*') then
-          vim_item.kind = vim_item.kind .. ' ' .. detail
+          menu = detail
         end
-
         if (entry.completion_item.data or {}).multiline then
-          vim_item.kind = vim_item.kind .. ' ' .. '[ML]'
+          menu = menu .. ' ' .. '[ML]'
         end
       end
-      local maxwidth = 80
-      vim_item.abbr = string.sub(vim_item.abbr, 1, maxwidth)
+
+      vim_item.kind = " " .. (kind or "") .. " "
+      vim_item.menu = "    (" .. (menu or "") .. ")"
+      vim_item.abbr = string.sub(vim_item.abbr, 1, 30)
       return vim_item
     end,
+  },
+})
+
+-- `/` cmdline setup.
+cmp.setup.cmdline('/', {
+  mapping = cmp.mapping.preset.cmdline(),
+  sources = {
+    { name = 'buffer' }
+  }
+})
+
+-- `:` cmdline setup.
+cmp.setup.cmdline(':', {
+  mapping = cmp.mapping.preset.cmdline(),
+  sources = cmp.config.sources({
+    { name = 'path' }
+  }, {
+    {
+      name = 'cmdline',
+      option = {
+        ignore_cmds = { 'Man', '!' }
+      }
+    }
+  })
+})
+
+-- DAP, only works with daps supporting 'supportsCompletionsRequest'.
+cmp.setup.filetype({ "dap-repl", "dapui_watches", "dapui_hover" }, {
+  sources = {
+    { name = "dap" },
   },
 })

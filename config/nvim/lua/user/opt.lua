@@ -35,7 +35,10 @@ opt.splitright = true
 opt.termguicolors = true
 opt.timeoutlen = 400
 opt.undofile = true
-opt.scrolloff = 999                          -- Center the view
+opt.scrolloff = 999 -- Center the view
+
+-- Relevant for popup menus, like cmp
+opt.pumheight = 10 -- limit to 10 entries
 
 -- interval for writing swap file to disk, also used by gitsigns
 opt.updatetime = 250

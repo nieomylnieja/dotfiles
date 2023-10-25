@@ -58,7 +58,10 @@ require("which-key").register({
   d = {
     name = "+Debug",
     b = { function() dap.toggle_breakpoint() end, "Toggle Breakpoint" },
-    d = { function()
+    B = { function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end, "Breakpoint Condition" },
+    c = { function() dap.continue() end, "Continue" },
+    a = { function() dap.continue({ before = dap_get_args }) end, "Run with Args" },
+    m = { function()
       local ft = vim.bo.filetype
       if ft == "go" then
         require("dap-go").debug_test()
@@ -66,9 +69,6 @@ require("which-key").register({
         vim.notify("unsupported DAP for running test", vim.log.levels.ERROR)
       end
     end, "Debug test" },
-    B = { function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end, "Breakpoint Condition" },
-    c = { function() dap.continue() end, "Continue" },
-    a = { function() dap.continue({ before = dap_get_args }) end, "Run with Args" },
     C = { function() dap.run_to_cursor() end, "Run to Cursor" },
     g = { function() dap.goto_() end, "Go to line (no execute)" },
     i = { function() dap.step_into() end, "Step Into" },
