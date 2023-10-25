@@ -56,21 +56,36 @@ local servers = {
   },
   gopls = {
     settings = {
-      usePlaceholders = true,
-      analyses = {
-        nilness = true,
-        shadow = true,
-        unusedparams = true,
-        unusewrites = true,
-      },
-      hints = {
-        assignVariableTypes = true,
-        compositeLiteralFields = true,
-        constantValues = true,
-        functionTypeParameters = true,
-        parameterNames = true,
-        rangeVariableTypes = true,
-      },
+      gopls = {
+        usePlaceholders = true,
+        staticcheck = true,
+        semanticTokens = true,
+        completeUnimported = true,
+        analyses = {
+          unreachable = true,
+          nilness = true,
+          shadow = true,
+          unusedparams = true,
+          unusewrites = true,
+        },
+        hints = {
+          assignVariableTypes = true,
+          compositeLiteralFields = true,
+          constantValues = true,
+          functionTypeParameters = true,
+          parameterNames = true,
+          rangeVariableTypes = true,
+        },
+        codelenses = {
+          generate = true,   -- show the `go generate` lens.
+          gc_details = true, -- Show a code lens toggling the display of gc's choices.
+          test = true,
+          tidy = true,
+          vendor = true,
+          regenerate_cgo = true,
+          upgrade_dependency = true,
+        }
+      }
     }
   },
 }
@@ -108,7 +123,10 @@ M.setup = function()
   require("neodev").setup()
 
   local capabilities = vim.lsp.protocol.make_client_capabilities()
-  capabilities = require("cmp_nvim_lsp").default_capabilities(capabilities)
+  capabilities = vim.tbl_deep_extend(
+    "force",
+    capabilities,
+    require("cmp_nvim_lsp").default_capabilities(capabilities))
   -- Ensure the servers above are installed
   local mason_lspconfig = require "mason-lspconfig"
 
@@ -121,6 +139,15 @@ M.setup = function()
 
   mason_lspconfig.setup_handlers {
     function(server_name)
+      if server_name == "gopls" then
+        -- Remove poorly supported tokens.
+        for i, item in ipairs(capabilities.textDocument.semanticTokens.tokenTypes) do
+          if item == "type" then
+            table.remove(capabilities.textDocument.semanticTokens.tokenTypes, i)
+            break
+          end
+        end
+      end
       require("lspconfig")[server_name].setup(vim.tbl_deep_extend(
         "force",
         {

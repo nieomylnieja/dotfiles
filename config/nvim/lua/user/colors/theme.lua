@@ -202,7 +202,7 @@ end
 
 theme.loadTreeSitter = function()
   return {
-    ["@constructor"] = { fg = nord.glacier },
+    ["@constructor"] = { fg = nord.off_blue },
     ["@constant"] = { fg = nord.darkest_white, style = "bold" },
     ["@float"] = { fg = nord.purple },
     ["@number"] = { fg = nord.purple },
@@ -211,7 +211,7 @@ theme.loadTreeSitter = function()
     ["@exception"] = { fg = nord.purple },
     ["@funtion.macro"] = { fg = nord.teal },
     ["@include"] = { fg = nord.glacier },
-    ["@label"] = { fg = nord.purple },
+    ["@label"] = { fg = nord.blue },
     ["@operator"] = { fg = nord.glacier },
     ["@parameter"] = { fg = nord.darkest_white },
     ["@punctuation.delimiter"] = { fg = nord.white },
@@ -283,13 +283,16 @@ theme.loadSemanitcTokens = function()
     ["@lsp.type.number"] = { link = "@number" },
     ["@lsp.type.operator"] = { link = "@operator" },
     ["@lsp.type.parameter"] = { link = "@parameter" },
+    ["@lsp.type.typeParameter"] = { fg = nord.darkest_white },
     ["@lsp.type.property"] = { link = "@property" },
     ["@lsp.type.selfKeyword"] = { link = "@variable.builtin" },
     ["@lsp.type.string.rust"] = { link = "@string" },
     ["@lsp.type.typeAlias"] = { link = "@type.definition" },
     ["@lsp.type.unresolvedReference"] = { undercurl = true, sp = nord.red },
     ["@lsp.type.variable"] = {}, -- use treesitter styles for regular variables
+    ["@lsp.typemod.variable.defaultLibrary"] = { fg = nord.glacier },
     ["@lsp.typemod.variable.readonly"] = { fg = nord.darkest_white, style = "bold" },
+    ["@lsp.typemod.type.definition"] = { fg = nord.teal },
   }
 end
 
@@ -312,7 +315,7 @@ theme.loadLSP = function()
     LspDiagnosticsSignError = { fg = nord.red },                                  -- used for "Error" diagnostic signs in sign column
     LspDiagnosticsFloatingError = { fg = nord.red },                              -- used for "Error" diagnostic messages in the diagnostics float
     LspDiagnosticsVirtualTextError = { fg = nord.red },                           -- Virtual text "Error"
-    LspDiagnosticsUnderlineError = { style = "undercurl", sp = nord.red },        -- used to underline "Error" diagnostics.
+    LspDiagnosticsUnderlineError = { fg = nord.red, style = "underline,bold" },        -- used to underline "Error" diagnostics.
     LspDiagnosticsDefaultWarning = { fg = nord.purple },                          -- used for "Warning" diagnostic signs in sign column
     LspDiagnosticsSignWarning = { fg = nord.purple },                             -- used for "Warning" diagnostic signs in sign column
     LspDiagnosticsFloatingWarning = { fg = nord.purple },                         -- used for "Warning" diagnostic messages in the diagnostics float
