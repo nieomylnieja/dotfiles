@@ -74,7 +74,6 @@ in {
     pass
     pavucontrol
     pdm
-    pgadmin4-desktopmode
     picom
     ripgrep
     rofi-power-menu
