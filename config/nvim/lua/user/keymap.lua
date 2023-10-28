@@ -45,7 +45,7 @@ map("v", ">", ">gv")
 
 local wk = require("which-key")
 
-map("n", "<leader>e", "<cmd>Telescope file_browser path=%:p:h select_buffer=true<cr>", { noremap = true })
+map("n", "<leader>e", "<cmd>:NvimTreeToggle<cr>", { noremap = true })
 
 wk.register({
   f = {

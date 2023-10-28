@@ -315,7 +315,7 @@ theme.loadLSP = function()
     LspDiagnosticsSignError = { fg = nord.red },                                  -- used for "Error" diagnostic signs in sign column
     LspDiagnosticsFloatingError = { fg = nord.red },                              -- used for "Error" diagnostic messages in the diagnostics float
     LspDiagnosticsVirtualTextError = { fg = nord.red },                           -- Virtual text "Error"
-    LspDiagnosticsUnderlineError = { fg = nord.red, style = "underline,bold" },        -- used to underline "Error" diagnostics.
+    LspDiagnosticsUnderlineError = { fg = nord.red, style = "underline,bold" },   -- used to underline "Error" diagnostics.
     LspDiagnosticsDefaultWarning = { fg = nord.purple },                          -- used for "Warning" diagnostic signs in sign column
     LspDiagnosticsSignWarning = { fg = nord.purple },                             -- used for "Warning" diagnostic signs in sign column
     LspDiagnosticsFloatingWarning = { fg = nord.purple },                         -- used for "Warning" diagnostic messages in the diagnostics float
@@ -420,10 +420,11 @@ theme.loadPlugins = function()
     NvimTreeGitNew               = { fg = nord.green },
     NvimTreeImageFile            = { fg = nord.purple },
     NvimTreeExecFile             = { fg = nord.green },
-    NvimTreeSpecialFile          = { fg = nord.glacier, style = "underline" },
-    NvimTreeFolderName           = { fg = nord.blue },
+    NvimTreeSpecialFile          = { fg = nord.off_blue, style = "underline" },
+    NvimTreeFolderName           = { fg = nord.darkest_white },
+    NvimTreeOpenedFolderName     = { fg = nord.darkest_white },
     NvimTreeEmptyFolderName      = { fg = nord.dark_gray },
-    NvimTreeFolderIcon           = { fg = nord.darkest_white },
+    NvimTreeFolderIcon           = { fg = nord.light_gray_bright },
     NvimTreeIndentMarker         = { fg = nord.dark_gray },
 
     -- WhichKey

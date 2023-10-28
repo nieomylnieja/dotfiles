@@ -132,13 +132,6 @@ return {
     end
   },
   {
-    "nvim-telescope/telescope-file-browser.nvim",
-    dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
-    config = function()
-      require("telescope").load_extension("file_browser")
-    end
-  },
-  {
     "folke/todo-comments.nvim",
     dependencies = { "nvim-lua/plenary.nvim" },
     opts = {}
@@ -222,12 +215,10 @@ return {
         },
         filetypes_denylist = {
           "alpha",
-          "neo-tree",
-          "packer",
+          "NvimTree",
           "neogitstatus",
           "Trouble",
           "Outline",
-          "spectre_panel",
           "toggleterm",
           "DressingSelect",
           "TelescopePrompt",
@@ -377,15 +368,14 @@ return {
   {
     "NvChad/nvim-colorizer.lua",
     config = function()
-      require("colorizer").setup()
+      require("colorizer").setup({})
     end
   },
   {
     "ahmedkhalf/project.nvim",
-    event = "VeryLazy",
     dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
     config = function()
-      require("project_nvim").setup({ manual_mode = true })
+      require("project_nvim").setup({})
       require("telescope").load_extension("projects")
     end,
   },
@@ -397,7 +387,17 @@ return {
     version = "*",
     dependencies = 'nvim-tree/nvim-web-devicons',
     opts = {
-      highlights = require("user.colors.bufferline").highlights
+      highlights = require("user.colors.bufferline").highlights,
+      options = {
+        offsets = {
+          {
+            filetype = "NvimTree",
+            text = "Tree",
+            highlight = "NvimTreeNormal",
+            text_align = "left",
+          },
+        },
+      }
     }
   },
   {
@@ -433,4 +433,19 @@ return {
       vim.cmd("autocmd! TermOpen term://* lua set_terminal_keymaps()")
     end
   },
+  {
+    "nvim-tree/nvim-tree.lua",
+    version = "*",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      require("nvim-tree").setup({
+        sync_root_with_cwd = true,
+        respect_buf_cwd = true,
+        update_focused_file = {
+          enable = true,
+          update_root = true
+        },
+      })
+    end,
+  }
 }
