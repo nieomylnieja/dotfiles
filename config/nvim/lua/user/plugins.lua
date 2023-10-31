@@ -83,7 +83,7 @@ return {
     cmd = "Mason",
     build = ":MasonUpdate",
     opts = {
-      ensure_installed = { "stylua", "luacheck", "delve" },
+      ensure_installed = { "stylua", "luacheck", "delve", "goimports" },
       ui = { border = "rounded" }
     },
     ---@param opts MasonSettings | {ensure_installed: string[]}

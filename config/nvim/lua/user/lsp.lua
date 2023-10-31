@@ -13,8 +13,14 @@ local luacheck = {
   lintSource = "luacheck"
 }
 
+local goimports = {
+  formatCommand = "goimports",
+  formatStdin = true,
+}
+
 local languages = {
   lua = { stylua, luacheck },
+  go = { goimports },
 }
 
 local servers = {
