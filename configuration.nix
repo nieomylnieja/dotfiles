@@ -143,7 +143,7 @@ in {
     neovim
     wget
     git
-    factorio
+    experimental.factorio
   ];
 
   # Support unpached dynamic binaries out of the box.

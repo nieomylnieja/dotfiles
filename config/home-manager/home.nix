@@ -33,6 +33,7 @@ in {
     csvkit
     delta
     direnv
+    discord
     docker
     docker-compose
     du-dust
