@@ -94,6 +94,7 @@ local servers = {
       }
     }
   },
+  jsonls = {},
 }
 
 local function keymap(bufnr)
