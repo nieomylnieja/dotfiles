@@ -34,8 +34,6 @@ in {
     delta
     direnv
     discord
-    docker
-    docker-compose
     du-dust
     dunst
     eza
@@ -71,6 +69,8 @@ in {
     nodejs
     nodePackages.npm
     nushell
+    ocaml
+    opam
     pamixer
     pass
     pavucontrol

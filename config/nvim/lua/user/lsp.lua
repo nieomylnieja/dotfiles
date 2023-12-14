@@ -94,6 +94,7 @@ local servers = {
       }
     }
   },
+  ocamllsp = {},
 }
 
 local function keymap(bufnr)

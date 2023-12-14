@@ -1,5 +1,10 @@
+# Copyright (c) 2016-present Sven Greb <development@svengreb.de>
+# This source code is licensed under the MIT license found in the license file.
+
 COLOR tty
 
+TERM alacritty
+TERM alacritty-direct
 TERM ansi
 TERM *color*
 TERM con[0-9]*x[0-9]*
@@ -40,6 +45,7 @@ TERM xterm*
 TERM xterm-color
 TERM xterm-88color
 TERM xterm-256color
+TERM xterm-kitty
 
 #+-----------------+
 #+ Global Defaults +
