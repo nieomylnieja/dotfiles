@@ -94,7 +94,9 @@ local servers = {
       }
     }
   },
-  ocamllsp = {},
+  ocamllsp = {
+    single_file_support = true,
+  },
 }
 
 local function keymap(bufnr)
