@@ -94,10 +94,13 @@ local servers = {
       }
     }
   },
+<<<<<<< HEAD
   ocamllsp = {
     single_file_support = true,
   },
+=======
   jsonls = {},
+>>>>>>> b1dfe9a388961c178d479c9cd3bf118467c2b514
 }
 
 local function keymap(bufnr)
