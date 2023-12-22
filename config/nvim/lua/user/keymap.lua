@@ -52,7 +52,7 @@ wk.register({
     name = "+Find",
     b = { "<cmd>Telescope buffers<cr>", "Buffers" },
     c = { "<cmd>Telescope git_branches<cr>", "Checkout branch" },
-    f = { "<cmd>Telescope find_files<cr>", "Find file" },
+    f = { "<cmd>Telescope find_files hidden=true<cr>", "Find file" },
     h = { "<cmd>Telescope help_tags<cr>", "Find help" },
     H = { "<cmd>Telescope highlights<cr>", "Find highlight groups" },
     M = { "<cmd>Telescope man_pages<cr>", "Man pages" },
