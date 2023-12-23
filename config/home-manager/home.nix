@@ -69,6 +69,7 @@ in {
     nodejs
     nodePackages.npm
     nushell
+    obsidian
     ocaml
     opam
     pamixer
