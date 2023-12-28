@@ -18,9 +18,15 @@ local goimports = {
   formatStdin = true,
 }
 
+local ocamlformat = {
+  formatCommand = "ocamlformat",
+  formatStdin = true,
+}
+
 local languages = {
   lua = { stylua, luacheck },
   go = { goimports },
+  ocaml = { ocamlformat },
 }
 
 local servers = {
@@ -126,10 +132,7 @@ local function keymap(bufnr)
 end
 
 M.setup = function()
-  -- mason-lspconfig requires that these setup functions are called in this order
-  -- before setting up the servers.
   require("mason").setup()
-  require("mason-lspconfig").setup()
   require("neodev").setup()
 
   for _, sign in ipairs({
@@ -146,19 +149,10 @@ M.setup = function()
     "force",
     capabilities,
     require("cmp_nvim_lsp").default_capabilities(capabilities))
-  -- Ensure the servers above are installed
-  local mason_lspconfig = require "mason-lspconfig"
 
-  mason_lspconfig.setup {
-    ensure_installed = vim.tbl_keys(servers),
-  }
-  local on_attach = function(_, bufnr)
-    keymap(bufnr)
-  end
-
-  mason_lspconfig.setup_handlers {
-    function(server_name)
-      if server_name == "gopls" then
+  local get_on_attach = function(server)
+    return function(_, bufnr)
+      if server == "gopls" then
         -- Remove poorly supported tokens.
         for i, item in ipairs(capabilities.textDocument.semanticTokens.tokenTypes) do
           if item == "type" then
@@ -167,15 +161,19 @@ M.setup = function()
           end
         end
       end
-      require("lspconfig")[server_name].setup(vim.tbl_deep_extend(
-        "force",
-        {
-          capabilities = capabilities,
-          on_attach = on_attach,
-        },
-        servers[server_name]))
-    end,
-  }
+      keymap(bufnr)
+    end
+  end
+
+  for server, config in pairs(servers) do
+    require("lspconfig")[server].setup(vim.tbl_deep_extend(
+      "force",
+      {
+        capabilities = capabilities,
+        on_attach = get_on_attach(server),
+      },
+      config))
+  end
 end
 
 return M

@@ -50,7 +50,6 @@ return {
     dependencies = {
       "folke/neodev.nvim",
       "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
     },
     config = function()
       require("user.lsp").setup()
@@ -84,7 +83,12 @@ return {
     cmd = "Mason",
     build = ":MasonUpdate",
     opts = {
-      ensure_installed = { "stylua", "luacheck", "delve", "goimports" },
+      ensure_installed = {
+        "stylua",
+        "luacheck",
+        "delve",
+        "goimports",
+      },
       ui = { border = "rounded" }
     },
     ---@param opts MasonSettings | {ensure_installed: string[]}
