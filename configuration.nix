@@ -138,6 +138,10 @@ in {
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
+  # Required for obsidian to work.
+  nixpkgs.config.permittedInsecurePackages = [
+    "electron-25.9.0"
+  ];
 
   # List packages installed in system profile. To search, run:
   environment.systemPackages = with pkgs; [

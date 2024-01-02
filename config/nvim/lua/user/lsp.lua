@@ -27,6 +27,7 @@ local languages = {
   lua = { stylua, luacheck },
   go = { goimports },
   ocaml = { ocamlformat },
+  -- python = {  },
 }
 
 local servers = {
@@ -104,6 +105,32 @@ local servers = {
     single_file_support = true,
   },
   jsonls = {},
+  yamlls = {
+    settings = {
+      yaml = {
+        format = {
+          enable = true,
+        },
+        schemas = {
+          -- { uri = "https://json.schemastore.org/package-lock.json" },
+          -- { uri = "https://json.schemastore.org/yarn.lock" },
+        }
+      }
+    }
+  },
+  ruff_lsp = {},
+  pyright = {
+    settings = {
+      python = {
+        analysis = {
+          -- We want to rely on ruff diagnostics, having both creates duplicates.
+          ignore = { "*" },
+        }
+      }
+    }
+  },
+  tsserver = {},
+  rnix = {},
 }
 
 local function keymap(bufnr)
@@ -151,7 +178,7 @@ M.setup = function()
     require("cmp_nvim_lsp").default_capabilities(capabilities))
 
   local get_on_attach = function(server)
-    return function(_, bufnr)
+    return function(client, bufnr)
       if server == "gopls" then
         -- Remove poorly supported tokens.
         for i, item in ipairs(capabilities.textDocument.semanticTokens.tokenTypes) do
@@ -160,6 +187,9 @@ M.setup = function()
             break
           end
         end
+      end
+      if server == "ruff_lsp" then
+        client.server_capabilities.hoverProvider = false
       end
       keymap(bufnr)
     end

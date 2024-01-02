@@ -84,10 +84,24 @@ return {
     build = ":MasonUpdate",
     opts = {
       ensure_installed = {
+        -- LSP
+        "lua-language-server",
+        "efm",
+        "gopls",
+        "yaml-language-server",
+        "json-lsp",
+        "pyright",
+        "ruff-lsp",
+        "typescript-language-server",
+        "rnix-lsp",
+        -- Linters/formatters
         "stylua",
         "luacheck",
         "delve",
         "goimports",
+        "ruff",
+        -- DAP
+        "delve",
       },
       ui = { border = "rounded" }
     },

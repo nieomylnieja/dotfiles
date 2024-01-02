@@ -79,6 +79,7 @@ in {
     picom
     ripgrep
     rofi-power-menu
+    rustup
     feh
     flameshot
     sops
