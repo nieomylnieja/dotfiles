@@ -11,7 +11,7 @@ install/nix:
 	sh <(curl -L https://nixos.org/nix/install) --no-daemon && . ~/.nix-profile/etc/profile.d/nix.sh
 
 install/home-manager:
-	nix-channel --add https://github.com/nix-community/home-manager/archive/release-23.05.tar.gz home-manager
+	nix-channel --add https://github.com/nix-community/home-manager/archive/release-23.11.tar.gz home-manager
 	nix-channel --update
 	nix-shell '<home-manager>' -A install
 	home-manager switch --flake ~/.dotfiles/config/home-manager#mh
