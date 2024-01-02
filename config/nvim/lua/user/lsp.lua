@@ -130,7 +130,21 @@ local servers = {
     }
   },
   tsserver = {},
-  rnix = {},
+  -- Installed through `nix profile install github:oxalica/nil`.
+  nil_ls = {
+    settings = {
+      ["nil"] = {
+        formatting = {
+          command = { "nixpkgs-fmt" },
+        },
+        nix = {
+          flake = {
+            autoArchive = true,
+          }
+        }
+      }
+    }
+  },
 }
 
 local function keymap(bufnr)

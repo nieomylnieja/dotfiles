@@ -93,7 +93,7 @@ return {
         "pyright",
         "ruff-lsp",
         "typescript-language-server",
-        "rnix-lsp",
+        "nil",
         -- Linters/formatters
         "stylua",
         "luacheck",

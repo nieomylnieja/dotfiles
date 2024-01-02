@@ -22,3 +22,5 @@ export LC_ALL=$LANG
 export QT_QPA_PLATFORMTHEME=qt5ct
 # Might fix some ixxues with java GUI apps
 export _JAVA_AWT_WM_NONREPARENTING=1
+# Fix issues with carg --git
+export CARGO_NET_GIT_FETCH_WITH_CLI=true 

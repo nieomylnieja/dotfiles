@@ -66,6 +66,7 @@ in {
     (nerdfonts.override {fonts = ["Mononoki"];})
     neofetch
     neovim
+    nixpkgs-fmt
     nodejs
     nodePackages.npm
     nushell
