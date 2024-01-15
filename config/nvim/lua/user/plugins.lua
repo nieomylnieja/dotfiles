@@ -56,6 +56,13 @@ return {
     end
   },
   {
+    "nvimtools/none-ls.nvim",
+    lazy = true,
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+    }
+  },
+  {
     -- Autocompletion
     "hrsh7th/nvim-cmp",
     dependencies = {
@@ -86,7 +93,6 @@ return {
       ensure_installed = {
         -- LSP
         "lua-language-server",
-        "efm",
         "gopls",
         "yaml-language-server",
         "json-lsp",
@@ -99,7 +105,12 @@ return {
         "luacheck",
         "delve",
         "goimports",
-        "ruff",
+        "ruff", -- Required for ruff-lsp to work.
+        "shfmt",
+        "shellcheck",
+        -- Code Actions
+        "gomodifytags",
+        "impl",
         -- DAP
         "delve",
       },
