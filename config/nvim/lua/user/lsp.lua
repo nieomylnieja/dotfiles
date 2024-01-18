@@ -16,9 +16,9 @@ local servers = {
         },
         workspace = {
           library = {
-            [vim.fn.expand "$VIMRUNTIME/lua"] = true,
-            [vim.fn.expand "$VIMRUNTIME/lua/vim/lsp"] = true,
-            [vim.fn.stdpath "data" .. "/lazy/lazy.nvim/lua/lazy"] = true,
+            [vim.fn.expand("$VIMRUNTIME/lua")] = true,
+            [vim.fn.expand("$VIMRUNTIME/lua/vim/lsp")] = true,
+            [vim.fn.stdpath("data") .. "/lazy/lazy.nvim/lua/lazy"] = true,
           },
           maxPreload = 100000,
           preloadFileSize = 10000,
@@ -26,7 +26,7 @@ local servers = {
         },
         telemetry = { enable = false },
       },
-    }
+    },
   },
   gopls = {
     settings = {
@@ -52,16 +52,18 @@ local servers = {
           rangeVariableTypes = true,
         },
         codelenses = {
-          generate = true,  -- show the `go generate` lens.
-          gc_details = true, -- Show a code lens toggling the display of gc's choices.
-          test = true,
+          generate = true,
+          gc_details = true,
+          -- We're using neotest for that.
+          -- test = true,
           tidy = true,
           vendor = true,
           regenerate_cgo = true,
+          run_govulncheck = true,
           upgrade_dependency = true,
-        }
-      }
-    }
+        },
+      },
+    },
   },
   ocamllsp = {
     single_file_support = true,
@@ -76,9 +78,9 @@ local servers = {
         schemas = {
           -- { uri = "https://json.schemastore.org/package-lock.json" },
           -- { uri = "https://json.schemastore.org/yarn.lock" },
-        }
-      }
-    }
+        },
+      },
+    },
   },
   ruff_lsp = {},
   pyright = {
@@ -87,9 +89,9 @@ local servers = {
         analysis = {
           -- We want to rely on ruff diagnostics, having both creates duplicates.
           ignore = { "*" },
-        }
-      }
-    }
+        },
+      },
+    },
   },
   tsserver = {},
   -- Installed through `nix profile install github:oxalica/nil`.
@@ -102,10 +104,10 @@ local servers = {
         nix = {
           flake = {
             autoArchive = true,
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   },
 }
 
@@ -150,10 +152,8 @@ M.setup = function()
   end
 
   local capabilities = vim.lsp.protocol.make_client_capabilities()
-  capabilities = vim.tbl_deep_extend(
-    "force",
-    capabilities,
-    require("cmp_nvim_lsp").default_capabilities(capabilities))
+  capabilities =
+      vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities(capabilities))
 
   local get_on_attach = function(server)
     return function(client, bufnr)
@@ -179,13 +179,10 @@ M.setup = function()
   })
 
   for server, config in pairs(servers) do
-    require("lspconfig")[server].setup(vim.tbl_deep_extend(
-      "force",
-      {
-        capabilities = capabilities,
-        on_attach = get_on_attach(server),
-      },
-      config))
+    require("lspconfig")[server].setup(vim.tbl_deep_extend("force", {
+      capabilities = capabilities,
+      on_attach = get_on_attach(server),
+    }, config))
   end
 end
 
