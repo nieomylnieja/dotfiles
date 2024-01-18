@@ -84,13 +84,14 @@ local servers = {
         hints = {
           assignVariableTypes = true,
           compositeLiteralFields = true,
+          compositeLiteralTypes = true,
           constantValues = true,
           functionTypeParameters = true,
           parameterNames = true,
           rangeVariableTypes = true,
         },
         codelenses = {
-          generate = true,   -- show the `go generate` lens.
+          generate = true,  -- show the `go generate` lens.
           gc_details = true, -- Show a code lens toggling the display of gc's choices.
           test = true,
           tidy = true,
@@ -149,7 +150,6 @@ local servers = {
 
 local function keymap(bufnr)
   local ts = require("telescope.builtin")
-  -- TODO: here
   -- See `:help vim.lsp.*` for documentation on any of the below functions
   local nmap = function(keys, func, desc)
     if desc then
@@ -160,9 +160,12 @@ local function keymap(bufnr)
 
   nmap("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
   nmap("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
+  nmap("<leader>cl", vim.lsp.codelens.run, "[C]ode [L]ens")
   nmap("gd", ts.lsp_definitions, "[G]oto [D]efinition")
   nmap("gi", ts.lsp_implementations, "[G]oto [I]mplementation")
-  nmap("gr", ts.lsp_references, "[G]oto [R]eferences")
+  nmap("gr", function()
+    ts.lsp_references({ include_declaration = false })
+  end, "[G]oto [R]eferences")
   nmap("<leader>ds", ts.lsp_document_symbols, "[D]ocument [S]ymbols")
   nmap("<leader>ws", ts.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
   nmap("<leader>fm", vim.lsp.buf.format, "[F]or[M]at buffer")
