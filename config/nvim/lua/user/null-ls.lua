@@ -1,0 +1,43 @@
+local M = {}
+
+M.setup = function(lsp_config)
+  local null_ls = require("null-ls")
+  local custom = require("user.null-ls-custom")
+
+  local fmt = null_ls.builtins.formatting
+  local lint = null_ls.builtins.diagnostics
+  local action = null_ls.builtins.code_actions
+
+  local sources = {
+    -- FORMATTING:
+    -- Lua
+    fmt.stylua,
+    -- Go
+    fmt.goimports,
+    -- OCaml
+    fmt.ocamlformat,
+    -- Shell
+    fmt.shfmt,
+    -- All types
+    fmt.trim_newlines,
+    fmt.trim_whitespace,
+
+    -- LINTING:
+    -- Shell
+    lint.shellcheck,
+
+    -- ACTIONS:
+    -- Go
+    action.impl,
+    -- custom.gomodifytags(),
+    action.gomodifytags.with({
+      args = { "-quiet", "-transform camelcase", "--skip-unexported" },
+    }),
+    -- Shell
+    action.shellcheck,
+  }
+
+  null_ls.setup(vim.tbl_deep_extend("force", lsp_config, { sources = sources }))
+end
+
+return M

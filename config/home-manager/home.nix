@@ -78,6 +78,7 @@ in {
     pavucontrol
     pdm
     picom
+    pinentry-qt
     ripgrep
     rofi-power-menu
     rustup
@@ -202,7 +203,7 @@ in {
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryFlavor = "gnome3";
+    pinentryFlavor = "qt";
   };
 
   # Lock screen

@@ -1,45 +1,6 @@
 local M = {}
 
-local stylua = {
-  formatCommand = "stylua -s --stdin-filepath ${INPUT} -",
-  formatStdin = true,
-}
-
-local luacheck = {
-  lintCommand = "luacheck --codes --formatter plain --std luajit --globals vim --filename ${INPUT} -",
-  lintIgnoreExitCode = true,
-  lintStdin = true,
-  lintFormats = { "%f:%l:%c: %m" },
-  lintSource = "luacheck"
-}
-
-local goimports = {
-  formatCommand = "goimports",
-  formatStdin = true,
-}
-
-local ocamlformat = {
-  formatCommand = "ocamlformat",
-  formatStdin = true,
-}
-
-local languages = {
-  lua = { stylua, luacheck },
-  go = { goimports },
-  ocaml = { ocamlformat },
-  -- python = {  },
-}
-
 local servers = {
-  efm = {
-    settings = {
-      rootMarkers = { ".git/" },
-      lintDebounce = 100,
-      languages = languages,
-    },
-    root_dir = vim.loop.cwd,
-    filetypes = vim.tbl_keys(languages),
-  },
   lua_ls = {
     settings = {
       Lua = {
@@ -211,6 +172,11 @@ M.setup = function()
       keymap(bufnr)
     end
   end
+
+  require("user.null-ls").setup({
+    capabilities = capabilities,
+    on_attach = get_on_attach(),
+  })
 
   for server, config in pairs(servers) do
     require("lspconfig")[server].setup(vim.tbl_deep_extend(
