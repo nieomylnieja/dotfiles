@@ -43,7 +43,7 @@ return {
         highlight = { enable = true },
         indent = { enable = true },
       })
-    end
+    end,
   },
   {
     "neovim/nvim-lspconfig",
@@ -53,14 +53,14 @@ return {
     },
     config = function()
       require("user.lsp").setup()
-    end
+    end,
   },
   {
     "nvimtools/none-ls.nvim",
     lazy = true,
     dependencies = {
       "nvim-lua/plenary.nvim",
-    }
+    },
   },
   {
     -- Autocompletion
@@ -83,7 +83,7 @@ return {
     },
     config = function()
       require("user.cmp")
-    end
+    end,
   },
   {
     "williamboman/mason.nvim",
@@ -114,7 +114,7 @@ return {
         -- DAP
         "delve",
       },
-      ui = { border = "rounded" }
+      ui = { border = "rounded" },
     },
     ---@param opts MasonSettings | {ensure_installed: string[]}
     config = function(_, opts)
@@ -153,18 +153,21 @@ return {
         "nvim-telescope/telescope-fzf-native.nvim",
         build = "make",
         cond = function()
-          return vim.fn.executable "make" == 1
+          return vim.fn.executable("make") == 1
         end,
       },
+      "edolphin-ydf/goimpl.nvim",
     },
-    config = function()
-      require("telescope").load_extension("fzf")
-    end
+    cknfig = function()
+      local ts = require("telescope")
+      ts.load_extension("fzf")
+      ts.load_extension("goimpl")
+    end,
   },
   {
     "folke/todo-comments.nvim",
     dependencies = { "nvim-lua/plenary.nvim" },
-    opts = {}
+    opts = {},
   },
   {
     "stevearc/dressing.nvim",
@@ -172,15 +175,15 @@ return {
       input = {
         win_options = {
           winblend = 10,
-        }
-      }
+        },
+      },
     },
   },
   {
     "numToStr/Comment.nvim",
     config = function()
       require("Comment").setup()
-    end
+    end,
   },
   {
     "folke/trouble.nvim",
@@ -197,11 +200,8 @@ return {
         -- Use fast wrap with <M-e>
         fast_wrap = {},
       })
-      require("cmp").event:on(
-        "confirm_done",
-        require("nvim-autopairs.completion.cmp").on_confirm_done()
-      )
-    end
+      require("cmp").event:on("confirm_done", require("nvim-autopairs.completion.cmp").on_confirm_done())
+    end,
   },
   {
     "lukas-reineke/indent-blankline.nvim",
@@ -217,7 +217,7 @@ return {
       exclude = {
         buftypes = {
           "terminal",
-          "nofile"
+          "nofile",
         },
         filetypes = {
           "help",
@@ -255,7 +255,7 @@ return {
         },
         under_cursor = false,
       })
-    end
+    end,
   },
   {
     "kylechui/nvim-surround",
@@ -263,7 +263,7 @@ return {
     event = "VeryLazy",
     config = function()
       require("nvim-surround").setup({})
-    end
+    end,
   },
   {
     "nvim-neotest/neotest",
@@ -276,7 +276,7 @@ return {
     },
     config = function()
       require("user.neotest")
-    end
+    end,
   },
   {
     "mfussenegger/nvim-dap",
@@ -290,7 +290,7 @@ return {
     },
     config = function()
       require("user.dap")
-    end
+    end,
   },
   {
     "folke/noice.nvim",
@@ -335,43 +335,63 @@ return {
     keys = {
       {
         "<S-Enter>",
-        function() require("noice").redirect(vim.fn.getcmdline()) end,
+        function()
+          require("noice").redirect(vim.fn.getcmdline())
+        end,
         mode = "c",
-        desc = "Redirect Cmdline"
+        desc = "Redirect Cmdline",
       },
       {
         "<leader>snl",
-        function() require("noice").cmd("last") end,
-        desc = "Noice Last Message"
+        function()
+          require("noice").cmd("last")
+        end,
+        desc = "Noice Last Message",
       },
       {
         "<leader>snh",
-        function() require("noice").cmd("history") end,
-        desc =
-        "Noice History"
+        function()
+          require("noice").cmd("history")
+        end,
+        desc = "Noice History",
       },
-      { "<leader>sna", function() require("noice").cmd("all") end, desc = "Noice All" },
+      {
+        "<leader>sna",
+        function()
+          require("noice").cmd("all")
+        end,
+        desc = "Noice All",
+      },
       {
         "<leader>snd",
-        function() require("noice").cmd("dismiss") end,
-        desc = "Dismiss All"
+        function()
+          require("noice").cmd("dismiss")
+        end,
+        desc = "Dismiss All",
       },
       {
         "<c-f>",
-        function() if not require("noice.lsp").scroll(4) then return "<c-f>" end end,
+        function()
+          if not require("noice.lsp").scroll(4) then
+            return "<c-f>"
+          end
+        end,
         silent = true,
         expr = true,
-        desc =
-        "Scroll forward",
-        mode = { "i", "n", "s" }
+        desc = "Scroll forward",
+        mode = { "i", "n", "s" },
       },
       {
         "<c-b>",
-        function() if not require("noice.lsp").scroll(-4) then return "<c-b>" end end,
+        function()
+          if not require("noice.lsp").scroll(-4) then
+            return "<c-b>"
+          end
+        end,
         silent = true,
         expr = true,
         desc = "Scroll backward",
-        mode = { "i", "n", "s" }
+        mode = { "i", "n", "s" },
       },
     },
   },
@@ -388,7 +408,7 @@ return {
         exclude_filetypes = { "TelescopePrompt", "NvimTree" },
         log_file_path = nil, -- absolute path to Tabnine log file
       })
-    end
+    end,
   },
   {
     "tzachar/cmp-tabnine",
@@ -399,7 +419,7 @@ return {
     "NvChad/nvim-colorizer.lua",
     config = function()
       require("colorizer").setup({})
-    end
+    end,
   },
   {
     "ahmedkhalf/project.nvim",
@@ -415,7 +435,7 @@ return {
   {
     "akinsho/bufferline.nvim",
     version = "*",
-    dependencies = 'nvim-tree/nvim-web-devicons',
+    dependencies = "nvim-tree/nvim-web-devicons",
     opts = {
       highlights = require("user.colors.bufferline").highlights,
       options = {
@@ -427,8 +447,8 @@ return {
             text_align = "left",
           },
         },
-      }
-    }
+      },
+    },
   },
   {
     "akinsho/toggleterm.nvim",
@@ -461,7 +481,7 @@ return {
       end
 
       vim.cmd("autocmd! TermOpen term://* lua set_terminal_keymaps()")
-    end
+    end,
   },
   {
     "nvim-tree/nvim-tree.lua",
@@ -473,12 +493,12 @@ return {
         respect_buf_cwd = true,
         update_focused_file = {
           enable = true,
-          update_root = true
+          update_root = true,
         },
       })
     end,
   },
   {
-    "tpope/vim-fugitive"
-  }
+    "tpope/vim-fugitive",
+  },
 }

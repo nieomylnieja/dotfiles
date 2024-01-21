@@ -2,7 +2,6 @@ local M = {}
 
 M.setup = function(lsp_config)
   local null_ls = require("null-ls")
-  local custom = require("user.null-ls-custom")
 
   local fmt = null_ls.builtins.formatting
   local lint = null_ls.builtins.diagnostics
@@ -27,8 +26,6 @@ M.setup = function(lsp_config)
     lint.shellcheck,
 
     -- ACTIONS:
-    -- Go
-    action.impl,
     -- custom.gomodifytags(),
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },

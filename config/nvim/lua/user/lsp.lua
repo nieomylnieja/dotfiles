@@ -35,6 +35,10 @@ local servers = {
         staticcheck = true,
         semanticTokens = true,
         completeUnimported = true,
+        -- Symbols are important for things like goimpl.
+        symbolMatcher = "FastFuzzy",
+        symbolStyle = "Package",
+        symbolScope = "all",
         analyses = {
           unreachable = true,
           nilness = true,
@@ -56,6 +60,9 @@ local servers = {
           gc_details = true,
           -- We're using neotest for that.
           -- test = true,
+          generate = true,
+          gc_details = true,
+          test = true,
           tidy = true,
           vendor = true,
           regenerate_cgo = true,
@@ -111,7 +118,7 @@ local servers = {
   },
 }
 
-local function keymap(bufnr)
+local function keymap(bufnr, server)
   local ts = require("telescope.builtin")
   -- See `:help vim.lsp.*` for documentation on any of the below functions
   local nmap = function(keys, func, desc)
@@ -136,6 +143,15 @@ local function keymap(bufnr)
   nmap("gK", vim.lsp.buf.signature_help, "Signature Documentation")
   nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
   nmap("<leader>D", ts.lsp_type_definitions, "Type [D]efinition")
+
+  if server == "gopls" then
+    nmap("<leader>im", function()
+      require("telescope").extensions.goimpl.goimpl({
+        path_display = "hidden",
+        symbol_width = 60,
+      })
+    end, "Type [D]efinition")
+  end
 end
 
 M.setup = function()
@@ -169,7 +185,7 @@ M.setup = function()
       if server == "ruff_lsp" then
         client.server_capabilities.hoverProvider = false
       end
-      keymap(bufnr)
+      keymap(bufnr, server)
     end
   end
 
