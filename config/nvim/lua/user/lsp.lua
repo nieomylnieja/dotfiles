@@ -173,12 +173,8 @@ M.setup = function()
     return function(client, bufnr)
       if server == "gopls" then
         -- Remove poorly supported tokens.
-        for i, item in ipairs(capabilities.textDocument.semanticTokens.tokenTypes) do
-          if item == "type" then
-            table.remove(capabilities.textDocument.semanticTokens.tokenTypes, i)
-            break
-          end
-        end
+        -- For example, currently gopls does not allow to discern between a boolean and a variable...
+        client.server_capabilities.semanticTokensProvider = nil
       end
       if server == "ruff_lsp" then
         client.server_capabilities.hoverProvider = false

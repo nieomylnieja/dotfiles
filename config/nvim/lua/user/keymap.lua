@@ -45,7 +45,13 @@ map("v", ">", ">gv")
 
 local wk = require("which-key")
 
-map("n", "<leader>e", "<cmd>:NvimTreeToggle<cr>", { noremap = true })
+map("n", "<leader>e", function()
+  -- Workaround for https://github.com/nvim-tree/nvim-tree.lua/issues/2520.
+  if vim.bo.filetype == "TelescopePrompt" then
+    require("telescope.actions").close(vim.api.nvim_get_current_buf())
+  end
+  vim.cmd("NvimTreeFocus")
+end, { noremap = true })
 
 wk.register({
   f = {
@@ -79,11 +85,14 @@ wk.register({
     m = { "<cmd>lua require('neotest').run.run()<cr>", "Test Method" },
     f = { "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", "Test File" },
     a = { "<cmd>lua require('neotest').run.run({vim.fn.getcwd()})<cr>", "Test Whole Project" },
-    p = { "<cmd>lua require('neotest').run.run({vim.fn.fnamemodify(vim.fn.expand('%:p'),':h')})<cr>", "Test Directory" },
+    p = {
+      "<cmd>lua require('neotest').run.run({vim.fn.fnamemodify(vim.fn.expand('%:p'),':h')})<cr>",
+      "Test Directory",
+    },
     s = { "<cmd>lua require('neotest').summary.toggle()<cr>", "Test Summary" },
     S = { "<cmd>lua require('neotest').output_panel.open()<cr>", "Test Summary panel" },
-    o = { "<cmd>lua require('neotest').output.open({enter=true})<cr>", "Output Window" }
-  }
+    o = { "<cmd>lua require('neotest').output.open({enter=true})<cr>", "Output Window" },
+  },
 }, { prefix = "<leader>" })
 
 -- Common kill function for bdelete and bwipeout
