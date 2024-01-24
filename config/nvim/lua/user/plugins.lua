@@ -158,10 +158,30 @@ return {
       },
       "edolphin-ydf/goimpl.nvim",
     },
-    cknfig = function()
+    config = function()
       local ts = require("telescope")
       ts.load_extension("fzf")
       ts.load_extension("goimpl")
+      ts.setup({
+        pickers = {
+          find_files = {
+            find_command = { "fd", "--type", "f", "--strip-cwd-prefix" },
+          },
+          live_grep = {
+            show_line = false,
+          },
+          lsp_definitions = {
+            show_line = false,
+          },
+          lsp_implementations = {
+            show_line = false,
+          },
+          lsp_references = {
+            include_declaration = false,
+            show_line = false,
+          },
+        },
+      })
     end,
   },
   {
