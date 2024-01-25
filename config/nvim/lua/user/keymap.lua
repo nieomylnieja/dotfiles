@@ -70,6 +70,7 @@ wk.register({
     l = { "<cmd>Telescope resume<cr>", "Resume last search" },
     t = { "<cmd>TodoTelescope<cr>", "TODO comments" },
     p = { "<Cmd>Telescope projects<CR>", "Projects" },
+    s = { "<Cmd>Telescope lsp_document_symbols<CR>", "LSP Symbols" },
   },
 }, { prefix = "<leader>" })
 
