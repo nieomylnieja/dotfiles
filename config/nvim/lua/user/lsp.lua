@@ -29,11 +29,17 @@ local servers = {
     },
   },
   gopls = {
+    init_options = {
+      usePlaceholders = true,
+    },
     settings = {
       gopls = {
+        experimentalPostfixCompletions = true,
         usePlaceholders = false,
         staticcheck = true,
-        semanticTokens = true,
+        -- Remove poorly supported tokens.
+        -- For example, currently gopls does not allow to discern between a boolean and a variable...
+        semanticTokens = false,
         completeUnimported = true,
         -- Symbols are important for things like goimpl.
         symbolMatcher = "FastFuzzy",
@@ -56,8 +62,6 @@ local servers = {
           rangeVariableTypes = true,
         },
         codelenses = {
-          generate = true,
-          gc_details = true,
           -- We're using neotest for that.
           -- test = true,
           generate = true,
@@ -167,17 +171,10 @@ M.setup = function()
     vim.fn.sign_define(sign.name, { texthl = sign.name, text = sign.text, numhl = "" })
   end
 
-  local capabilities = vim.lsp.protocol.make_client_capabilities()
-  capabilities =
-      vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities(capabilities))
+  local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
   local get_on_attach = function(server)
     return function(client, bufnr)
-      if server == "gopls" then
-        -- Remove poorly supported tokens.
-        -- For example, currently gopls does not allow to discern between a boolean and a variable...
-        client.server_capabilities.semanticTokensProvider = nil
-      end
       if server == "ruff_lsp" then
         client.server_capabilities.hoverProvider = false
       end

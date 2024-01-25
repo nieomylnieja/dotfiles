@@ -50,7 +50,7 @@ map("n", "<leader>e", function()
   if vim.bo.filetype == "TelescopePrompt" then
     require("telescope.actions").close(vim.api.nvim_get_current_buf())
   end
-  vim.cmd("NvimTreeFocus")
+  vim.cmd("NvimTreeToggle")
 end, { noremap = true })
 
 wk.register({

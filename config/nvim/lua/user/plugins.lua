@@ -162,6 +162,8 @@ return {
       local ts = require("telescope")
       ts.load_extension("fzf")
       ts.load_extension("goimpl")
+      require("telescope._extensions.extensions")
+      ts.load_extension("env")
     end,
   },
   {

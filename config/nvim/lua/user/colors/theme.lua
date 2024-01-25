@@ -292,7 +292,7 @@ theme.loadSemanitcTokens = function()
     ["@lsp.type.variable"] = {}, -- use treesitter styles for regular variables
     ["@lsp.mod.builtin"] = { fg = nord.glacier },
     ["@lsp.typemod.variable.defaultLibrary"] = { fg = nord.glacier },
-    ["@lsp.typemod.variable.readonly"] = { fg = nord.darkest_white, style = "bold" },
+    ["@lsp.typemod.variable.readonly"] = { link = "@type.builtin" },
     ["@lsp.typemod.type.definition"] = { fg = nord.teal },
   }
 end
