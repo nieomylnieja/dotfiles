@@ -1,45 +1,45 @@
 local theme = {}
 
-local nord = require "user.colors.nord"
+local nord = require("user.colors.nord")
 
 theme.loadSyntax = function()
   return {
-    Type = { fg = nord.glacier },                                          -- int, long, char, etc.
-    StorageClass = { fg = nord.glacier },                                  -- static, register, volatile, etc.
-    Structure = { fg = nord.glacier },                                     -- struct, union, enum, etc.
-    Constant = { fg = nord.darkest_white },                                -- any constant
-    Character = { fg = nord.green },                                       -- any character constant: 'c', '\n'
-    Number = { fg = nord.purple },                                         -- a number constant: 5
-    Boolean = { fg = nord.glacier },                                       -- a boolean constant: TRUE, false
-    Float = { fg = nord.purple },                                          -- a floating point constant: 2.3e10
-    Statement = { fg = nord.glacier },                                     -- any statement
-    Label = { fg = nord.glacier },                                         -- case, default, etc.
-    Operator = { fg = nord.glacier },                                      -- sizeof", "+", "*", etc.
-    Exception = { fg = nord.glacier },                                     -- try, catch, throw
-    PreProc = { fg = nord.glacier },                                       -- generic Preprocessor
-    Include = { fg = nord.glacier },                                       -- preprocessor #include
-    Define = { fg = nord.glacier },                                        -- preprocessor #define
-    Macro = { fg = nord.glacier },                                         -- same as Define
-    Typedef = { fg = nord.glacier },                                       -- A typedef
-    PreCondit = { fg = nord.yellow },                                      -- preprocessor #if, #else, #endif, etc.
-    Special = { fg = nord.darkest_white },                                 -- any special symbol
-    SpecialChar = { fg = nord.yellow },                                    -- special character in a constant
-    Tag = { fg = nord.darkest_white },                                     -- you can use CTRL-] on this
-    Delimiter = { fg = nord.white },                                       -- character that needs attention like , or .
-    SpecialComment = { fg = nord.off_blue },                               -- special things inside a comment
-    Debug = { fg = nord.red },                                             -- debugging statements
+    Type = { fg = nord.glacier },                                        -- int, long, char, etc.
+    StorageClass = { fg = nord.glacier },                                -- static, register, volatile, etc.
+    Structure = { fg = nord.glacier },                                   -- struct, union, enum, etc.
+    Constant = { fg = nord.darkest_white },                              -- any constant
+    Character = { fg = nord.green },                                     -- any character constant: 'c', '\n'
+    Number = { fg = nord.purple },                                       -- a number constant: 5
+    Boolean = { fg = nord.glacier },                                     -- a boolean constant: TRUE, false
+    Float = { fg = nord.purple },                                        -- a floating point constant: 2.3e10
+    Statement = { fg = nord.glacier },                                   -- any statement
+    Label = { fg = nord.glacier },                                       -- case, default, etc.
+    Operator = { fg = nord.glacier },                                    -- sizeof", "+", "*", etc.
+    Exception = { fg = nord.glacier },                                   -- try, catch, throw
+    PreProc = { fg = nord.glacier },                                     -- generic Preprocessor
+    Include = { fg = nord.glacier },                                     -- preprocessor #include
+    Define = { fg = nord.glacier },                                      -- preprocessor #define
+    Macro = { fg = nord.glacier },                                       -- same as Define
+    Typedef = { fg = nord.glacier },                                     -- A typedef
+    PreCondit = { fg = nord.yellow },                                    -- preprocessor #if, #else, #endif, etc.
+    Special = { fg = nord.darkest_white },                               -- any special symbol
+    SpecialChar = { fg = nord.yellow },                                  -- special character in a constant
+    Tag = { fg = nord.darkest_white },                                   -- you can use CTRL-] on this
+    Delimiter = { fg = nord.white },                                     -- character that needs attention like , or .
+    SpecialComment = { fg = nord.off_blue },                             -- special things inside a comment
+    Debug = { fg = nord.red },                                           -- debugging statements
     Underlined = { fg = nord.green, bg = nord.none, style = "underline" }, -- text that stands out, HTML links
-    Ignore = { fg = nord.dark_gray },                                      -- left blank, hidden
-    Error = { fg = nord.red, bg = nord.none, style = "bold,underline" },   -- any erroneous construct
-    Todo = { fg = nord.yellow, bg = nord.none, style = "bold,italic" },    -- anything that needs extra attention; mostly the keywords TODO FIXME and XXX
+    Ignore = { fg = nord.dark_gray },                                    -- left blank, hidden
+    Error = { fg = nord.red, bg = nord.none, style = "bold,underline" }, -- any erroneous construct
+    Todo = { fg = nord.yellow, bg = nord.none, style = "bold,italic" },  -- anything that needs extra attention; mostly the keywords TODO FIXME and XXX
     Conceal = { fg = nord.none, bg = nord.black },
-    Comment = { fg = nord.light_gray_bright, style = "italic" },           -- normal comments
-    Conditional = { fg = nord.glacier, style = "italic" },                 -- normal if, then, else, endif, switch, etc.
-    Function = { fg = nord.off_blue, style = "italic" },                   -- normal function names
-    Identifier = { fg = nord.glacier, style = "italic" },                  -- any variable name
-    Keyword = { fg = nord.glacier, style = "italic" },                     -- normal for, do, while, etc.
-    Repeat = { fg = nord.glacier, style = "italic" },                      -- normal any other keyword
-    String = { fg = nord.green, style = "italic" },                        -- any string
+    Comment = { fg = nord.light_gray_bright, style = "italic" },         -- normal comments
+    Conditional = { fg = nord.glacier, style = "italic" },               -- normal if, then, else, endif, switch, etc.
+    Function = { fg = nord.off_blue, style = "italic" },                 -- normal function names
+    Identifier = { fg = nord.glacier, style = "italic" },                -- any variable name
+    Keyword = { fg = nord.glacier, style = "italic" },                   -- normal for, do, while, etc.
+    Repeat = { fg = nord.glacier, style = "italic" },                    -- normal any other keyword
+    String = { fg = nord.green, style = "italic" },                      -- any string
 
     htmlLink = { fg = nord.green, style = "underline" },
     htmlH1 = { fg = nord.off_blue, style = "bold" },
@@ -58,13 +58,13 @@ end
 
 theme.loadEditor = function()
   return {
-    NormalFloat = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
-    FloatBorder = { fg = nord.darkest_white, bg = nord.float },               -- normal text and background color
-    ColorColumn = { fg = nord.none, bg = nord.dark_gray },                    -- used for the columns set with 'colorcolumn'
-    Conceal = { fg = nord.dark_gray },                                        -- placeholder characters substituted for concealed text (see 'conceallevel')
-    Cursor = { fg = nord.darkest_white, bg = nord.none, style = "reverse" },  -- the character under the cursor
+    NormalFloat = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
+    FloatBorder = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
+    ColorColumn = { fg = nord.none, bg = nord.dark_gray },                  -- used for the columns set with 'colorcolumn'
+    Conceal = { fg = nord.dark_gray },                                      -- placeholder characters substituted for concealed text (see 'conceallevel')
+    Cursor = { fg = nord.darkest_white, bg = nord.none, style = "reverse" }, -- the character under the cursor
     CursorIM = { fg = nord.darker_white, bg = nord.none, style = "reverse" }, -- like Cursor, but used when in IME mode
-    Directory = { fg = nord.teal, bg = nord.none },                           -- directory names (and other special names in listings)
+    Directory = { fg = nord.teal, bg = nord.none },                         -- directory names (and other special names in listings)
     EndOfBuffer = { fg = nord.dark_gray },
     ErrorMsg = { fg = nord.none },
     Folded = { fg = nord.light_gray_bright, bg = nord.none, style = "italic" },
@@ -174,10 +174,13 @@ theme.loadEditor = function()
     -- Remove window split borders
     VertSplit = { fg = nord.gray },
 
-    DiffAdd = { fg = nord.green, bg = nord.dark_gray },       -- diff mode: Added line
-    DiffChange = { fg = nord.off_blue, bg = nord.dark_gray }, -- diff mode: Changed line
-    DiffDelete = { fg = nord.red, bg = nord.dark_gray },      -- diff mode: Deleted line
-    DiffText = { fg = nord.teal, bg = nord.dark_gray },       -- diff mode: Changed text within a changed line
+    -- Blended 85% nord.black and 15% nord.green
+    DiffAdd = { bg = "#40494b" },   -- diff mode: Added line
+    DiffChange = { bg = nord.black }, -- diff mode: Changed line
+    -- Blended 50% nord.black and 50% nord.red
+    DiffDelete = { bg = "#774b55" }, -- diff mode: Deleted line
+    -- Blended 70% nord.black and 30% nord.red
+    DiffText = { bg = "#4b5d65 " },  -- diff mode: Changed text within a changed line
   }
 end
 
@@ -312,29 +315,29 @@ end
 
 theme.loadLSP = function()
   return {
-    LspDiagnosticsDefaultError = { fg = nord.red },                               -- used for "Error" diagnostic virtual text
-    LspDiagnosticsSignError = { fg = nord.red },                                  -- used for "Error" diagnostic signs in sign column
-    LspDiagnosticsFloatingError = { fg = nord.red },                              -- used for "Error" diagnostic messages in the diagnostics float
-    LspDiagnosticsVirtualTextError = { fg = nord.red },                           -- Virtual text "Error"
-    LspDiagnosticsUnderlineError = { fg = nord.red, style = "underline,bold" },   -- used to underline "Error" diagnostics.
-    LspDiagnosticsDefaultWarning = { fg = nord.purple },                          -- used for "Warning" diagnostic signs in sign column
-    LspDiagnosticsSignWarning = { fg = nord.purple },                             -- used for "Warning" diagnostic signs in sign column
-    LspDiagnosticsFloatingWarning = { fg = nord.purple },                         -- used for "Warning" diagnostic messages in the diagnostics float
-    LspDiagnosticsVirtualTextWarning = { fg = nord.purple },                      -- Virtual text "Warning"
-    LspDiagnosticsUnderlineWarning = { style = "undercurl", sp = nord.purple },   -- used to underline "Warning" diagnostics.
-    LspDiagnosticsDefaultInformation = { fg = nord.blue },                        -- used for "Information" diagnostic virtual text
-    LspDiagnosticsSignInformation = { fg = nord.blue },                           -- used for "Information" diagnostic signs in sign column
-    LspDiagnosticsFloatingInformation = { fg = nord.blue },                       -- used for "Information" diagnostic messages in the diagnostics float
-    LspDiagnosticsVirtualTextInformation = { fg = nord.blue },                    -- Virtual text "Information"
+    LspDiagnosticsDefaultError = { fg = nord.red },                             -- used for "Error" diagnostic virtual text
+    LspDiagnosticsSignError = { fg = nord.red },                                -- used for "Error" diagnostic signs in sign column
+    LspDiagnosticsFloatingError = { fg = nord.red },                            -- used for "Error" diagnostic messages in the diagnostics float
+    LspDiagnosticsVirtualTextError = { fg = nord.red },                         -- Virtual text "Error"
+    LspDiagnosticsUnderlineError = { fg = nord.red, style = "underline,bold" }, -- used to underline "Error" diagnostics.
+    LspDiagnosticsDefaultWarning = { fg = nord.purple },                        -- used for "Warning" diagnostic signs in sign column
+    LspDiagnosticsSignWarning = { fg = nord.purple },                           -- used for "Warning" diagnostic signs in sign column
+    LspDiagnosticsFloatingWarning = { fg = nord.purple },                       -- used for "Warning" diagnostic messages in the diagnostics float
+    LspDiagnosticsVirtualTextWarning = { fg = nord.purple },                    -- Virtual text "Warning"
+    LspDiagnosticsUnderlineWarning = { style = "undercurl", sp = nord.purple }, -- used to underline "Warning" diagnostics.
+    LspDiagnosticsDefaultInformation = { fg = nord.blue },                      -- used for "Information" diagnostic virtual text
+    LspDiagnosticsSignInformation = { fg = nord.blue },                         -- used for "Information" diagnostic signs in sign column
+    LspDiagnosticsFloatingInformation = { fg = nord.blue },                     -- used for "Information" diagnostic messages in the diagnostics float
+    LspDiagnosticsVirtualTextInformation = { fg = nord.blue },                  -- Virtual text "Information"
     LspDiagnosticsUnderlineInformation = { style = "undercurl", sp = nord.blue }, -- used to underline "Information" diagnostics.
-    LspDiagnosticsDefaultHint = { fg = nord.glacier },                            -- used for "Hint" diagnostic virtual text
-    LspDiagnosticsSignHint = { fg = nord.glacier },                               -- used for "Hint" diagnostic signs in sign column
-    LspDiagnosticsFloatingHint = { fg = nord.glacier },                           -- used for "Hint" diagnostic messages in the diagnostics float
-    LspDiagnosticsVirtualTextHint = { fg = nord.glacier },                        -- Virtual text "Hint"
-    LspDiagnosticsUnderlineHint = { style = "undercurl", sp = nord.blue },        -- used to underline "Hint" diagnostics.
-    LspReferenceText = { fg = nord.darkest_white, bg = nord.dark_gray },          -- used for highlighting "text" references
-    LspReferenceRead = { fg = nord.darkest_white, bg = nord.dark_gray },          -- used for highlighting "read" references
-    LspReferenceWrite = { fg = nord.darkest_white, bg = nord.dark_gray },         -- used for highlighting "write" references
+    LspDiagnosticsDefaultHint = { fg = nord.glacier },                          -- used for "Hint" diagnostic virtual text
+    LspDiagnosticsSignHint = { fg = nord.glacier },                             -- used for "Hint" diagnostic signs in sign column
+    LspDiagnosticsFloatingHint = { fg = nord.glacier },                         -- used for "Hint" diagnostic messages in the diagnostics float
+    LspDiagnosticsVirtualTextHint = { fg = nord.glacier },                      -- Virtual text "Hint"
+    LspDiagnosticsUnderlineHint = { style = "undercurl", sp = nord.blue },      -- used to underline "Hint" diagnostics.
+    LspReferenceText = { fg = nord.darkest_white, bg = nord.dark_gray },        -- used for highlighting "text" references
+    LspReferenceRead = { fg = nord.darkest_white, bg = nord.dark_gray },        -- used for highlighting "read" references
+    LspReferenceWrite = { fg = nord.darkest_white, bg = nord.dark_gray },       -- used for highlighting "write" references
     LspCodeLens = { fg = nord.light_gray, style = "italic" },
     LspDiagnosticsError = { fg = nord.red },
     LspDiagnosticsWarning = { fg = nord.purple },
@@ -367,141 +370,141 @@ end
 theme.loadPlugins = function()
   return {
     -- LspTrouble
-    LspTroubleText               = { fg = nord.darkest_white },
-    LspTroubleCount              = { fg = nord.glacier, bg = nord.blue },
-    LspTroubleNormal             = { fg = nord.darkest_white, bg = nord.sidebar },
+    LspTroubleText = { fg = nord.darkest_white },
+    LspTroubleCount = { fg = nord.glacier, bg = nord.blue },
+    LspTroubleNormal = { fg = nord.darkest_white, bg = nord.sidebar },
 
     -- Diff
-    diffAdded                    = { fg = nord.green },
-    diffRemoved                  = { fg = nord.red },
-    diffChanged                  = { fg = nord.purple },
-    diffOldFile                  = { fg = nord.yellow },
-    diffNewFile                  = { fg = nord.orange },
-    diffFile                     = { fg = nord.teal },
-    diffLine                     = { fg = nord.light_gray },
-    diffIndexLine                = { fg = nord.glacier },
+    diffAdded = { fg = nord.green },
+    diffRemoved = { fg = nord.red },
+    diffChanged = { fg = nord.purple },
+    diffOldFile = { fg = nord.yellow },
+    diffNewFile = { fg = nord.orange },
+    diffFile = { fg = nord.teal },
+    diffLine = { fg = nord.light_gray },
+    diffIndexLine = { fg = nord.glacier },
 
     -- Neogit
-    NeogitBranch                 = { fg = nord.blue },
-    NeogitRemote                 = { fg = nord.glacier },
-    NeogitHunkHeader             = { fg = nord.off_blue },
-    NeogitHunkHeaderHighlight    = { fg = nord.off_blue, bg = nord.dark_gray },
-    NeogitDiffContextHighlight   = { bg = nord.dark_gray },
-    NeogitDiffDeleteHighlight    = { fg = nord.red, style = "reverse" },
-    NeogitDiffAddHighlight       = { fg = nord.green, style = "reverse" },
+    NeogitBranch = { fg = nord.blue },
+    NeogitRemote = { fg = nord.glacier },
+    NeogitHunkHeader = { fg = nord.off_blue },
+    NeogitHunkHeaderHighlight = { fg = nord.off_blue, bg = nord.dark_gray },
+    NeogitDiffContextHighlight = { bg = nord.dark_gray },
+    NeogitDiffDeleteHighlight = { fg = nord.red, style = "reverse" },
+    NeogitDiffAddHighlight = { fg = nord.green, style = "reverse" },
 
     -- GitSigns
-    GitSignsAdd                  = { fg = nord.green },  -- diff mode: Added line |diff.txt|
-    GitSignsAddNr                = { fg = nord.green },  -- diff mode: Added line |diff.txt|
-    GitSignsAddLn                = { fg = nord.green },  -- diff mode: Added line |diff.txt|
-    GitSignsChange               = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitSignsChangeNr             = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitSignsChangeLn             = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
-    GitSignsDelete               = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-    GitSignsDeleteNr             = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-    GitSignsDeleteLn             = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
-    GitSignsCurrentLineBlame     = { fg = nord.light_gray_bright, style = "bold" },
+    GitSignsAdd = { fg = nord.green },     -- diff mode: Added line |diff.txt|
+    GitSignsAddNr = { fg = nord.green },   -- diff mode: Added line |diff.txt|
+    GitSignsAddLn = { fg = nord.green },   -- diff mode: Added line |diff.txt|
+    GitSignsChange = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsChangeNr = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsChangeLn = { fg = nord.purple }, -- diff mode: Changed line |diff.txt|
+    GitSignsDelete = { fg = nord.red },    -- diff mode: Deleted line |diff.txt|
+    GitSignsDeleteNr = { fg = nord.red },  -- diff mode: Deleted line |diff.txt|
+    GitSignsDeleteLn = { fg = nord.red },  -- diff mode: Deleted line |diff.txt|
+    GitSignsCurrentLineBlame = { fg = nord.light_gray_bright, style = "bold" },
 
     -- Telescope
-    TelescopePromptBorder        = { fg = nord.off_blue },
-    TelescopeResultsBorder       = { fg = nord.glacier },
-    TelescopePreviewBorder       = { fg = nord.green },
-    TelescopeSelectionCaret      = { fg = nord.glacier },
-    TelescopeSelection           = { fg = nord.glacier },
-    TelescopeMatching            = { fg = nord.off_blue },
+    TelescopePromptBorder = { fg = nord.off_blue },
+    TelescopeResultsBorder = { fg = nord.glacier },
+    TelescopePreviewBorder = { fg = nord.green },
+    TelescopeSelectionCaret = { fg = nord.glacier },
+    TelescopeSelection = { fg = nord.glacier },
+    TelescopeMatching = { fg = nord.off_blue },
 
     -- Neotree
-    NeoTreeTabInactive           = { fg = nord.light_gray, bg = nord.dark_gray },
-    NeoTreeTabActive             = { fg = nord.teal, bg = nord.gray },
+    NeoTreeTabInactive = { fg = nord.light_gray, bg = nord.dark_gray },
+    NeoTreeTabActive = { fg = nord.teal, bg = nord.gray },
 
     -- NvimTree
-    NvimTreeNormal               = { fg = nord.darkest_white, bg = nord.none },
-    NvimTreeRootFolder           = { fg = nord.teal, style = "bold" },
-    NvimTreeGitDirty             = { fg = nord.purple },
-    NvimTreeGitNew               = { fg = nord.green },
-    NvimTreeImageFile            = { fg = nord.purple },
-    NvimTreeExecFile             = { fg = nord.green },
-    NvimTreeSpecialFile          = { fg = nord.off_blue, style = "underline" },
-    NvimTreeFolderName           = { fg = nord.darkest_white },
-    NvimTreeOpenedFolderName     = { fg = nord.darkest_white },
-    NvimTreeEmptyFolderName      = { fg = nord.dark_gray },
-    NvimTreeFolderIcon           = { fg = nord.light_gray_bright },
-    NvimTreeIndentMarker         = { fg = nord.dark_gray },
+    NvimTreeNormal = { fg = nord.darkest_white, bg = nord.none },
+    NvimTreeRootFolder = { fg = nord.teal, style = "bold" },
+    NvimTreeGitDirty = { fg = nord.purple },
+    NvimTreeGitNew = { fg = nord.green },
+    NvimTreeImageFile = { fg = nord.purple },
+    NvimTreeExecFile = { fg = nord.green },
+    NvimTreeSpecialFile = { fg = nord.off_blue, style = "underline" },
+    NvimTreeFolderName = { fg = nord.darkest_white },
+    NvimTreeOpenedFolderName = { fg = nord.darkest_white },
+    NvimTreeEmptyFolderName = { fg = nord.dark_gray },
+    NvimTreeFolderIcon = { fg = nord.light_gray_bright },
+    NvimTreeIndentMarker = { fg = nord.dark_gray },
 
     -- WhichKey
-    WhichKey                     = { fg = nord.darkest_white, style = "bold" },
-    WhichKeyGroup                = { fg = nord.darkest_white },
-    WhichKeyDesc                 = { fg = nord.teal, style = "italic" },
-    WhichKeySeperator            = { fg = nord.darkest_white },
-    WhichKeyFloating             = { bg = nord.float },
-    WhichKeyFloat                = { bg = nord.float },
+    WhichKey = { fg = nord.darkest_white, style = "bold" },
+    WhichKeyGroup = { fg = nord.darkest_white },
+    WhichKeyDesc = { fg = nord.teal, style = "italic" },
+    WhichKeySeperator = { fg = nord.darkest_white },
+    WhichKeyFloating = { bg = nord.float },
+    WhichKeyFloat = { bg = nord.float },
 
     -- Cmp
-    CmpItemKind                  = { fg = nord.purple },
-    CmpItemAbbrMatch             = { fg = nord.darker_white, style = "bold" },
-    CmpItemAbbrMatchFuzzy        = { fg = nord.darker_white, style = "bold" },
-    CmpItemAbbr                  = { fg = nord.darkest_white },
-    CmpItemMenu                  = { fg = nord.green },
+    CmpItemKind = { fg = nord.purple },
+    CmpItemAbbrMatch = { fg = nord.darker_white, style = "bold" },
+    CmpItemAbbrMatchFuzzy = { fg = nord.darker_white, style = "bold" },
+    CmpItemAbbr = { fg = nord.darkest_white },
+    CmpItemMenu = { fg = nord.green },
 
     -- Indent Blankline
-    IndentBlanklineChar          = { fg = nord.light_gray },
-    IndentBlanklineContextChar   = { fg = nord.blue },
+    IndentBlanklineChar = { fg = nord.light_gray },
+    IndentBlanklineContextChar = { fg = nord.blue },
 
     -- Illuminate
-    IlluminatedWordText          = { bg = nord.gray },
-    IlluminatedWordRead          = { bg = nord.gray },
-    IlluminatedWordWrite         = { bg = nord.gray },
+    IlluminatedWordText = { bg = nord.gray },
+    IlluminatedWordRead = { bg = nord.gray },
+    IlluminatedWordWrite = { bg = nord.gray },
 
     -- nvim-dap
-    DapBreakpoint                = { fg = nord.green },
-    DapStopped                   = { fg = nord.purple },
+    DapBreakpoint = { fg = nord.green },
+    DapStopped = { fg = nord.purple },
 
     -- nvim-dap-ui
-    DapUIVariable                = { fg = nord.yellow },
-    DapUIScope                   = { fg = nord.off_blue },
-    DapUIType                    = { fg = nord.light_gray_bright },
-    DapUIModifiedValue           = { fg = nord.off_blue },
-    DapUIDecoration              = { fg = nord.off_blue },
-    DapUIThread                  = { fg = nord.off_blue },
-    DapUIStoppedThread           = { fg = nord.off_blue },
-    DapUISource                  = { fg = nord.glacier },
-    DapUILineNumber              = { fg = nord.off_blue },
-    DapUIFloatBorder             = { fg = nord.off_blue },
-    DapUIWatchesEmpty            = { fg = nord.red },
-    DapUIWatchesValue            = { fg = nord.off_blue },
-    DapUIWatchesError            = { fg = nord.red },
-    DapUIBreakpointsPath         = { fg = nord.off_blue },
-    DapUIBreakpointsInfo         = { fg = nord.off_blue },
-    DapUIBreakpointsCurrentLine  = { fg = nord.off_blue },
+    DapUIVariable = { fg = nord.yellow },
+    DapUIScope = { fg = nord.off_blue },
+    DapUIType = { fg = nord.light_gray_bright },
+    DapUIModifiedValue = { fg = nord.off_blue },
+    DapUIDecoration = { fg = nord.off_blue },
+    DapUIThread = { fg = nord.off_blue },
+    DapUIStoppedThread = { fg = nord.off_blue },
+    DapUISource = { fg = nord.glacier },
+    DapUILineNumber = { fg = nord.off_blue },
+    DapUIFloatBorder = { fg = nord.off_blue },
+    DapUIWatchesEmpty = { fg = nord.red },
+    DapUIWatchesValue = { fg = nord.off_blue },
+    DapUIWatchesError = { fg = nord.red },
+    DapUIBreakpointsPath = { fg = nord.off_blue },
+    DapUIBreakpointsInfo = { fg = nord.off_blue },
+    DapUIBreakpointsCurrentLine = { fg = nord.off_blue },
     DapUIBreakpointsDisabledLine = { fg = nord.dark_gray },
-    DapUIStepOver                = { fg = nord.white },
-    DapUIStepInto                = { fg = nord.white },
-    DapUIStepBack                = { fg = nord.white },
-    DapUIStepOut                 = { fg = nord.white },
-    DapUIStop                    = { fg = nord.red },
-    DapUIPlayPause               = { fg = nord.green },
-    DapUIRestart                 = { fg = nord.green },
-    DapUIUnavailable             = { fg = nord.dark_gray },
-    DapUIWinSelect               = { fg = nord.white },
+    DapUIStepOver = { fg = nord.white },
+    DapUIStepInto = { fg = nord.white },
+    DapUIStepBack = { fg = nord.white },
+    DapUIStepOut = { fg = nord.white },
+    DapUIStop = { fg = nord.red },
+    DapUIPlayPause = { fg = nord.green },
+    DapUIRestart = { fg = nord.green },
+    DapUIUnavailable = { fg = nord.dark_gray },
+    DapUIWinSelect = { fg = nord.white },
 
     -- copilot
-    CopilotLabel                 = { fg = nord.light_gray, bg = nord.none },
+    CopilotLabel = { fg = nord.light_gray, bg = nord.none },
 
     -- Statusline
-    StatusLineDull               = { fg = nord.light_gray, bg = nord.dark_gray },
-    StatusLineAccent             = { fg = nord.black, bg = nord.yellow },
+    StatusLineDull = { fg = nord.light_gray, bg = nord.dark_gray },
+    StatusLineAccent = { fg = nord.black, bg = nord.yellow },
 
     -- Neotest
-    NeotestFailed                = { fg = nord.red },
-    NeotestDir                   = { fg = nord.off_blue },
-    NeotestFile                  = { fg = nord.off_blue },
-    NeotestTarget                = { fg = nord.purple },
-    NeotestRunning               = { fg = nord.yellow },
-    NeotestPassed                = { fg = nord.green },
-    NeotestSkipped               = { fg = nord.glacier },
-    NeotestMakred                = { fg = nord.orange },
-    NeotestNamespace             = { fg = nord.glacier },
-    NeotestAdapterName           = { fg = nord.glacier },
+    NeotestFailed = { fg = nord.red },
+    NeotestDir = { fg = nord.off_blue },
+    NeotestFile = { fg = nord.off_blue },
+    NeotestTarget = { fg = nord.purple },
+    NeotestRunning = { fg = nord.yellow },
+    NeotestPassed = { fg = nord.green },
+    NeotestSkipped = { fg = nord.glacier },
+    NeotestMakred = { fg = nord.orange },
+    NeotestNamespace = { fg = nord.glacier },
+    NeotestAdapterName = { fg = nord.glacier },
   }
 end
 

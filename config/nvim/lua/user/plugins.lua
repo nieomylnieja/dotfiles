@@ -183,7 +183,7 @@ return {
             show_line = false,
           },
           lsp_document_symbols = {
-            show_line = true,
+            show_line = false,
           },
         },
       })
@@ -456,6 +456,11 @@ return {
   },
   {
     "sindrets/diffview.nvim",
+    config = function()
+      require("diffview").setup({
+        enhanced_diff_hl = true,
+      })
+    end,
   },
   {
     "akinsho/bufferline.nvim",
