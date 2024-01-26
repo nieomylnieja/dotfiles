@@ -172,3 +172,6 @@ test -r /home/mh/.opam/opam-init/init.sh && . /home/mh/.opam/opam-init/init.sh >
 if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
 	source "$HOME"/nobl9/nobl9rc.bash
 fi
+
+# Hook for direnv.
+eval "$(direnv hook bash)"
