@@ -29,7 +29,7 @@ main() {
 			sed 's/\n/ /'
 	)
 
-  # TODO: fetch only once per resource.
+	# TODO: fetch only once per resource.
 	# declare -A resources
 	for env in "${selectedEnvs[@]}"; do
 		entry=$(jq "select(.name == \"$env\")" <<<"$allEnvs")
@@ -42,7 +42,7 @@ main() {
 				value=$(kubectl get -n "$namespace" "${type%"KeyRef"}/$name" -o json |
 					jq -r ".data.\"$key\"")
 				if [[ $type == "secretKeyRef" ]]; then
-					value=$(base64 -d <<<"$value")
+					value=$(base64 -d <<<"$value" | sed -z 's/\n/\\n/g')
 				fi
 			elif [[ $type == "fieldRef" ]]; then
 				path=$(jq -r .valueFrom.fieldRef.fieldPath <<<"$entry" | sed "s/'/\"/g")
