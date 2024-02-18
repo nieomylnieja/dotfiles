@@ -13,7 +13,7 @@
 	insteadOf = https://github.com/
 
 [commit]
-	template = /home/mh/.dotfiles/config/git/commit-template
+	template = ~/.dotfiles/config/git/commit-template
 
 [pull]
   rebase = false
@@ -25,11 +25,21 @@
 [mergetool "vimdiff"]
 	cmd = nvim -c DiffviewOpen
 
+[column]
+	ui = auto
+
+[branch]
+	sort = -committerdate
+
+[maintenance]
+	auto = false
+	strategy = incremental
+
 [init]
 	defaultBranch = main
 
 [core]
-	excludesfile = /home/mh/.dotfiles/config/git/gitignore-global
+	excludesfile = ~/.dotfiles/config/git/gitignore-global
 	editor = nvim
   autocrlf = input
   pager = delta
@@ -39,6 +49,7 @@
 	subup = submodule update --init --recursive
   tree = log --graph --pretty=format:'%Cblue%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%ar) %C(cyan)<%an>%Creset' --abbrev-commit
 	pc = !"f() { remote=\"${1:-origin}\"; git push -u \"$remote\" $(git rev-parse --abbrev-ref HEAD); }; f"
+	staash = stash --all
 
 [interactive]
   diffFilter = delta --color-only

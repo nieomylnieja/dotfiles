@@ -51,7 +51,7 @@ in {
     gnome.sushi
     gnumake
     gnupg
-    go
+    go_1_22
     httpie
     i3lock-color
     jetbrains.goland
