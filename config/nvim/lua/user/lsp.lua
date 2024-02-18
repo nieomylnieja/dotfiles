@@ -87,8 +87,7 @@ local servers = {
           enable = true,
         },
         schemas = {
-          -- { uri = "https://json.schemastore.org/package-lock.json" },
-          -- { uri = "https://json.schemastore.org/yarn.lock" },
+          ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
         },
       },
     },

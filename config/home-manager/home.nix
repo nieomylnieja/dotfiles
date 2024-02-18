@@ -32,6 +32,7 @@ in {
     cachix
     csvkit
     delta
+    devbox
     direnv
     discord
     du-dust
