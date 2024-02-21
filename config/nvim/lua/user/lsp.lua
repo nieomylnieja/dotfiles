@@ -184,8 +184,22 @@ M.setup = function()
     on_attach = get_on_attach(),
   })
 
+  local configs = require("lspconfig.configs")
+  local lsp_conf = require("lspconfig")
+  configs.n9lsp = {
+    default_config = {
+      cmd = { "n9lsp", "-logLevel=debug" },
+      filetypes = { "yaml" },
+      root_dir = function(fname)
+        return lsp_conf.util.find_git_ancestor(fname)
+      end,
+      settings = {},
+    },
+  }
+  servers["n9lsp"] = {}
+
   for server, config in pairs(servers) do
-    require("lspconfig")[server].setup(vim.tbl_deep_extend("force", {
+    lsp_conf[server].setup(vim.tbl_deep_extend("force", {
       capabilities = capabilities,
       on_attach = get_on_attach(server),
     }, config))

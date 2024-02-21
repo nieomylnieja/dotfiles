@@ -67,8 +67,10 @@ in {
   # Configure keymap in X11
   services.xserver = {
     enable = true;
-    layout = "pl";
-    xkbVariant = "";
+    xkb = {
+      layout = "pl";
+      variant = "";
+    };
     libinput.enable = true; # Touchpad support.
     displayManager = {
       lightdm.enable = true;
@@ -133,7 +135,7 @@ in {
       "scanner"
       "docker"
     ];
-    packages = with pkgs; [];
+    packages = with pkgs; [ ];
   };
 
   # Allow unfree packages
@@ -148,7 +150,6 @@ in {
     neovim
     wget
     git
-    experimental.factorio
   ];
 
   # Support unpached dynamic binaries out of the box.
@@ -159,13 +160,13 @@ in {
 
   # Always enable shell system wide, othwerise it won't source the neccessary stuff.
   users.defaultUserShell = pkgs.bash;
-  environment.shells = with pkgs; [bash];
+  environment.shells = with pkgs; [ bash ];
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
   # Yubikey support
-  services.udev.packages = [pkgs.yubikey-personalization];
+  services.udev.packages = [ pkgs.yubikey-personalization ];
   services.pcscd.enable = true;
 
   # Configure UI

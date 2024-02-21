@@ -421,25 +421,47 @@ return {
     },
   },
   {
-    "codota/tabnine-nvim",
-    build = "./dl_binaries.sh",
+    "zbirenbaum/copilot.lua",
     config = function()
-      require("tabnine").setup({
-        disable_auto_comment = true,
-        accept_keymap = "<M-Tab>",
-        dismiss_keymap = "<C-]>",
-        debounce_ms = 800,
-        -- suggestion_color = { gui = "#808080", cterm = 244 },
-        exclude_filetypes = { "TelescopePrompt", "NvimTree" },
-        log_file_path = nil, -- absolute path to Tabnine log file
+      -- Required for cmp to work properly.
+      require("copilot").setup({
+        suggestion = { enabled = false },
+        panel = { enabled = false },
       })
     end,
   },
   {
-    "tzachar/cmp-tabnine",
-    build = "./install.sh",
-    dependencies = "hrsh7th/nvim-cmp",
+    "zbirenbaum/copilot-cmp",
+    config = function()
+      require("copilot_cmp").setup()
+    end,
   },
+  -- EVALUATION OVER --
+  -- Once they have a better chat support I might reconsider.
+  --
+  -- {
+  -- 	"codota/tabnine-nvim",
+  -- 	build = {
+  -- 		"./dl_binaries.sh",
+  -- 		"cd chat/ && cargo build --release",
+  -- 	},
+  -- 	config = function()
+  -- 		require("tabnine").setup({
+  -- 			disable_auto_comment = true,
+  -- 			accept_keymap = "<M-Tab>",
+  -- 			dismiss_keymap = "<C-]>",
+  -- 			debounce_ms = 800,
+  -- 			-- suggestion_color = { gui = "#808080", cterm = 244 },
+  -- 			exclude_filetypes = { "TelescopePrompt", "NvimTree" },
+  -- 			log_file_path = nil, -- absolute path to Tabnine log file
+  -- 		})
+  -- 	end,
+  -- },
+  -- {
+  -- 	"tzachar/cmp-tabnine",
+  -- 	build = "./install.sh",
+  -- 	dependencies = "hrsh7th/nvim-cmp",
+  -- },
   {
     "NvChad/nvim-colorizer.lua",
     config = function()

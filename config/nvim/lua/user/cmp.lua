@@ -3,10 +3,10 @@ local luasnip = require("luasnip")
 require("luasnip.loaders.from_vscode").lazy_load()
 luasnip.config.setup({})
 
-local tabnine = require("cmp_tabnine.config")
-tabnine:setup({
-  max_num_results = 3,
-})
+-- local tabnine = require("cmp_tabnine.config")
+-- tabnine:setup({
+--   max_num_results = 3,
+-- })
 
 cmp.setup({
   snippet = {
@@ -55,7 +55,8 @@ cmp.setup({
   sources = {
     { name = "nvim_lsp" },
     { name = "luasnip" },
-    { name = "cmp_tabnine" },
+    -- { name = "cmp_tabnine" },
+    { name = "copilot" },
     { name = "path" },
   },
   formatting = {
@@ -64,7 +65,7 @@ cmp.setup({
       vim_item.kind = require("lspkind").symbolic(vim_item.kind, { mode = "symbol_text" })
       local strings = vim.split(vim_item.kind, "%s", { trimempty = true })
       local kind, menu = strings[1], strings[2]
-      if entry.source.name == "cmp_tabnine" then
+      if entry.source.name == "cmp_tabnine" or entry.source.name == "copilot" then
         local detail = (entry.completion_item.labelDetails or {}).detail
         kind = "󱙺"
         if detail and detail:find(".*%%.*") then

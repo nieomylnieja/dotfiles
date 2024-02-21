@@ -64,7 +64,7 @@ in {
     mesa
     moreutils
     cinnamon.nemo-with-extensions
-    (nerdfonts.override {fonts = ["Mononoki"];})
+    (nerdfonts.override { fonts = [ "Mononoki" ]; })
     neofetch
     neovim
     nixpkgs-fmt
@@ -133,7 +133,7 @@ in {
 
   programs.browserpass = {
     enable = true;
-    browsers = ["brave" "firefox"];
+    browsers = [ "brave" "firefox" ];
   };
 
   programs.firefox = {
@@ -196,7 +196,7 @@ in {
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
-    plugins = with pkgs; [rofi-calc];
+    plugins = with pkgs; [ rofi-calc ];
     pass.enable = true;
   };
 
@@ -208,40 +208,42 @@ in {
   };
 
   # Lock screen
-  services.xidlehook = let
-    paths = [
-      "$PATH"
-      "${pkgs.xorg.xrandr}/bin"
-      "${dotfilesDir}/scripts"
-      "${pkgs.i3lock-color}/bin"
-      "${pkgs.dunst}/bin"
-      "${pkgs.bash}/bin"
-      "${pkgs.gnugrep}/bin"
-      "${pkgs.coreutils-full}/bin"
-    ];
-  in {
-    enable = true;
-    not-when-audio = true;
-    detect-sleep = true;
-    environment = {
-      "PATH" = builtins.concatStringsSep ":" paths;
+  services.xidlehook =
+    let
+      paths = [
+        "$PATH"
+        "${pkgs.xorg.xrandr}/bin"
+        "${dotfilesDir}/scripts"
+        "${pkgs.i3lock-color}/bin"
+        "${pkgs.dunst}/bin"
+        "${pkgs.bash}/bin"
+        "${pkgs.gnugrep}/bin"
+        "${pkgs.coreutils-full}/bin"
+      ];
+    in
+    {
+      enable = true;
+      not-when-audio = true;
+      detect-sleep = true;
+      environment = {
+        "PATH" = builtins.concatStringsSep ":" paths;
+      };
+      timers = [
+        {
+          delay = 300;
+          command = "brightness set 50";
+          canceller = "brightness set 100";
+        }
+        {
+          delay = 10;
+          command = "brightness set 100; locker";
+        }
+        {
+          delay = 3600;
+          command = "systemctl hibernate || systemctl suspend";
+        }
+      ];
     };
-    timers = [
-      {
-        delay = 300;
-        command = "brightness set 50";
-        canceller = "brightness set 100";
-      }
-      {
-        delay = 10;
-        command = "brightness set 100; locker";
-      }
-      {
-        delay = 3600;
-        command = "systemctl hibernate || systemctl suspend";
-      }
-    ];
-  };
 
   # Notifications
   services.dunst.enable = true;
