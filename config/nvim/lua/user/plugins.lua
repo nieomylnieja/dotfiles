@@ -100,14 +100,15 @@ return {
         "ruff-lsp",
         "typescript-language-server",
         "nil",
+        "bash-language-server",
         -- Linters/formatters
         "stylua",
         "luacheck",
         "delve",
         "goimports",
-        "ruff", -- Required for ruff-lsp to work.
+        "ruff",   -- Required for ruff-lsp to work.
         "shfmt",
-        "shellcheck",
+        "shellcheck", -- For bashls
         -- Code Actions
         "gomodifytags",
         "impl",
