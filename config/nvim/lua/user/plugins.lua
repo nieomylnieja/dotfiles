@@ -114,6 +114,7 @@ return {
         "impl",
         -- DAP
         "delve",
+        -- "debugpy",
       },
       ui = { border = "rounded" },
     },
@@ -313,6 +314,7 @@ return {
         opts = {},
       },
       "leoluz/nvim-dap-go",
+      "mfussenegger/nvim-dap-python",
     },
     config = function()
       require("user.dap")

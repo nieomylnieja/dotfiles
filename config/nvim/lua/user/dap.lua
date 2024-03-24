@@ -40,7 +40,11 @@ dap.listeners.after.event_initialized["dapui_config"] = function() dapui.open({}
 dap.listeners.before.event_terminated["dapui_config"] = function() dapui.close({}) end
 dap.listeners.before.event_exited["dapui_config"] = function() dapui.close({}) end
 
-require("dap-go").setup()
+local dap_go = require("dap-go")
+local dap_python = require("dap-python")
+
+dap_go.setup()
+dap_python.setup()
 
 ---@param config {args?:string[]|fun():string[]?}
 local function dap_get_args(config)
@@ -64,7 +68,9 @@ require("which-key").register({
     m = { function()
       local ft = vim.bo.filetype
       if ft == "go" then
-        require("dap-go").debug_test()
+        dap_go.debug_test()
+      elseif ft == "python" then
+        dap_python.test_method()
       else
         vim.notify("unsupported DAP for running test", vim.log.levels.ERROR)
       end
@@ -79,8 +85,9 @@ require("which-key").register({
     O = { function() dap.step_over() end, "Step Over" },
     p = { function() dap.pause() end, "Pause" },
     r = { function() dap.repl.toggle() end, "Toggle REPL" },
-    s = { function() dap.session() end, "Session" },
     t = { function() dap.terminate() end, "Terminate" },
     w = { function() require("dap.ui.widgets").hover() end, "Widgets" },
+    f = { function() dap_python.test_class() end, "Debug class" },
+    s = { function() dap_python.debug_selection() end, "Debug selection" },
   }
 }, { prefix = "<leader>" })
