@@ -300,6 +300,7 @@ return {
       "antoinemadec/FixCursorHold.nvim",
       -- Adapters
       "nvim-neotest/neotest-go",
+      "nvim-neotest/nvim-nio",
     },
     config = function()
       require("user.neotest")
