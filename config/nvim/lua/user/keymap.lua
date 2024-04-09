@@ -1,8 +1,12 @@
 local map = vim.keymap.set
 
--- better up/down which works with wrapped lines.
+-- Better up/down which works with wrapped lines.
 map({ "n", "x" }, "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
 map({ "n", "x" }, "k", "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
+
+-- Use H and L for beginning/end of line.
+map("n", "H", "^", { silent = true })
+map("n", "L", "$", { silent = true })
 
 -- Move to window using the <ctrl> hjkl keys
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window", remap = true })
