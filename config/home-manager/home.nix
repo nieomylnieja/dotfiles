@@ -1,11 +1,12 @@
-{
-  config,
-  pkgs,
-  ...
-}: let
+{ config
+, pkgs
+, ...
+}:
+let
   homeDir = "/home/mh";
   dotfilesDir = "${homeDir}/.dotfiles";
-in {
+in
+{
   programs.home-manager.enable = true;
   nixpkgs.config = {
     allowUnfree = true;
@@ -205,7 +206,7 @@ in {
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryFlavor = "qt";
+    pinentryPackage = pkgs.pinentry-qt;
   };
 
   # Lock screen
