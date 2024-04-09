@@ -18,20 +18,12 @@ M.setup = function(lsp_config)
     -- Shell
     fmt.shfmt,
     -- All types
-    fmt.trim_newlines,
-    fmt.trim_whitespace,
-
-    -- LINTING:
-    -- Shell
-    lint.shellcheck,
 
     -- ACTIONS:
     -- custom.gomodifytags(),
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },
     }),
-    -- Shell
-    action.shellcheck,
   }
 
   null_ls.setup(vim.tbl_deep_extend("force", lsp_config, { sources = sources }))

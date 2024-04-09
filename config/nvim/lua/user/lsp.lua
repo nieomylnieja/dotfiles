@@ -119,6 +119,13 @@ local servers = {
       },
     },
   },
+  bashls = {
+    settings = {
+      bashIde = {
+        globPattern = "*@(.sh|.inc|.bash|.command|.bats)",
+      },
+    },
+  },
 }
 
 local function keymap(bufnr, server)
