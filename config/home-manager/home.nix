@@ -85,6 +85,7 @@ in {
     rustup
     feh
     flameshot
+    signal-desktop
     sops
     spotify
     starship
