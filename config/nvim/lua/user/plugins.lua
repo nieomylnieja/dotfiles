@@ -101,6 +101,7 @@ return {
         "typescript-language-server",
         "nil",
         "bash-language-server",
+        "terraform-ls",
         -- Linters/formatters
         "stylua",
         "luacheck",

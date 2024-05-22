@@ -126,6 +126,7 @@ local servers = {
       },
     },
   },
+  terraformls = {},
 }
 
 local function keymap(bufnr, server)

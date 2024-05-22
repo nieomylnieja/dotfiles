@@ -120,6 +120,7 @@ in
     "picom".source = ../picom;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "ideavim".source = ../ideavim;
+    "direnv".source = ../direnv;
   };
 
   home.sessionPath = [
