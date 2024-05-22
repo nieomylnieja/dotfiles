@@ -1,15 +1,16 @@
 # Edit this configuration file to define what should be installed on
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
-{
-  config,
-  pkgs,
-  ...
-}: let
+{ config
+, pkgs
+, ...
+}:
+let
   user = "mh";
   # Will vary based on machine.
   luks-disk = "db203a15-1291-4e05-9912-d199aefb9d0d";
-in {
+in
+{
   imports = [
     # Include the results of the hardware scan.
     ./hardware-configuration.nix
@@ -65,16 +66,16 @@ in {
   };
 
   # Configure keymap in X11
+  services.libinput.enable = true; # Touchpad support.
+  services.displayManager.defaultSession = "none+qtile";
   services.xserver = {
     enable = true;
     xkb = {
       layout = "pl";
       variant = "";
     };
-    libinput.enable = true; # Touchpad support.
     displayManager = {
       lightdm.enable = true;
-      defaultSession = "none+qtile";
     };
     windowManager.session = [{
       name = "qtile";
@@ -107,16 +108,16 @@ in {
 
   # Bluetooth
   hardware.bluetooth.enable = true;
-  environment.etc = {
-    "wireplumber/bluetooth.lua.d/51-bluez-config.lua".text = ''
+  services.pipewire.wireplumber.configPackages = [
+    (pkgs.writeTextDir "share/wireplumber/bluetooth.lua.d/51-bluez-config.lua" ''
       bluez_monitor.properties = {
       	["bluez5.enable-sbc-xq"] = true,
       	["bluez5.enable-msbc"] = true,
       	["bluez5.enable-hw-volume"] = true,
       	["bluez5.headset-roles"] = "[ hsp_hs hsp_ag hfp_hf hfp_ag ]"
       }
-    '';
-  };
+    '')
+  ];
 
   # Configure console keymap
   console.keyMap = "pl2";
@@ -135,16 +136,10 @@ in {
       "scanner"
       "docker"
     ];
-    packages = with pkgs; [ ];
   };
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
-  # Required for obsidian to work.
-  nixpkgs.config.permittedInsecurePackages = [
-    "electron-25.9.0"
-  ];
-
   # List packages installed in system profile. To search, run:
   environment.systemPackages = with pkgs; [
     neovim
