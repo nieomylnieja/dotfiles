@@ -87,6 +87,7 @@ in
     feh
     flameshot
     signal-desktop
+    slack
     sops
     spotify
     starship
