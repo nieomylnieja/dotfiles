@@ -101,6 +101,7 @@ in
     yubikey-manager
     yq
     vlc
+    winbox
   ];
 
   home.file = {
