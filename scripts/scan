@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+device=$(scanimage -L |
+  fzf --prompt 'Loading>  ' --bind 'load:change-prompt:> ' |
+  awk '{sub(/'"'"'/,"",$2);sub(/`/,"",$2);print $2}')
+
+scanimage --device-name "$device" --resolution=1200 --mode=Color --format=pdf >scan.pdf
