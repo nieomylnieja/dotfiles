@@ -118,6 +118,8 @@ in
       }
     '')
   ];
+  # Scanner support
+  hardware.sane.enable = true;
 
   # Configure console keymap
   console.keyMap = "pl2";
