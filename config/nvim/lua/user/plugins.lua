@@ -103,6 +103,7 @@ return {
         "bash-language-server",
         "terraform-ls",
         -- Linters/formatters
+        "actionlint",
         "stylua",
         "luacheck",
         "delve",

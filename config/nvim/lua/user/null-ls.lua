@@ -8,6 +8,9 @@ M.setup = function(lsp_config)
   local action = null_ls.builtins.code_actions
 
   local sources = {
+    -- LINTING:
+    lint.actionlint,
+    --
     -- FORMATTING:
     -- Lua
     fmt.stylua,
