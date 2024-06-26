@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+read -rp "Enter search phrase: " search_phrase
+read -rp "Enter replace phrase: " replace_phrase
+
+# shellcheck disable=SC2016
+changes=$(rg --vimgrep "$search_phrase" |
+  awk -F':' '{print $1, $2}' |
+  fzf -m \
+    --preview '
+    git diff -U4 \
+      {1} \
+      <(sed '"'"'{2}s/'"$search_phrase"'/'"$replace_phrase"'/g'"'"' {1}) |
+    delta \
+      --side-by-side \
+      -w ${FZF_PREVIEW_COLUMNS:-$COLUMNS}' \
+    --preview-window up,50%)
+
+while read -r change; do
+  file=$(echo "$change" | awk '{print $1}')
+  line=$(echo "$change" | awk '{print $2}')
+  echo "Replacing '$search_phrase' with '$replace_phrase' in $file:$line"
+  sed -i "${line}s/${search_phrase}/${replace_phrase}/g" "$file"
+done <<<"$changes"
