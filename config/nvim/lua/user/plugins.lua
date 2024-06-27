@@ -208,12 +208,13 @@ return {
       },
     },
   },
-  {
-    "numToStr/Comment.nvim",
-    config = function()
-      require("Comment").setup()
-    end,
-  },
+  -- I might not need it since nvim 0.10 comes with this functionality baked-in.
+  -- {
+  --   "numToStr/Comment.nvim",
+  --   config = function()
+  --     require("Comment").setup()
+  --   end,
+  -- },
   {
     "folke/trouble.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },

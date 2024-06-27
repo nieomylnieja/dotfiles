@@ -34,6 +34,7 @@ local servers = {
     },
     settings = {
       gopls = {
+        buildFlags = { "-tags=integration_test,e2e_test,unit_test" },
         experimentalPostfixCompletions = true,
         usePlaceholders = false,
         staticcheck = true,
@@ -80,18 +81,18 @@ local servers = {
     single_file_support = true,
   },
   jsonls = {},
-  yamlls = {
-    settings = {
-      yaml = {
-        format = {
-          enable = true,
-        },
-        schemas = {
-          ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
-        },
-      },
-    },
-  },
+  -- yamlls = {
+  --   settings = {
+  --     yaml = {
+  --       format = {
+  --         enable = true,
+  --       },
+  --       schemas = {
+  --         ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
+  --       },
+  --     },
+  --   },
+  -- },
   ruff_lsp = {},
   pyright = {
     settings = {
@@ -152,6 +153,9 @@ local function keymap(bufnr, server)
   nmap("gK", vim.lsp.buf.signature_help, "Signature Documentation")
   nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")
   nmap("<leader>D", ts.lsp_type_definitions, "Type [D]efinition")
+  nmap("<leader>h", function()
+    vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({}))
+  end, "Inlay [H]ints")
 
   if server == "gopls" then
     nmap("<leader>im", function()
@@ -194,22 +198,24 @@ M.setup = function()
 
   local configs = require("lspconfig.configs")
   local lsp_conf = require("lspconfig")
-  configs.n9lsp = {
-    default_config = {
-      cmd = { "n9lsp", "-logLevel=debug" },
-      filetypes = { "yaml" },
-      root_dir = function(fname)
-        return lsp_conf.util.find_git_ancestor(fname)
-      end,
-      settings = {},
-    },
-  }
-  servers["n9lsp"] = {}
+  -- configs.n9lsp = {
+  --   default_config = {
+  --     cmd = { "n9lsp", "-logLevel=debug" },
+  --     filetypes = { "yaml" },
+  --     root_dir = function(fname)
+  --       return lsp_conf.util.find_git_ancestor(fname)
+  --     end,
+  --     settings = {},
+  --     message_level = vim.lsp.protocol.MessageType.Info,
+  --   },
+  -- }
+  -- servers["n9lsp"] = {}
 
   for server, config in pairs(servers) do
     lsp_conf[server].setup(vim.tbl_deep_extend("force", {
       capabilities = capabilities,
       on_attach = get_on_attach(server),
+      message_level = vim.lsp.protocol.MessageType.Info,
     }, config))
   end
 end

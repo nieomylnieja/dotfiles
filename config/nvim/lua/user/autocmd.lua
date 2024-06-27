@@ -91,12 +91,3 @@ vim.api.nvim_create_autocmd({ "BufWritePre" }, {
     vim.fn.mkdir(vim.fn.fnamemodify(file, ":p:h"), "p")
   end,
 })
-
--- Refresh code lenses for gopls.
-vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI", "InsertLeave" }, {
-  group = augroup("codelenses"),
-  pattern = { "*.go", "*.mod" },
-  callback = function()
-    vim.lsp.codelens.refresh()
-  end,
-})
