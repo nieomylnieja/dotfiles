@@ -40,7 +40,7 @@ local servers = {
         staticcheck = true,
         -- Remove poorly supported tokens.
         -- For example, currently gopls does not allow to discern between a boolean and a variable...
-        semanticTokens = false,
+        semanticTokens = true,
         completeUnimported = true,
         -- Symbols are important for things like goimpl.
         symbolMatcher = "FastFuzzy",

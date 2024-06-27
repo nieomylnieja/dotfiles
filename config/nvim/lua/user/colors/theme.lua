@@ -248,6 +248,7 @@ theme.loadTreeSitter = function()
     ["@conditional"] = { fg = nord.glacier },
     ["@namespace"] = { fg = nord.darkest_white },
     ["@method"] = { fg = nord.off_blue },
+    ["@module"] = { fg = nord.darkest_white },
     ["@function"] = { fg = nord.off_blue },
     ["@function.builtin"] = { fg = nord.off_blue },
     ["@field"] = { fg = nord.darkest_white },
@@ -272,7 +273,7 @@ theme.loadSemanitcTokens = function()
     ["@lsp.type.macro"] = { link = "@funtion.macro" },
     ["@lsp.type.method"] = { fg = nord.off_blue },
     ["@lsp.type.struct"] = { fg = nord.off_blue },
-    ["@lsp.type.type"] = { link = "@type" },
+    ["@lsp.type.type"] = { fg = nord.teal, style = "bold" },
     ["@lsp.type.boolean"] = { link = "@boolean" },
     ["@lsp.type.builtinType"] = { link = "@type.builtin" },
     ["@lsp.type.comment"] = { link = "@comment" },
@@ -295,8 +296,9 @@ theme.loadSemanitcTokens = function()
     ["@lsp.type.variable"] = {}, -- use treesitter styles for regular variables
     ["@lsp.mod.builtin"] = { fg = nord.glacier },
     ["@lsp.typemod.variable.defaultLibrary"] = { fg = nord.glacier },
-    ["@lsp.typemod.variable.readonly"] = { link = "@type.builtin" },
+    ["@lsp.typemod.variable.readonly"] = { fg = nord.darkest_white, style = "bold" },
     ["@lsp.typemod.type.definition"] = { fg = nord.teal },
+    ["@lsp.typemod.type.defaultLibrary"] = { fg = nord.glacier },
   }
 end
 
