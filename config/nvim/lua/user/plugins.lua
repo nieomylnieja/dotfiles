@@ -220,6 +220,7 @@ return {
     dependencies = { "nvim-tree/nvim-web-devicons" },
     cmd = { "TroubleToggle", "Trouble" },
     opts = {
+      focus = true,
       warn_no_results = false,
       open_no_results = true,
     },
