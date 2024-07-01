@@ -219,7 +219,10 @@ return {
     "folke/trouble.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     cmd = { "TroubleToggle", "Trouble" },
-    opts = { use_diagnostic_signs = true },
+    opts = {
+      warn_no_results = false,
+      open_no_results = true,
+    },
   },
   {
     "windwp/nvim-autopairs",
