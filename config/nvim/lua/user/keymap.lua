@@ -89,11 +89,11 @@ wk.register({
 wk.register({
   t = {
     name = "+Trouble/Test",
-    r = { "<cmd>Trouble lsp_references<cr>", "References" },
-    q = { "<cmd>Trouble quickfix<cr>", "Quick Fix" },
-    l = { "<cmd>Trouble loclist<cr>", "Location List" },
-    d = { "<cmd>Trouble document_diagnostics<cr>", "Diagnostics" },
-    w = { "<cmd>Trouble workspace_diagnostics<cr>", "Workspace Diagnostics" },
+    r = { "<cmd>Trouble lsp toggle focus=false win.position=right<cr>", "References" },
+    q = { "<cmd>Trouble qflist toggle<cr>", "Quick Fix" },
+    l = { "<cmd>Trouble loclist toggle<cr>", "Location List" },
+    d = { "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Diagnostics" },
+    w = { "<cmd>Trouble diagnostics toggle<cr>", "Workspace Diagnostics" },
     t = { "<cmd>TodoTrouble<cr>", "TODO comments" },
     m = { "<cmd>lua require('neotest').run.run()<cr>", "Test Method" },
     f = { "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", "Test File" },
