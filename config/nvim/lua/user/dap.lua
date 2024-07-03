@@ -43,7 +43,11 @@ dap.listeners.before.event_exited["dapui_config"] = function() dapui.close({}) e
 local dap_go = require("dap-go")
 local dap_python = require("dap-python")
 
-dap_go.setup()
+dap_go.setup({
+  delve = {
+    build_flags = "-tags=integration_test,e2e_test,unit_test"
+  }
+})
 dap_python.setup()
 
 ---@param config {args?:string[]|fun():string[]?}

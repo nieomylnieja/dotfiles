@@ -60,6 +60,8 @@ theme.loadEditor = function()
   return {
     NormalFloat = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
     FloatBorder = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
+    WinBar = { bg = nord.black },
+    WinBarNC = { bg = nord.black },
     ColorColumn = { fg = nord.none, bg = nord.dark_gray },                  -- used for the columns set with 'colorcolumn'
     Conceal = { fg = nord.dark_gray },                                      -- placeholder characters substituted for concealed text (see 'conceallevel')
     Cursor = { fg = nord.darkest_white, bg = nord.none, style = "reverse" }, -- the character under the cursor
@@ -180,7 +182,7 @@ theme.loadEditor = function()
     -- Blended 50% nord.black and 50% nord.red
     DiffDelete = { bg = "#774b55" }, -- diff mode: Deleted line
     -- Blended 70% nord.black and 30% nord.red
-    DiffText = { bg = "#4b5d65 " },  -- diff mode: Changed text within a changed line
+    DiffText = { bg = "#4b5d65 " }, -- diff mode: Changed text within a changed line
   }
 end
 

@@ -15,7 +15,8 @@ M.setup = function(lsp_config)
     -- Lua
     fmt.stylua,
     -- Go
-    fmt.goimports,
+    -- FIXME: goimports is not working properly, it lags the hell out of null-ls formatting.
+    -- fmt.goimports,
     -- OCaml
     fmt.ocamlformat,
     -- Shell
