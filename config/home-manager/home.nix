@@ -48,8 +48,8 @@ in
     gh
     git
     glibcLocales
-    gnome.simple-scan
-    gnome.sushi
+    simple-scan
+    sushi
     gnumake
     gnupg
     go_1_22
