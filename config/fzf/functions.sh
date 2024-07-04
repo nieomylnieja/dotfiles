@@ -6,24 +6,24 @@
 
 # fzf --preview command for file and directory
 if type bat >/dev/null 2>&1; then
-    FZF_PREVIEW_CMD='bat --color=always --plain --line-range :$FZF_PREVIEW_LINES {}'
+  FZF_PREVIEW_CMD='bat --color=always --plain --line-range :$FZF_PREVIEW_LINES {}'
 elif type pygmentize >/dev/null 2>&1; then
-    FZF_PREVIEW_CMD='head -n $FZF_PREVIEW_LINES {} | pygmentize -g'
+  FZF_PREVIEW_CMD='head -n $FZF_PREVIEW_LINES {} | pygmentize -g'
 else
-    FZF_PREVIEW_CMD='head -n $FZF_PREVIEW_LINES {}'
+  FZF_PREVIEW_CMD='head -n $FZF_PREVIEW_LINES {}'
 fi
 
 # zdd - cd to selected directory
 zdd() {
   local dir
   dir="$(
-    find "${1:-.}" -path '*/\.*' -prune -o -type d -print 2> /dev/null \
-      | fzf +m \
-          --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)' \
+    find "${1:-.}" -path '*/\.*' -prune -o -type d -print 2>/dev/null |
+      fzf +m \
+        --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
+        --preview-window='right:hidden:wrap' \
+        --bind=ctrl-v:toggle-preview \
+        --bind=ctrl-x:toggle-sort \
+        --header='(view:ctrl-v) (sort:ctrl-x)'
   )" || return
   cd "$dir" || return
 }
@@ -32,13 +32,13 @@ zdd() {
 zda() {
   local dir
   dir="$(
-    find "${1:-.}" -type d 2> /dev/null \
-      | fzf +m \
-          --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)' \
+    find "${1:-.}" -type d 2>/dev/null |
+      fzf +m \
+        --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
+        --preview-window='right:hidden:wrap' \
+        --bind=ctrl-v:toggle-preview \
+        --bind=ctrl-x:toggle-sort \
+        --header='(view:ctrl-v) (sort:ctrl-x)'
   )" || return
   cd "$dir" || return
 }
@@ -58,13 +58,13 @@ zdr() {
   }
 
   parent_dir="$(
-    get_parent_dirs "$(realpath "${1:-$PWD}")" \
-      | fzf +m \
-          --preview 'tree -C {} | head -n $FZF_PREVIEW_LINES' \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)' \
+    get_parent_dirs "$(realpath "${1:-$PWD}")" |
+      fzf +m \
+        --preview 'tree -C {} | head -n $FZF_PREVIEW_LINES' \
+        --preview-window='right:hidden:wrap' \
+        --bind=ctrl-v:toggle-preview \
+        --bind=ctrl-x:toggle-sort \
+        --header='(view:ctrl-v) (sort:ctrl-x)'
   )" || return
 
   cd "$parent_dir" || return
@@ -74,16 +74,16 @@ zdr() {
 zst() {
   local dir
   dir="$(
-    dirs \
-      | sed 's#\s#\n#g' \
-      | uniq \
-      | sed "s#^~#$HOME#" \
-      | fzf +s +m -1 -q "$*" \
-            --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
-            --preview-window='right:hidden:wrap' \
-            --bind=ctrl-v:toggle-preview \
-            --bind=ctrl-x:toggle-sort \
-            --header='(view:ctrl-v) (sort:ctrl-x)' \
+    dirs |
+      sed 's#\s#\n#g' |
+      uniq |
+      sed "s#^~#$HOME#" |
+      fzf +s +m -1 -q "$*" \
+        --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
+        --preview-window='right:hidden:wrap' \
+        --bind=ctrl-v:toggle-preview \
+        --bind=ctrl-x:toggle-sort \
+        --header='(view:ctrl-v) (sort:ctrl-x)'
   )"
   # check $dir exists for Ctrl-C interrupt
   # or change directory to $HOME (= no value cd)
@@ -95,13 +95,14 @@ zst() {
 # zdf - cd into the directory of the selected file
 zdf() {
   local file
-  file="$(fzf +m -q "$*" \
-           --preview="${FZF_PREVIEW_CMD}" \
-           --preview-window='right:hidden:wrap' \
-           --bind=ctrl-v:toggle-preview \
-           --bind=ctrl-x:toggle-sort \
-           --header='(view:ctrl-v) (sort:ctrl-x)' \
-       )"
+  file="$(
+    fzf +m -q "$*" \
+      --preview="${FZF_PREVIEW_CMD}" \
+      --preview-window='right:hidden:wrap' \
+      --bind=ctrl-v:toggle-preview \
+      --bind=ctrl-x:toggle-sort \
+      --header='(view:ctrl-v) (sort:ctrl-x)'
+  )"
   cd "$(dirname "$file")" || return
 }
 
@@ -110,21 +111,13 @@ zz() {
   local dir
 
   dir="$(
-    fasd -dl \
-      | fzf \
-          --tac \
-          --reverse \
-          --select-1 \
-          --no-sort \
-          --no-multi \
-          --tiebreak=index \
-          --bind=ctrl-x:toggle-sort \
-          --query "$*" \
-          --preview='tree -C {} | head -n $FZF_PREVIEW_LINES' \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)' \
+    zoxide query -ls |
+      awk '{print $2}' |
+      fzf \
+        --no-sort \
+        --multi \
+        --bind=ctrl-x:toggle-sort \
+        --preview="exa -1l --color=always {}"
   )" || return
 
   cd "$dir" || return
@@ -168,50 +161,46 @@ EOF
     # args is start from '-'
     while getopts darfszh OPT; do
       case "$OPT" in
-        d) shift; zdd  "$1";;
-        a) shift; zda "$1";;
-        r) shift; zdr "$1";;
-        s) shift; zst "$*";;
-        f) shift; zdf "$*";;
-        z) shift; zz  "$*";;
-        h) usage; return 0;;
-        *) usage; return 1;;
+      d)
+        shift
+        zdd "$1"
+        ;;
+      a)
+        shift
+        zda "$1"
+        ;;
+      r)
+        shift
+        zdr "$1"
+        ;;
+      s)
+        shift
+        zst "$*"
+        ;;
+      f)
+        shift
+        zdf "$*"
+        ;;
+      z)
+        shift
+        zz "$*"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+      *)
+        usage
+        return 1
+        ;;
       esac
     done
   fi
 }
 
-
 # -----------------------------------------------------------------------------
 # file
 # -----------------------------------------------------------------------------
-
-# e - open 'frecency' files in $VISUAL editor
-e() {
-  local IFS=$'\n'
-  local files=()
-
-  files=(
-  "$(
-    fasd -fl \
-      | fzf \
-          --tac \
-          --reverse -1 \
-          --no-sort \
-          --multi \
-          --tiebreak=index \
-          --bind=ctrl-x:toggle-sort \
-          --query "$*" \
-          --preview="${FZF_PREVIEW_CMD}" \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)' \
-      )"
-  ) || return
-
-  "${EDITOR:-vim}" "${files[@]}"
-}
 
 # fe [FUZZY PATTERN] - Open the selected file with the default editor
 #   - Bypass fuzzy finder if there's only one match (--select-1)
@@ -220,16 +209,17 @@ fe() {
   local IFS=$'\n'
   local files=()
   files=(
-    "$(fzf-tmux \
-          --query="$1" \
-          --multi \
-          --select-1 \
-          --exit-0 \
-          --preview="${FZF_PREVIEW_CMD}" \
-          --preview-window='right:hidden:wrap' \
-          --bind=ctrl-v:toggle-preview \
-          --bind=ctrl-x:toggle-sort \
-          --header='(view:ctrl-v) (sort:ctrl-x)'
+    "$(
+      fzf-tmux \
+        --query="$1" \
+        --multi \
+        --select-1 \
+        --exit-0 \
+        --preview="${FZF_PREVIEW_CMD}" \
+        --preview-window='right:hidden:wrap' \
+        --bind=ctrl-v:toggle-preview \
+        --bind=ctrl-x:toggle-sort \
+        --header='(view:ctrl-v) (sort:ctrl-x)'
     )"
   ) || return
   "${EDITOR:-vim}" "${files[@]}"
@@ -246,14 +236,14 @@ fo() {
 
   out=(
     "$(
-        fzf-tmux \
-          --query="$1" \
-          --exit-0 \
-          --expect=ctrl-o,ctrl-e
+      fzf-tmux \
+        --query="$1" \
+        --exit-0 \
+        --expect=ctrl-o,ctrl-e
     )"
   )
-  key="$(head -1 <<< "${out[@]}")"
-  file="$(head -2 <<< "${out[@]}" | tail -1)" || return
+  key="$(head -1 <<<"${out[@]}")"
+  file="$(head -2 <<<"${out[@]}" | tail -1)" || return
 
   if [[ "$key" == ctrl-o ]]; then
     "${OPENER:-xdg-open}" "$file"
@@ -266,16 +256,15 @@ fo() {
 fv() {
   local files
   files="$(
-    grep '^>' "$HOME/.viminfo" \
-      | cut -c3- \
-      | while read -r line; do
-          [[ -f "${line/\~/$HOME}" ]] && echo "$line"
-        done \
-      | fzf -m -0 -1 -q "$*"
+    grep '^>' "$HOME/.viminfo" |
+      cut -c3- |
+      while read -r line; do
+        [[ -f "${line/\~/$HOME}" ]] && echo "$line"
+      done |
+      fzf -m -0 -1 -q "$*"
   )"
   "${EDITOR:-vim}" "${files/\~/$HOME}"
 }
-
 
 # -----------------------------------------------------------------------------
 # git
@@ -298,17 +287,17 @@ fbr() {
       --format='%(refname:short)'
   )" || return
 
-  num_branches="$(wc -l <<< "$branches")"
+  num_branches="$(wc -l <<<"$branches")"
 
   branch="$(
-    echo "$branches" \
-      | fzf-tmux -d "$((2 + "$num_branches"))" +m
+    echo "$branches" |
+      fzf-tmux -d "$((2 + "$num_branches"))" +m
   )" || return
 
   target="$(
-    echo "$branch" \
-      | sed "s/.* //" \
-      | sed "s#remotes/[^/]*/##"
+    echo "$branch" |
+      sed "s/.* //" |
+      sed "s#remotes/[^/]*/##"
   )" || return
 
   git checkout "$target"
@@ -321,31 +310,31 @@ fco() {
   local target
 
   tags="$(
-    git tag \
-      | awk '{print "\x1b[31;1mtag\x1b[m\t" $1}'
+    git tag |
+      awk '{print "\x1b[31;1mtag\x1b[m\t" $1}'
   )" || return
 
   branches="$(
-    git branch --all \
-      | grep -v HEAD \
-      | sed 's/.* //' \
-      | sed 's#remotes/[^/]*/##' \
-      | sort -u \
-      | awk '{print "\x1b[34;1mbranch\x1b[m\t" $1}'
+    git branch --all |
+      grep -v HEAD |
+      sed 's/.* //' |
+      sed 's#remotes/[^/]*/##' |
+      sort -u |
+      awk '{print "\x1b[34;1mbranch\x1b[m\t" $1}'
   )" || return
 
   target="$(
-    printf '%s\n%s' "$tags" "$branches" \
-      | fzf-tmux \
-          -l40 \
-          -- \
-          --no-hscroll \
-          --ansi \
-          +m \
-          -d '\t' \
-          -n 2 \
-          -1 \
-          -q "$*"
+    printf '%s\n%s' "$tags" "$branches" |
+      fzf-tmux \
+        -l40 \
+        -- \
+        --no-hscroll \
+        --ansi \
+        +m \
+        -d '\t' \
+        -n 2 \
+        -1 \
+        -q "$*"
   )" || return
 
   git checkout "$(echo "$target" | awk '{print $2}')"
@@ -361,8 +350,8 @@ fcoc() {
   )" || return
 
   commit="$(
-    echo "$commits" \
-      | fzf --tac +s +m -e
+    echo "$commits" |
+      fzf --tac +s +m -e
   )" || return
 
   git checkout "$(echo "$commit" | sed "s/ .*//")"
@@ -383,14 +372,14 @@ fcs() {
   )" || return
 
   commit="$(
-    echo "$commits" \
-      | fzf \
-          --tac \
-          +s \
-          +m \
-          -e \
-          --ansi \
-          --reverse
+    echo "$commits" |
+      fzf \
+        --tac \
+        +s \
+        +m \
+        -e \
+        --ansi \
+        --reverse
   )" || return
 
   echo -n "$(echo "$commit" | sed "s/ .*//")"
@@ -407,14 +396,14 @@ fshow() {
   git log \
     --graph \
     --color=always \
-    --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" \
-    | fzf \
-        --ansi \
-        --no-sort \
-        --reverse \
-        --tiebreak=index \
-        --bind=ctrl-s:toggle-sort \
-        --bind "ctrl-m:execute: ($execute) <<'FZF-EOF'
+    --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
+    fzf \
+      --ansi \
+      --no-sort \
+      --reverse \
+      --tiebreak=index \
+      --bind=ctrl-s:toggle-sort \
+      --bind "ctrl-m:execute: ($execute) <<'FZF-EOF'
   {}
 FZF-EOF"
 }
@@ -431,15 +420,15 @@ fstash() {
   local sha
 
   while out="$(
-    git stash list --pretty='%C(yellow)%h %>(14)%Cgreen%cr %C(blue)%gs' \
-      | fzf \
-          --ansi \
-          --no-sort \
-          --query="$q" \
-          --print-query \
-          --expect=ctrl-d,ctrl-b
+    git stash list --pretty='%C(yellow)%h %>(14)%Cgreen%cr %C(blue)%gs' |
+      fzf \
+        --ansi \
+        --no-sort \
+        --query="$q" \
+        --print-query \
+        --expect=ctrl-d,ctrl-b
   )"; do
-    mapfile -t out <<< "$out"
+    mapfile -t out <<<"$out"
     q="${out[0]}"
     k="${out[1]}"
     sha="${out[-1]}"
@@ -529,12 +518,11 @@ fzf-gitlog-multi-widget() {
     --tiebreak=index \
     --bind=ctrl-x:toggle-sort'
 
-  eval "$git_cmd | $fzf_cmd" \
-    | grep -o '[a-f0-9]\{7\}' \
-    | xargs -I % sh -c 'git show % --color' \
-    | cat
+  eval "$git_cmd | $fzf_cmd" |
+    grep -o '[a-f0-9]\{7\}' |
+    xargs -I % sh -c 'git show % --color' |
+    cat
 }
-
 
 # -----------------------------------------------------------------------------
 # history
@@ -547,10 +535,10 @@ runcmd() {
 
 # fh - repeat history
 fh() {
-  ([[ -n "$ZSH_NAME" ]] && fc -l 1 || history) \
-    | fzf +s --tac \
-    | sed -re 's/^\s*[0-9]+\s*//' \
-    | runcmd
+  ([[ -n "$ZSH_NAME" ]] && fc -l 1 || history) |
+    fzf +s --tac |
+    sed -re 's/^\s*[0-9]+\s*//' |
+    runcmd
 }
 
 # writecmd - utility function used to write the command in the shell
@@ -560,12 +548,11 @@ writecmd() {
 
 # fhe - repeat history edit
 fhe() {
-  ([[ -n "$ZSH_NAME" ]] && fc -l 1 || history) \
-    | fzf +s --tac \
-    | sed -re 's/^\s*[0-9]+\s*//' \
-    | writecmd
+  ([[ -n "$ZSH_NAME" ]] && fc -l 1 || history) |
+    fzf +s --tac |
+    sed -re 's/^\s*[0-9]+\s*//' |
+    writecmd
 }
-
 
 # -----------------------------------------------------------------------------
 # pid
@@ -576,15 +563,14 @@ fkill() {
   local pid
 
   pid="$(
-    ps -ef \
-      | sed 1d \
-      | fzf -m \
-      | awk '{print $2}'
+    ps -ef |
+      sed 1d |
+      fzf -m |
+      awk '{print $2}'
   )" || return
 
   kill -"${1:-9}" "$pid"
 }
-
 
 # -----------------------------------------------------------------------------
 # tags
@@ -597,16 +583,15 @@ ftags() {
   [[ -e 'tags' ]] || return
 
   line="$(
-    awk 'BEGIN { FS="\t" } !/^!/ {print toupper($4)"\t"$1"\t"$2"\t"$3}' tags \
-      | cut -c1-"$COLUMNS" \
-      | fzf --nth=2 --tiebreak=begin
+    awk 'BEGIN { FS="\t" } !/^!/ {print toupper($4)"\t"$1"\t"$2"\t"$3}' tags |
+      cut -c1-"$COLUMNS" |
+      fzf --nth=2 --tiebreak=begin
   )" || return
 
-  "${EDITOR:-vim}" "$(cut -f3 <<< "$line")" \
+  "${EDITOR:-vim}" "$(cut -f3 <<<"$line")" \
     -c 'set nocst' \
-    -c "silent tag \"$(cut -f2 <<< "$line")\""
+    -c "silent tag \"$(cut -f2 <<<"$line")\""
 }
-
 
 # -----------------------------------------------------------------------------
 # tmux
@@ -619,11 +604,11 @@ fs() {
   local session
 
   session="$(
-    tmux list-sessions -F "#{session_name}" \
-      | fzf-tmux \
-          --query="$1" \
-          --select-1 \
-          --exit-0
+    tmux list-sessions -F "#{session_name}" |
+      fzf-tmux \
+        --query="$1" \
+        --select-1 \
+        --exit-0
   )" || return
 
   tmux switch-client -t "$session"
@@ -647,27 +632,27 @@ ftpane() {
   current_window="$(tmux display-message -p '#I')"
 
   target="$(
-    echo "$panes" \
-      | grep -v "$current_pane" \
-      | fzf +m --reverse
+    echo "$panes" |
+      grep -v "$current_pane" |
+      fzf +m --reverse
   )" || return
 
   target_window="$(
-    echo "$target" \
-      | awk 'BEGIN{FS=":|-"} {print$1}'
+    echo "$target" |
+      awk 'BEGIN{FS=":|-"} {print$1}'
   )"
 
   target_pane="$(
-    echo "$target" \
-      | awk 'BEGIN{FS=":|-"} {print$2}' \
-      | cut -c 1
+    echo "$target" |
+      awk 'BEGIN{FS=":|-"} {print$2}' |
+      cut -c 1
   )"
 
   if [[ "$current_window" -eq "$target_window" ]]; then
     tmux select-pane -t "$target_window.$target_pane"
   else
-    tmux select-pane -t "$target_window.$target_pane" \
-      && tmux select-window -t "$target_window"
+    tmux select-pane -t "$target_window.$target_pane" &&
+      tmux select-window -t "$target_window"
   fi
 }
 
