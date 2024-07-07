@@ -147,7 +147,6 @@ in
     neovim
     wget
     git
-    prismlauncher
   ];
 
   # Support unpached dynamic binaries out of the box.
