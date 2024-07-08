@@ -147,6 +147,7 @@ in
     neovim
     wget
     git
+    inetutils
   ];
 
   # Support unpached dynamic binaries out of the box.

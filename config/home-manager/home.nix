@@ -23,6 +23,7 @@ in
     apg
     alacritty
     alejandra
+    ansible
     arandr
     bat
     bash-completion
