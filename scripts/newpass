@@ -4,11 +4,13 @@ set -e
 
 flag_r=false
 
-while getopts “:r” OPTION
-do
+while getopts ":r" OPTION; do
   case $OPTION in
-    r) flag_r=true ;;
-    ?) echo "invalid flag"; exit 1 ;;
+  r) flag_r=true ;;
+  ?)
+    echo "invalid flag"
+    exit 1
+    ;;
   esac
 done
 
@@ -22,21 +24,25 @@ read_non_empty() {
   echo "$input"
 }
 
-generate_new() {
-  dir="$(fd -t d -H --base-directory=$HOME/.password-store | awk '{print}; END { print "New" }' | fzf)"
+new_password() {
+  apg -n 1 -m 16 -x 16 -a 0 -M SN
+}
 
-  if [ $dir == "New" ]; then
+generate() {
+  path="$(fd -t d -H --base-directory="$HOME/.password-store" | awk '{print}; END { print "New" }' | fzf)"
+
+  if [ "$path" == "New" ]; then
     echo -n "Pass a full path, a new dir will be created: "
     path="$(read_non_empty)"
   else
-    echo -n "Pass a relative path to $dir dir: "
-    path="$dir/$(read_non_empty)"
+    echo -n "Pass a relative path to $path dir: "
+    path="$path/$(read_non_empty)"
   fi
 
   echo -n "Provide a username if applicable: "
   read -r username
 
-  local pass="$(apg -n 1 -m 16 -x 16 -a 0 -M SN)"
+  local pass="$(new_password)"
 
   if [ -z "$username" ]; then
     echo "$pass" | pass insert -m "$path"
@@ -48,22 +54,26 @@ username: $username
 url: $(basename "$path")
 EOF
   fi
-  
+
   xclip -sel clip <<<"$pass"
   echo "Created pass $path entry" && exit 0
 }
 
 regenerate() {
-  dir="$(fd -t d -H --base-directory=$HOME/.password-store | fzf)"
-  local pass="$(apg -n 1 -m 16 -x 16 -a 0 -M SN)"
-  
+  path="$(fd -t f -H --base-directory="$HOME/.password-store" .gpg | sed 's/\.gpg//' | fzf)"
+  local pass="$(new_password)"
+
+  pass show "$path" | sed "1s/.*/$pass/" | pass insert -f -m "$path"
+
+  xclip -sel clip <<<"$pass"
+  echo "Updated pass $path entry" && exit 0
 }
 
 main() {
-  if $flag_r ; then
+  if $flag_r; then
     regenerate
   else
-    generate_new
+    generate
   fi
 }
 
