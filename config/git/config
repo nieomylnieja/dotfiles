@@ -50,6 +50,7 @@
   tree = log --graph --pretty=format:'%Cblue%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%ar) %C(cyan)<%an>%Creset' --abbrev-commit
 	pc = !"f() { remote=\"${1:-origin}\"; git push -u \"$remote\" $(git rev-parse --abbrev-ref HEAD); }; f"
 	staash = stash --all
+	me = !gitme.bash
 
 [interactive]
   diffFilter = delta --color-only
