@@ -167,7 +167,9 @@ return {
       ts.load_extension("fzf")
       ts.load_extension("goimpl")
       require("telescope._extensions.env")
+      require("telescope._extensions.live_grep_dir")
       ts.load_extension("env")
+      ts.load_extension("live_grep_dir")
       ts.setup({
         pickers = {
           find_files = {

@@ -63,3 +63,7 @@ vim.g.editorconfig = {
   trim_trailing_whitespace = true,
   insert_final_newline = false,
 }
+
+-- grep configuration
+opt.grepprg="rg --vimgrep --no-heading --smart-case"
+opt.grepformat="%f:%l:%c:%m"

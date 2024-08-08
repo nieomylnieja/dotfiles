@@ -106,12 +106,8 @@ local function show_environment_variables(opts)
       :find()
 end
 
-local function run()
-  show_environment_variables()
-end
-
 return require("telescope").register_extension({
   exports = {
-    env = run,
+    env = show_environment_variables,
   },
 })

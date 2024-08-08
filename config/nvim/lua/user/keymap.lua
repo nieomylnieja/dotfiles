@@ -69,14 +69,7 @@ wk.register({
     r = { "<cmd>Telescope oldfiles<cr>", "Open recent file" },
     R = { "<cmd>Telescope registers<cr>", "Registers" },
     g = { "<cmd>Telescope live_grep<cr>", "Live grep" },
-    G = {
-      function()
-        require("telescope.builtin").live_grep({
-          cwd = require("telescope.utils").buffer_dir(),
-        })
-      end,
-      "Live grep on current directory",
-    },
+    G = { "<cmd>Telescope live_grep_dir<cr>", "Live grep on selected directory" },
     k = { "<cmd>Telescope keymaps<cr>", "Keymaps" },
     C = { "<cmd>Telescope commands<cr>", "Commands" },
     l = { "<cmd>Telescope resume<cr>", "Resume last search" },
