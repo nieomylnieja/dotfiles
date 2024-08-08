@@ -12,7 +12,7 @@ set smartcase           " ... unless term contains an uppercase character
 set hlsearch            " ... as you type
 
 " Wrapping
-set textwidth=80        " Hard-wrap text at nth column
+set textwidth=120       " Hard-wrap text at nth column
 set nowrap              " Don't wrap long lines (good for vsplits)
 
 " Syntax
