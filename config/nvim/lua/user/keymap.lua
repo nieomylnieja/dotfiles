@@ -57,49 +57,48 @@ map("n", "<leader>e", function()
   vim.cmd("NvimTreeToggle")
 end, { noremap = true })
 
-wk.register({
-  f = {
-    name = "+Find",
-    b = { "<cmd>Telescope buffers<cr>", "Buffers" },
-    c = { "<cmd>Telescope git_branches<cr>", "Checkout branch" },
-    f = { "<cmd>Telescope find_files hidden=true<cr>", "Find file" },
-    h = { "<cmd>Telescope help_tags<cr>", "Find help" },
-    H = { "<cmd>Telescope highlights<cr>", "Find highlight groups" },
-    M = { "<cmd>Telescope man_pages<cr>", "Man pages" },
-    r = { "<cmd>Telescope oldfiles<cr>", "Open recent file" },
-    R = { "<cmd>Telescope registers<cr>", "Registers" },
-    g = { "<cmd>Telescope live_grep<cr>", "Live grep" },
-    G = { "<cmd>Telescope live_grep_dir<cr>", "Live grep on selected directory" },
-    k = { "<cmd>Telescope keymaps<cr>", "Keymaps" },
-    C = { "<cmd>Telescope commands<cr>", "Commands" },
-    l = { "<cmd>Telescope resume<cr>", "Resume last search" },
-    t = { "<cmd>TodoTelescope<cr>", "TODO comments" },
-    p = { "<Cmd>Telescope projects<CR>", "Projects" },
-    s = { "<Cmd>Telescope lsp_document_symbols<CR>", "LSP Symbols" },
-  },
-}, { prefix = "<leader>" })
+wk.add({
+  { "<leader>f",  group = "Find" },
+  { "<leader>fC", "<cmd>Telescope commands<cr>",               desc = "Commands" },
+  { "<leader>fG", "<cmd>Telescope live_grep_dir<cr>",          desc = "Live grep on selected directory" },
+  { "<leader>fH", "<cmd>Telescope highlights<cr>",             desc = "Find highlight groups" },
+  { "<leader>fM", "<cmd>Telescope man_pages<cr>",              desc = "Man pages" },
+  { "<leader>fR", "<cmd>Telescope registers<cr>",              desc = "Registers" },
+  { "<leader>fb", "<cmd>Telescope buffers<cr>",                desc = "Buffers" },
+  { "<leader>fc", "<cmd>Telescope git_branches<cr>",           desc = "Checkout branch" },
+  { "<leader>ff", "<cmd>Telescope find_files hidden=true<cr>", desc = "Find file" },
+  { "<leader>fg", "<cmd>Telescope live_grep<cr>",              desc = "Live grep" },
+  { "<leader>fh", "<cmd>Telescope help_tags<cr>",              desc = "Find help" },
+  { "<leader>fk", "<cmd>Telescope keymaps<cr>",                desc = "Keymaps" },
+  { "<leader>fl", "<cmd>Telescope resume<cr>",                 desc = "Resume last search" },
+  { "<leader>fp", "<Cmd>Telescope projects<CR>",               desc = "Projects" },
+  { "<leader>fr", "<cmd>Telescope oldfiles<cr>",               desc = "Open recent file" },
+  { "<leader>fs", "<Cmd>Telescope lsp_document_symbols<CR>",   desc = "LSP Symbols" },
+  { "<leader>ft", "<cmd>TodoTelescope<cr>",                    desc = "TODO comments" },
+})
 
-wk.register({
-  t = {
-    name = "+Trouble/Test",
-    r = { "<cmd>Trouble lsp toggle focus=false win.position=right<cr>", "References" },
-    q = { "<cmd>Trouble qflist toggle<cr>", "Quick Fix" },
-    l = { "<cmd>Trouble loclist toggle<cr>", "Location List" },
-    d = { "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", "Diagnostics" },
-    w = { "<cmd>Trouble diagnostics toggle<cr>", "Workspace Diagnostics" },
-    t = { "<cmd>TodoTrouble<cr>", "TODO comments" },
-    m = { "<cmd>lua require('neotest').run.run()<cr>", "Test Method" },
-    f = { "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", "Test File" },
-    a = { "<cmd>lua require('neotest').run.run({vim.fn.getcwd()})<cr>", "Test Whole Project" },
-    p = {
-      "<cmd>lua require('neotest').run.run({vim.fn.fnamemodify(vim.fn.expand('%:p'),':h')})<cr>",
-      "Test Directory",
-    },
-    s = { "<cmd>lua require('neotest').summary.toggle()<cr>", "Test Summary" },
-    S = { "<cmd>lua require('neotest').output_panel.open()<cr>", "Test Summary panel" },
-    o = { "<cmd>lua require('neotest').output.open({enter=true})<cr>", "Output Window" },
+wk.add({
+  { "<leader>t",  group = "Trouble/Test" },
+  { "<leader>tN", "<cmd>lua require('trouble').prev(nil)<cr>",                     desc = "Previous item" },
+  { "<leader>tS", "<cmd>lua require('neotest').output_panel.open()<cr>",           desc = "Test Summary panel" },
+  { "<leader>ta", "<cmd>lua require('neotest').run.run({vim.fn.getcwd()})<cr>",    desc = "Test Whole Project" },
+  { "<leader>td", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>",              desc = "Diagnostics" },
+  { "<leader>tf", "<cmd>lua require('neotest').run.run({vim.fn.expand('%')})<cr>", desc = "Test File" },
+  { "<leader>tl", "<cmd>Trouble loclist toggle<cr>",                               desc = "Location List" },
+  { "<leader>tm", "<cmd>lua require('neotest').run.run()<cr>",                     desc = "Test Method" },
+  { "<leader>tn", "<cmd>lua require('trouble').next(nil)<cr>",                     desc = "Next item" },
+  { "<leader>to", "<cmd>lua require('neotest').output.open({enter=true})<cr>",     desc = "Output Window" },
+  {
+    "<leader>tp",
+    "<cmd>lua require('neotest').run.run({vim.fn.fnamemodify(vim.fn.expand('%:p'),':h')})<cr>",
+    desc = "Test Directory",
   },
-}, { prefix = "<leader>" })
+  { "<leader>tq", "<cmd>Trouble qflist toggle<cr>",                             desc = "Quick Fix" },
+  { "<leader>tr", "<cmd>Trouble lsp toggle focus=false win.position=right<cr>", desc = "References" },
+  { "<leader>ts", "<cmd>lua require('neotest').summary.toggle()<cr>",           desc = "Test Summary" },
+  { "<leader>tt", "<cmd>TodoTrouble<cr>",                                       desc = "TODO comments" },
+  { "<leader>tw", "<cmd>Trouble diagnostics toggle<cr>",                        desc = "Workspace Diagnostics" },
+})
 
 -- Common kill function for bdelete and bwipeout
 -- credits: based LunarVim which in turn is based on bbye and nvim-bufdel

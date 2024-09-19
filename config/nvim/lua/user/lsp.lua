@@ -104,7 +104,7 @@ local servers = {
       },
     },
   },
-  tsserver = {},
+  ts_ls = {},
   -- Installed through `nix profile install github:oxalica/nil`.
   nil_ls = {
     settings = {

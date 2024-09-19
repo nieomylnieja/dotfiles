@@ -347,6 +347,7 @@ theme.loadLSP = function()
     LspDiagnosticsWarning = { fg = nord.purple },
     LspDiagnosticsInformation = { fg = nord.blue },
     LspDiagnosticsHint = { fg = nord.glacier },
+    LspInlayHint = { fg = nord.gray },
 
     DiagnosticError = { link = "LspDiagnosticsDefaultError" },
     DiagnosticWarn = { link = "LspDiagnosticsDefaultWarning" },
