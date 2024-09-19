@@ -53,7 +53,7 @@ in
     sushi
     gnumake
     gnupg
-    go_1_22
+    go_1_23
     httpie
     i3lock-color
     jetbrains.goland
