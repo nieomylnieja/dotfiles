@@ -81,18 +81,21 @@ local servers = {
     single_file_support = true,
   },
   jsonls = {},
-  -- yamlls = {
-  --   settings = {
-  --     yaml = {
-  --       format = {
-  --         enable = true,
-  --       },
-  --       schemas = {
-  --         ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
-  --       },
-  --     },
-  --   },
-  -- },
+  yamlls = {
+    settings = {
+      yaml = {
+        format = {
+          enable = true,
+        },
+        schemaStore = true,
+        schemas = {
+          ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
+          ["https://json.schemastore.org/catalog-info.json"] = "catalog-info.yaml",
+          ["https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/schemas/v3.0/schema.json"] = "openapi-specification.yaml",
+        },
+      },
+    },
+  },
   ruff_lsp = {},
   pyright = {
     settings = {
@@ -128,7 +131,30 @@ local servers = {
     },
   },
   terraformls = {},
+  templ = {},
+  html = {},
+  htmx = {},
+  tailwindcss = {},
 }
+
+local function lsp_format()
+  if vim.bo.filetype == "templ" then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local filename = vim.api.nvim_buf_get_name(bufnr)
+    local cmd = "templ fmt " .. vim.fn.shellescape(filename)
+
+    vim.fn.jobstart(cmd, {
+      on_exit = function()
+        -- Reload the buffer only if it's still the current buffer
+        if vim.api.nvim_get_current_buf() == bufnr then
+          vim.cmd("e!")
+        end
+      end,
+    })
+  else
+    vim.lsp.buf.format()
+  end
+end
 
 local function keymap(bufnr, server)
   local ts = require("telescope.builtin")
@@ -148,7 +174,7 @@ local function keymap(bufnr, server)
   nmap("gr", ts.lsp_references, "[G]oto [R]eferences")
   nmap("<leader>ds", ts.lsp_document_symbols, "[D]ocument [S]ymbols")
   nmap("<leader>ws", ts.lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
-  nmap("<leader>fm", vim.lsp.buf.format, "[F]or[M]at buffer")
+  nmap("<leader>fm", lsp_format, "[F]or[M]at buffer")
   nmap("K", vim.lsp.buf.hover, "Hover Documentation")
   nmap("gK", vim.lsp.buf.signature_help, "Signature Documentation")
   nmap("gD", vim.lsp.buf.declaration, "[G]oto [D]eclaration")

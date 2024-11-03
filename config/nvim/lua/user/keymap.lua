@@ -47,6 +47,9 @@ map("o", "N", "'nN'[v:searchforward]", { expr = true, desc = "Prev search result
 map("v", "<", "<gv")
 map("v", ">", ">gv")
 
+-- spelling
+map("n", "z=", "<cmd>:lua require'telescope.builtin'.spell_suggest{}<cr>", { desc = "Spelling suggestions" })
+
 local wk = require("which-key")
 
 map("n", "<leader>e", function()

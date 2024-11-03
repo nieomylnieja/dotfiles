@@ -102,6 +102,10 @@ return {
         "nil",
         "bash-language-server",
         "terraform-ls",
+        "templ",
+        "html-lsp",
+        "htmx-lsp",
+        "tailwindcss-language-server",
         -- Linters/formatters
         "actionlint",
         "stylua",
@@ -575,6 +579,13 @@ return {
     end,
     config = function()
       require("user.markdown-preview")
+    end,
+    ft = { "markdown", "plantuml", "mermaid" },
+  },
+  {
+    "windwp/nvim-ts-autotag",
+    config = function()
+      require("nvim-ts-autotag").setup()
     end,
   },
 }

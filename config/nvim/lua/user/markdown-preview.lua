@@ -35,4 +35,4 @@ vim.g.mkdp_preview_options = {
 
 -- recognized filetypes
 -- these filetypes will have MarkdownPreview... commands
-vim.g.mkdp_filetypes = { "markdown", "plantuml" }
+vim.g.mkdp_filetypes = { "markdown", "plantuml", "mermaid" }

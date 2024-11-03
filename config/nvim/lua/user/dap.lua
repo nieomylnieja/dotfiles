@@ -45,7 +45,7 @@ local dap_python = require("dap-python")
 
 dap_go.setup({
   delve = {
-    build_flags = "-tags=integration_test,e2e_test,unit_test"
+    build_flags = "-tags=integration_test,e2e_test,unit_test",
   }
 })
 dap_python.setup()
@@ -64,11 +64,11 @@ end
 
 require("which-key").add({
     { "<leader>d", group = "Debug" },
-    { "<leader>b", function() dap.toggle_breakpoint() end, desc = "Toggle Breakpoint" },
-    { "<leader>B", function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end, desc = "Breakpoint Condition" },
-    { "<leader>c", function() dap.continue() end, desc = "Continue" },
-    { "<leader>a", function() dap.continue({ before = dap_get_args }) end, desc = "Run with Args" },
-    { "<leader>m", function()
+    { "<leader>db", function() dap.toggle_breakpoint() end, desc = "Toggle Breakpoint" },
+    { "<leader>dB", function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end, desc = "Breakpoint Condition" },
+    { "<leader>dc", function() dap.continue() end, desc = "Continue" },
+    { "<leader>da", function() dap.continue({ before = dap_get_args }) end, desc = "Run with Args" },
+    { "<leader>dm", function()
       local ft = vim.bo.filetype
       if ft == "go" then
         dap_go.debug_test()
@@ -78,18 +78,18 @@ require("which-key").add({
         vim.notify("unsupported DAP for running test", vim.log.levels.ERROR)
       end
     end, desc = "Debug test" },
-    { "<leader>C", function() dap.run_to_cursor() end, desc = "Run to Cursor" },
-    { "<leader>g", function() dap.goto_() end, desc = "Go to line (no execute)" },
-    { "<leader>i", function() dap.step_into() end, desc = "Step Into" },
-    { "<leader>j", function() dap.down() end, desc = "Down" },
-    { "<leader>k", function() dap.up() end, desc = "Up" },
-    { "<leader>l", function() dap.run_last() end, desc = "Run Last" },
-    { "<leader>o", function() dap.step_out() end, desc = "Step Out" },
-    { "<leader>O", function() dap.step_over() end, desc = "Step Over" },
-    { "<leader>p", function() dap.pause() end, desc = "Pause" },
-    { "<leader>r", function() dap.repl.toggle() end, desc = "Toggle REPL" },
-    { "<leader>t", function() dap.terminate() end, desc = "Terminate" },
-    { "<leader>w", function() require("dap.ui.widgets").hover() end, desc = "Widgets" },
-    { "<leader>f", function() dap_python.test_class() end, desc = "Debug class" },
-    {"<leader>s", function() dap_python.debug_selection() end, desc = "Debug selection" },
+    { "<leader>dC", function() dap.run_to_cursor() end, desc = "Run to Cursor" },
+    { "<leader>dg", function() dap.goto_() end, desc = "Go to line (no execute)" },
+    { "<leader>di", function() dap.step_into() end, desc = "Step Into" },
+    { "<leader>dj", function() dap.down() end, desc = "Down" },
+    { "<leader>dk", function() dap.up() end, desc = "Up" },
+    { "<leader>dl", function() dap.run_last() end, desc = "Run Last" },
+    { "<leader>do", function() dap.step_out() end, desc = "Step Out" },
+    { "<leader>dO", function() dap.step_over() end, desc = "Step Over" },
+    { "<leader>dp", function() dap.pause() end, desc = "Pause" },
+    { "<leader>dr", function() dap.repl.toggle() end, desc = "Toggle REPL" },
+    { "<leader>dt", function() dap.terminate() end, desc = "Terminate" },
+    { "<leader>dw", function() require("dap.ui.widgets").hover() end, desc = "Widgets" },
+    { "<leader>df", function() dap_python.test_class() end, desc = "Debug class" },
+    { "<leader>ds", function() dap_python.debug_selection() end, desc = "Debug selection" },
 })

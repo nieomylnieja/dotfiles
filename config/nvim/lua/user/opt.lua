@@ -26,6 +26,10 @@ opt.relativenumber = true
 opt.numberwidth = 2
 opt.ruler = false
 
+-- Spelling
+-- vim.opt.spelllang = "en_us"
+-- vim.opt.spell = true
+
 -- disable nvim intro
 opt.shortmess:append("fFIlqx")
 
@@ -65,5 +69,5 @@ vim.g.editorconfig = {
 }
 
 -- grep configuration
-opt.grepprg="rg --vimgrep --no-heading --smart-case"
-opt.grepformat="%f:%l:%c:%m"
+opt.grepprg = "rg --vimgrep --no-heading --smart-case"
+opt.grepformat = "%f:%l:%c:%m"
