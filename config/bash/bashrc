@@ -65,9 +65,6 @@ alias cp="cp -i"
 alias mv='mv -i'
 alias rm='rm -I'
 
-# git
-alias gc="git branch --remotes --list | grep -v '^\* ' | tr -d ' ' | sed 's/origin\///' | fzf --preview 'git log origin/{}' | xargs git checkout"
-
 # yay
 alias yayd='pacman -Qq | fzf --multi --preview "pacman -Qi {1}" | xargs -ro sudo pacman -Rns'
 

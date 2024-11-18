@@ -22,6 +22,9 @@
 	tool = "vimdiff"
 	prompt = false
 
+[mergetool]
+	keepBackup = false
+
 [mergetool "vimdiff"]
 	cmd = nvim -c DiffviewOpen
 
