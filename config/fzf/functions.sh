@@ -210,7 +210,7 @@ fe() {
   local files=()
   files=(
     "$(
-      fzf-tmux \
+      fzf \
         --query="$1" \
         --multi \
         --select-1 \
@@ -236,7 +236,7 @@ fo() {
 
   out=(
     "$(
-      fzf-tmux \
+      fzf \
         --query="$1" \
         --exit-0 \
         --expect=ctrl-o,ctrl-e
@@ -273,29 +273,33 @@ fv() {
 # fbr - checkout git branch (including remote branches)
 #   - sorted by most recent commit
 #   - limit 30 last branches
+#   - preview git log
 fbr() {
   local branches
-  local num_branches
-  local branch
-  local target
 
   branches="$(
     git for-each-ref \
       --count=30 \
       --sort=-committerdate \
       refs/heads/ \
-      --format='%(refname:short)'
+      --format='%(refname:short)' |
+      while read -r branch; do
+        last_commit_date=$(git log -1 --date=format:'%Y-%m-%d' --format='%cd %an' "$branch")
+        echo "$branch $last_commit_date"
+      done |
+      column -t
   )" || return
 
-  num_branches="$(wc -l <<<"$branches")"
+  local branch
+  local target
 
   branch="$(
-    echo "$branches" |
-      fzf-tmux -d "$((2 + "$num_branches"))" +m
+    echo "$branches" | fzf --preview 'git log {1}'
   )" || return
 
   target="$(
     echo "$branch" |
+      awk '{print $1}' |
       sed "s/.* //" |
       sed "s#remotes/[^/]*/##"
   )" || return
@@ -325,7 +329,7 @@ fco() {
 
   target="$(
     printf '%s\n%s' "$tags" "$branches" |
-      fzf-tmux \
+      fzf \
         -l40 \
         -- \
         --no-hscroll \
