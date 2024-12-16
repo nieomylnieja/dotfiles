@@ -13,6 +13,6 @@ curl -s "https://$domain/rest/api/2/search?jql=assignee=$user_id+and+project=$ji
   sed 's/[ .]/-/g' |
   sed -E 's/-{2,}/-/g' |
   sed 's/-*$//' |
-  sed 's/\[\]//' |
+  tr -d '[]' |
   fzf | 
   xargs git checkout -b
