@@ -65,7 +65,7 @@ in
     man-pages
     mesa
     moreutils
-    cinnamon.nemo-with-extensions
+    nemo-with-extensions
     (nerdfonts.override { fonts = [ "Mononoki" ]; })
     neofetch
     neovim
