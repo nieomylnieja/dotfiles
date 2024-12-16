@@ -66,7 +66,7 @@ in
     mesa
     moreutils
     nemo-with-extensions
-    (nerdfonts.override { fonts = [ "Mononoki" ]; })
+    nerd-fonts.mononoki
     neofetch
     neovim
     nixpkgs-fmt
