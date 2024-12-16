@@ -24,7 +24,7 @@
       modules = [
         ./home.nix
         {
-          nixpkgs.overlays = [nur.overlay];
+          nixpkgs.overlays = [nur.overlays.default];
         }
       ];
     };
