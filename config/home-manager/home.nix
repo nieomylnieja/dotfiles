@@ -1,5 +1,6 @@
 { config
 , pkgs
+, lib
 , ...
 }:
 let
@@ -16,10 +17,11 @@ in
   home = {
     username = "mh";
     homeDirectory = homeDir;
-    stateVersion = "23.11";
+    stateVersion = "24.11";
   };
 
   home.packages = with pkgs; [
+    aws-vault
     apg
     alacritty
     alejandra
@@ -30,7 +32,6 @@ in
     bashmount
     bottom
     browserpass
-    brave
     cachix
     csvkit
     delta
@@ -70,8 +71,6 @@ in
     neofetch
     neovim
     nixpkgs-fmt
-    nodejs
-    nodePackages.npm
     nushell
     obsidian
     ocaml
@@ -104,6 +103,13 @@ in
     vlc
     winbox
   ];
+
+  # Neovim has to be linked as the directory has to be writable.
+  home.activation = {
+    createLinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
+      run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
+    '';
+  };
 
   home.file = {
     ".bashrc".source = ../bash/bashrc;
@@ -139,7 +145,7 @@ in
 
   programs.browserpass = {
     enable = true;
-    browsers = [ "brave" "firefox" ];
+    browsers = [ "firefox" ];
   };
 
   programs.firefox = {

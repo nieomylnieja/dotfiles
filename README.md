@@ -2,6 +2,11 @@
 
 Behold, the **.files**
 
+## Setup
+
+1. Migrate SSH and GPG configuration.
+2. Install node and rust with appropriate `make install/` target.
+
 ## Home Manager
 
 ### Updating nix channel

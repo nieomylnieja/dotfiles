@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-23.11";
+    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-24.11";
     nixpkgs-experimental.url = "github:nixos/nixpkgs/master";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
@@ -38,7 +38,7 @@
     };
   in {
     nixosConfigurations = {
-      mh = nixpkgs.lib.nixosSystem {
+      home = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
           ({
@@ -46,13 +46,31 @@
             pkgs,
             ...
           }: {nixpkgs.overlays = [overlay-stable overlay-experimental];})
-          ./configuration.nix
+          ./config/nixos/home/configuration.nix
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
             home-manager.users.mh = import ./config/home-manager/home.nix;
-            nixpkgs.overlays = [nur.overlay];
+            nixpkgs.overlays = [nur.overlays.default];
+          }
+        ];
+      };
+      work = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          ({
+            config,
+            pkgs,
+            ...
+          }: {nixpkgs.overlays = [overlay-stable overlay-experimental];})
+          ./config/nixos/work/configuration.nix
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.users.mh = import ./config/home-manager/home.nix;
+            nixpkgs.overlays = [nur.overlays.default];
           }
         ];
       };
