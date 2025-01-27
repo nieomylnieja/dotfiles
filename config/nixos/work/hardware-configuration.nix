@@ -2,10 +2,13 @@
 # and may be overwritten by future invocations.  Please make changes
 # to /etc/nixos/configuration.nix instead.
 { config, lib, pkgs, modulesPath, ... }:
-
+let
+  root-device = "/dev/disk/by-uuid/cb8aa241-afd4-45b2-a881-40a5ade8cc4d";
+in
 {
   imports =
-    [ (modulesPath + "/installer/scan/not-detected.nix")
+    [
+      (modulesPath + "/installer/scan/not-detected.nix")
     ];
 
   boot.initrd.availableKernelModules = [ "xhci_pci" "thunderbolt" "vmd" "nvme" "usb_storage" "sd_mod" ];
@@ -14,19 +17,32 @@
   boot.extraModulePackages = [ ];
 
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/cb8aa241-afd4-45b2-a881-40a5ade8cc4d";
+    {
+      device = "${root-device}";
       fsType = "ext4";
     };
 
   boot.initrd.luks.devices."luks-c0217f9b-6efb-4cf0-82c3-4addcc8d585d".device = "/dev/disk/by-uuid/c0217f9b-6efb-4cf0-82c3-4addcc8d585d";
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/01CB-B2E7";
+    {
+      device = "/dev/disk/by-uuid/01CB-B2E7";
       fsType = "vfat";
       options = [ "fmask=0077" "dmask=0077" ];
     };
 
-  swapDevices = [ ];
+  # Hibernation.
+  swapDevices = [
+    {
+      device = "/var/lib/swapfile";
+      size = 32 * 1024; # 32GB in MB
+    }
+  ];
+  # Calculated by: 
+  #   sudo filefrag -v /var/lib/swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}'
+  boot.kernelParams = [ "resume_offset=226052096" ];
+  boot.resumeDevice = "${root-device}";
+  powerManagement.enable = true;
 
   # Enables DHCP on each ethernet and wireless interface. In case of scripted networking
   # (the default) this is the recommended approach. When using systemd-networkd it's

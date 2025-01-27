@@ -175,9 +175,36 @@ in
       };
     };
     profiles = {
-      main = {
+      home = {
         id = 0;
-        name = "mateusz";
+        name = "home";
+        search = {
+          force = true;
+          default = "DuckDuckGo";
+        };
+        settings = {
+          "general.smoothScroll" = true;
+        };
+        extraConfig = ''
+          user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+          user_pref("full-screen-api.ignore-widgets", true);
+          user_pref("media.ffmpeg.vaapi.enabled", true);
+          user_pref("media.rdd-vpx.enabled", true);
+        '';
+        extensions = with pkgs.nur.repos.rycee.firefox-addons; [
+          vimium
+          browserpass
+          ublock-origin
+          privacy-badger
+          clearurls
+          decentraleyes
+          duckduckgo-privacy-essentials
+          darkreader
+        ];
+      };
+      work = {
+        id = 1;
+        name = "work";
         search = {
           force = true;
           default = "DuckDuckGo";
