@@ -106,7 +106,7 @@ in
 
   # Neovim has to be linked as the directory has to be writable.
   home.activation = {
-    createLinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
     '';
   };
@@ -174,62 +174,53 @@ in
         };
       };
     };
-    profiles = {
-      home = {
-        id = 0;
-        name = "home";
-        search = {
-          force = true;
-          default = "DuckDuckGo";
+    profiles =
+      let
+        common = {
+          search = {
+            force = true;
+            default = "DuckDuckGo";
+          };
+          settings = {
+            "general.smoothScroll" = true;
+          };
+          extraConfig = ''
+            user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+            user_pref("full-screen-api.ignore-widgets", true);
+            user_pref("media.ffmpeg.vaapi.enabled", true);
+            user_pref("media.rdd-vpx.enabled", true);
+          '';
         };
-        settings = {
-          "general.smoothScroll" = true;
-        };
-        extraConfig = ''
-          user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
-          user_pref("full-screen-api.ignore-widgets", true);
-          user_pref("media.ffmpeg.vaapi.enabled", true);
-          user_pref("media.rdd-vpx.enabled", true);
-        '';
-        extensions = with pkgs.nur.repos.rycee.firefox-addons; [
-          vimium
-          browserpass
-          ublock-origin
-          privacy-badger
-          clearurls
-          decentraleyes
-          duckduckgo-privacy-essentials
-          darkreader
-        ];
+      in
+      {
+        work = {
+          id = 0;
+          name = "work";
+          extensions = with pkgs.nur.repos.rycee.firefox-addons; [
+            vimium
+            browserpass
+            ublock-origin
+            privacy-badger
+            clearurls
+            decentraleyes
+            duckduckgo-privacy-essentials
+            onepassword-password-manager
+          ];
+        } // common;
+        home = {
+          id = 1;
+          name = "home";
+          extensions = with pkgs.nur.repos.rycee.firefox-addons; [
+            vimium
+            browserpass
+            ublock-origin
+            privacy-badger
+            clearurls
+            decentraleyes
+            duckduckgo-privacy-essentials
+          ];
+        } // common;
       };
-      work = {
-        id = 1;
-        name = "work";
-        search = {
-          force = true;
-          default = "DuckDuckGo";
-        };
-        settings = {
-          "general.smoothScroll" = true;
-        };
-        extraConfig = ''
-          user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
-          user_pref("full-screen-api.ignore-widgets", true);
-          user_pref("media.ffmpeg.vaapi.enabled", true);
-          user_pref("media.rdd-vpx.enabled", true);
-        '';
-        extensions = with pkgs.nur.repos.rycee.firefox-addons; [
-          vimium
-          browserpass
-          ublock-origin
-          privacy-badger
-          clearurls
-          decentraleyes
-          duckduckgo-privacy-essentials
-          darkreader
-        ];
-      };
-    };
   };
 
   # Can't be listed in packages list, as it will create two colliding binaries.

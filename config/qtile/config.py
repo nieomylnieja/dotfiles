@@ -27,7 +27,7 @@ keys = [
         desc="Launch launcher"),
     Key([mod],
         "b",
-        lazy.spawn(["bash", "-c", "${BROWSER-firefox}"]),
+        lazy.spawn(["bash", "-c", "firefox -P $(echo -e \"work\\nhome\" | rofi -dmenu -i)"]),
         desc="Launch browser"),
     Key([mod, "shift"],
         "b",
