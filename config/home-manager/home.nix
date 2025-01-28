@@ -21,6 +21,7 @@ in
   };
 
   home.packages = with pkgs; [
+    awscli2
     aws-vault
     apg
     alacritty
@@ -81,6 +82,7 @@ in
     pdm
     picom
     pinentry-qt
+    kubectl
     ripgrep
     rofi-power-menu
     rustup

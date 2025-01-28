@@ -55,7 +55,7 @@
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
-  # Enable the GNOME Desktop Environment.
+  # Configure desktop environment.
   services.xserver.displayManager.gdm.enable = true;
   services.displayManager.defaultSession = "none+qtile";
   services.xserver.windowManager.session = [{
@@ -91,16 +91,14 @@
 
   # Bluetooth
   hardware.bluetooth.enable = true;
-  services.pipewire.wireplumber.configPackages = [
-    (pkgs.writeTextDir "share/wireplumber/bluetooth.lua.d/51-bluez-config.lua" ''
-      bluez_monitor.properties = {
-      	["bluez5.enable-sbc-xq"] = true,
-      	["bluez5.enable-msbc"] = true,
-      	["bluez5.enable-hw-volume"] = true,
-      	["bluez5.headset-roles"] = "[ hsp_hs hsp_ag hfp_hf hfp_ag ]"
-      }
-    '')
-  ];
+  services.pipewire.wireplumber.extraConfig.bluetoothEnhancements = {
+    "monitor.bluez.properties" = {
+      "bluez5.enable-sbc-xq" = true;
+      "bluez5.enable-msbc" = true;
+      "bluez5.enable-hw-volume" = true;
+      "bluez5.roles" = [ "hsp_hs" "hsp_ag" "hfp_hf" "hfp_ag" ];
+    };
+  };
 
   # Enable touchpad support (enabled default in most desktopManager).
   services.libinput.enable = true;
