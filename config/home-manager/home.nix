@@ -79,6 +79,7 @@ in
     pamixer
     pass
     pavucontrol
+    pulseaudio # For pactl.
     pdm
     picom
     pinentry-qt
