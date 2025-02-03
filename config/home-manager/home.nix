@@ -39,6 +39,7 @@ in
     devbox
     direnv
     discord
+    distrobox
     du-dust
     dunst
     eza
@@ -63,6 +64,7 @@ in
     lesspipe
     libsForQt5.qt5ct
     luajitPackages.luarocks
+    lutris
     man
     man-pages
     mesa
@@ -104,7 +106,6 @@ in
     yubikey-manager
     yq
     vlc
-    winbox
   ];
 
   # Neovim has to be linked as the directory has to be writable.

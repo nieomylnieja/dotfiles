@@ -135,14 +135,31 @@
   services.udev.packages = [ pkgs.yubikey-personalization ];
   services.pcscd.enable = true;
 
-  # Docker.
-  virtualisation.docker = {
-    enable = true;
-    rootless = {
+  # Podman.
+  virtualisation.containers.enable = true;
+  virtualisation = {
+    podman = {
       enable = true;
-      setSocketVariable = true;
+      # Create a `docker` alias for podman, to use it as a drop-in replacement
+      dockerCompat = true;
+      # Required for containers under podman-compose to be able to talk to each other.
+      defaultNetwork.settings.dns_enabled = true;
     };
   };
+
+  # VritualBox.
+  virtualisation.virtualbox = {
+    host = {
+      enable = true;
+      enableExtensionPack = true;
+    };
+    guest = {
+      enable = true;
+      dragAndDrop = true;
+      clipboard = true;
+    };
+  };
+  users.extraGroups.vboxusers.members = [ "mh" ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
