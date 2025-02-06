@@ -54,6 +54,7 @@ in
     glibcLocales
     simple-scan
     sushi
+    gimp
     gnumake
     gnupg
     go_1_23
@@ -63,6 +64,7 @@ in
     jq
     lesspipe
     libsForQt5.qt5ct
+    libnotify # For notify-send.
     luajitPackages.luarocks
     lutris
     man
@@ -74,6 +76,7 @@ in
     neofetch
     neovim
     nixpkgs-fmt
+    nordic
     nushell
     obsidian
     ocaml
@@ -89,6 +92,7 @@ in
     ripgrep
     rofi-power-menu
     rustup
+    kubernetes-helm
     feh
     flameshot
     signal-desktop
@@ -98,6 +102,7 @@ in
     starship
     statix
     unzip
+    zathura
     zoxide
     xclip
     xorg.xrandr
@@ -106,6 +111,7 @@ in
     yubikey-manager
     yq
     vlc
+    winbox
   ];
 
   # Neovim has to be linked as the directory has to be writable.
@@ -134,6 +140,14 @@ in
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
+    "zathura".source = ../zathura;
+  };
+
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "application/pdf" = [ "zathura" ];
+    };
   };
 
   home.sessionPath = [

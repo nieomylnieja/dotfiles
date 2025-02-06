@@ -49,7 +49,15 @@ in
   # still possible to use this option, but it's recommended to use it in conjunction
   # with explicit per-interface declarations with `networking.interfaces.<interface>.useDHCP`.
   networking.useDHCP = lib.mkDefault true;
-  # networking.interfaces.wlp0s20f3.useDHCP = lib.mkDefault true;
+
+  # # Required to connect to MikroTik for the first time.
+  # networking.interfaces.enp0s13f0u1u4 = {
+  #   ipv4.addresses = [
+  #     { address = "192.168.88.2"; prefixLength = 24; }
+  #   ];
+  #   # Ensure no gateway is specified here:
+  #   useDHCP = false;
+  # };
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;

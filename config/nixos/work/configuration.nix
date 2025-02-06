@@ -39,7 +39,6 @@
 
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
-
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "pl_PL.UTF-8";
     LC_IDENTIFICATION = "pl_PL.UTF-8";
@@ -145,6 +144,11 @@
       # Required for containers under podman-compose to be able to talk to each other.
       defaultNetwork.settings.dns_enabled = true;
     };
+  };
+  # For seamless migration from Docker.
+  # Ref: https://podman-desktop.io/docs/migrating-from-docker/using-the-docker_host-environment-variable
+  environment.sessionVariables = {
+    DOCKER_HOST = "unix:///run/user/1000/podman/podman.sock";
   };
 
   # VritualBox.
