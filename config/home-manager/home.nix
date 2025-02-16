@@ -65,6 +65,7 @@ in
     lesspipe
     libsForQt5.qt5ct
     libnotify # For notify-send.
+    libreoffice
     luajitPackages.luarocks
     lutris
     man
@@ -81,6 +82,7 @@ in
     obsidian
     ocaml
     opam
+    openssl
     pamixer
     pass
     pavucontrol
@@ -111,6 +113,7 @@ in
     yubikey-manager
     yq
     vlc
+    vscode
     winbox
   ];
 
@@ -141,6 +144,7 @@ in
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
+    "Code/User".source = ../vscode;
   };
 
   xdg.mimeApps = {
