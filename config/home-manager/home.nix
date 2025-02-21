@@ -12,10 +12,6 @@ let
 in
 {
   programs.home-manager.enable = true;
-  # nixpkgs.config = {
-  #   allowUnfree = true;
-  #   allowUnfreePredicate = _: true;
-  # };
 
   home = {
     username = "mh";
@@ -150,7 +146,7 @@ in
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
-    "Code/User".source = ../vscode;
+    # "Code/User/settings.json".source = ../vscode/settings.json;
   };
 
   xdg.mimeApps = {
@@ -224,7 +220,7 @@ in
         work = {
           id = 0;
           name = "work";
-          extensions = with pkgs.nur.repos.rycee.firefox-addons; [
+          extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
             vimium
             browserpass
             ublock-origin
@@ -238,7 +234,7 @@ in
         home = {
           id = 1;
           name = "home";
-          extensions = with pkgs.nur.repos.rycee.firefox-addons; [
+          extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
             vimium
             browserpass
             ublock-origin
