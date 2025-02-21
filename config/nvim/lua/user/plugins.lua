@@ -97,7 +97,6 @@ return {
         "yaml-language-server",
         "json-lsp",
         "pyright",
-        "ruff-lsp",
         "typescript-language-server",
         "nil",
         "bash-language-server",
@@ -112,7 +111,7 @@ return {
         "luacheck",
         "delve",
         "goimports",
-        "ruff",   -- Required for ruff-lsp to work.
+        "ruff",   -- Serves ass an LSP too.
         "shfmt",
         "shellcheck", -- For bashls
         -- Code Actions
@@ -335,6 +334,14 @@ return {
     end,
   },
   {
+    "rcarriga/nvim-notify",
+    config = function()
+      require("notify").setup({
+        background_colour = "#000000",
+      })
+    end,
+  },
+  {
     "folke/noice.nvim",
     event = "VeryLazy",
     dependencies = {
@@ -436,22 +443,6 @@ return {
         mode = { "i", "n", "s" },
       },
     },
-  },
-  {
-    "zbirenbaum/copilot.lua",
-    config = function()
-      -- Required for cmp to work properly.
-      require("copilot").setup({
-        suggestion = { enabled = false },
-        panel = { enabled = false },
-      })
-    end,
-  },
-  {
-    "zbirenbaum/copilot-cmp",
-    config = function()
-      require("copilot_cmp").setup()
-    end,
   },
   -- EVALUATION OVER --
   -- Once they have a better chat support I might reconsider.

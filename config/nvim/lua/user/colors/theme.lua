@@ -149,6 +149,7 @@ theme.loadEditor = function()
     BufferVisibleTarget = { bg = nord.gray, fg = nord.red },
 
     -- nvim-notify
+    NotifyBackground = { bg = nord.black },
     NotifyDEBUGBorder = { fg = nord.light_gray },
     NotifyDEBUGIcon = { fg = nord.light_gray },
     NotifyDEBUGTitle = { fg = nord.light_gray },

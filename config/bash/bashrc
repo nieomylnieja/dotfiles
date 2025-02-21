@@ -145,12 +145,6 @@ if [ -x "$(command -v pyenv)" ]; then
 	eval "$(pyenv virtualenv-init -)"
 fi
 
-# Zoxide (cd replacement)
-if [ -x "$(command -v zoxide)" ]; then
-	eval "$(zoxide init bash)"
-  alias cd='z'
-fi
-
 # Run dircolors to set LS_COLORS in the envs
 eval "$(dircolors)"
 
@@ -172,3 +166,9 @@ fi
 
 # Hook for direnv.
 eval "$(direnv hook bash)"
+
+# Zoxide (cd replacement)
+if [ -x "$(command -v zoxide)" ]; then
+	eval "$(zoxide init bash)"
+  alias cd='z'
+fi

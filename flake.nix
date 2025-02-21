@@ -51,6 +51,7 @@
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
+            home-manager.backupFileExtension = "backup";
             home-manager.users.mh = import ./config/home-manager/home.nix;
             nixpkgs.overlays = [nur.overlays.default];
           }
@@ -69,6 +70,7 @@
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
+            home-manager.backupFileExtension = "backup";
             home-manager.users.mh = import ./config/home-manager/home.nix;
             nixpkgs.overlays = [nur.overlays.default];
           }

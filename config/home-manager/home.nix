@@ -6,13 +6,16 @@
 let
   homeDir = "/home/mh";
   dotfilesDir = "${homeDir}/.dotfiles";
+  gdk = pkgs.google-cloud-sdk.withExtraComponents (with pkgs.google-cloud-sdk.components; [
+    gke-gcloud-auth-plugin
+  ]);
 in
 {
   programs.home-manager.enable = true;
-  nixpkgs.config = {
-    allowUnfree = true;
-    allowUnfreePredicate = _: true;
-  };
+  # nixpkgs.config = {
+  #   allowUnfree = true;
+  #   allowUnfreePredicate = _: true;
+  # };
 
   home = {
     username = "mh";
@@ -58,9 +61,12 @@ in
     gnumake
     gnupg
     go_1_23
+    gdk
     httpie
     i3lock-color
     jetbrains.goland
+    jetbrains.idea-community
+    jetbrains.jdk # JDK for plugin development.
     jq
     lesspipe
     libsForQt5.qt5ct
