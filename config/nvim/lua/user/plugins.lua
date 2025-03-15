@@ -348,39 +348,39 @@ return {
       "MunifTanjim/nui.nvim",
       "rcarriga/nvim-notify",
     },
-    opts = {
-      lsp = {
-        override = {
-          ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
-          ["vim.lsp.util.stylize_markdown"] = true,
-          ["cmp.entry.get_documentation"] = true,
-        },
-      },
-      messages = {
-        enabled = false,
-      },
-      routes = {
-        {
-          filter = {
-            event = "msg_show",
-            any = {
-              { find = "%d+L, %d+B" },
-              { find = "; after #%d+" },
-              { find = "; before #%d+" },
-              { find = "lines yanked" },
-              { find = "fewer lines" },
-            },
-          },
-          view = "mini",
-        },
-      },
-      presets = {
-        bottom_search = true,
-        command_palette = true,
-        long_message_to_split = true,
-        lsp_doc_border = true,
-      },
-    },
+    -- opts = {
+    -- lsp = {
+    --   override = {
+    --     ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
+    --     ["vim.lsp.util.stylize_markdown"] = true,
+    --     ["cmp.entry.get_documentation"] = true,
+    --   },
+    -- },
+    -- messages = {
+    --   enabled = true,
+    -- },
+    -- routes = {
+    --   {
+    --     filter = {
+    --       event = "msg_show",
+    --       any = {
+    --         { find = "%d+L, %d+B" },
+    --         { find = "; after #%d+" },
+    --         { find = "; before #%d+" },
+    --         { find = "lines yanked" },
+    --         { find = "fewer lines" },
+    --       },
+    --     },
+    --     view = "mini",
+    --   },
+    -- },
+    -- presets = {
+    --   bottom_search = true,
+    --   command_palette = true,
+    --   long_message_to_split = true,
+    --   lsp_doc_border = true,
+    -- },
+    -- },
     keys = {
       {
         "<S-Enter>",
@@ -564,19 +564,21 @@ return {
   {
     "iamcco/markdown-preview.nvim",
     cmd = { "MarkdownPreviewToggle", "MarkdownPreview", "MarkdownPreviewStop" },
-    ft = { "markdown" },
+    ft = { "markdown", "plantuml", "mermaid" },
     build = function()
       vim.fn["mkdp#util#install"]()
     end,
     config = function()
       require("user.markdown-preview")
     end,
-    ft = { "markdown", "plantuml", "mermaid" },
   },
   {
     "windwp/nvim-ts-autotag",
     config = function()
       require("nvim-ts-autotag").setup()
     end,
+  },
+  {
+    "bullets-vim/bullets.vim",
   },
 }

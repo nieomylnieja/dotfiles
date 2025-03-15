@@ -1,4 +1,26 @@
 {
     "workbench.colorTheme": "Nord",
-    "vim.useSystemClipboard": true
+    "vim.useSystemClipboard": true,
+    "terminal.integrated.profiles.linux": {
+        "bash": {
+            "path": "bash",
+            "args": ["-i"],
+            "icon": "terminal-bash"
+        },
+        "zsh": {
+            "path": "zsh"
+        },
+        "fish": {
+            "path": "fish"
+        },
+        "tmux": {
+            "path": "tmux",
+            "icon": "terminal-tmux"
+        },
+        "pwsh": {
+            "path": "pwsh",
+            "icon": "terminal-powershell"
+        },
+    },
+    "terminal.integrated.defaultProfile.linux": "bash"
 }

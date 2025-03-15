@@ -20,6 +20,7 @@ in
   };
 
   home.packages = with pkgs; [
+    anki
     awscli2
     aws-vault
     apg
@@ -88,6 +89,7 @@ in
     pamixer
     pass
     pavucontrol
+    peek
     pulseaudio # For pactl.
     pdm
     picom
@@ -115,7 +117,6 @@ in
     yubikey-manager
     yq
     vlc
-    vscode
     winbox
   ];
 
@@ -123,6 +124,7 @@ in
   home.activation = {
     createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
+      ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/vscode/settings.json ${config.xdg.configHome}/Code/User/settings.json
     '';
   };
 
@@ -146,7 +148,6 @@ in
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
-    # "Code/User/settings.json".source = ../vscode/settings.json;
   };
 
   xdg.mimeApps = {
@@ -170,6 +171,58 @@ in
   programs.browserpass = {
     enable = true;
     browsers = [ "firefox" ];
+  };
+
+  programs.vscode = {
+    enable = true;
+    package = pkgs.vscode.fhsWithPackages (ps: with ps; [
+      # Essentially everything Electron needs to run.
+      # This is neccessary for Extension Test Runner to spawn a test VS Code instance.
+      alsa-lib
+      at-spi2-atk
+      cairo
+      cups
+      dbus
+      expat
+      gdk-pixbuf
+      glib
+      gtk3
+      gtk4
+      nss
+      nspr
+      xorg.libX11
+      xorg.libxcb
+      xorg.libXcomposite
+      xorg.libXdamage
+      xorg.libXext
+      xorg.libXfixes
+      xorg.libXrandr
+      xorg.libxkbfile
+      xorg.libxshmfence
+      pango
+      pciutils
+      stdenv.cc.cc
+      systemd
+      libnotify
+      pipewire
+      libsecret
+      libpulseaudio
+      speechd-minimal
+      libdrm
+      mesa
+      libxkbcommon
+      libGL
+      vulkan-loader
+    ]);
+  };
+
+  programs.poetry = {
+    enable = true;
+    package = pkgs.poetry.withPlugins (ps: with ps; [ poetry-plugin-shell ]);
+    settings = {
+      virtualenvs.create = true;
+      virtualenvs.in-project = true;
+    };
   };
 
   programs.firefox = {
@@ -301,6 +354,11 @@ in
 
   # Notifications
   services.dunst.enable = true;
+
+  # LLMs
+  services.ollama = {
+    enable = true;
+  };
 
   # UI
   home.pointerCursor = {

@@ -3,11 +3,6 @@ local luasnip = require("luasnip")
 require("luasnip.loaders.from_vscode").lazy_load()
 luasnip.config.setup({})
 
--- local tabnine = require("cmp_tabnine.config")
--- tabnine:setup({
---   max_num_results = 3,
--- })
-
 cmp.setup({
   snippet = {
     expand = function(args)

@@ -91,7 +91,8 @@ local servers = {
         schemas = {
           ["https://taskfile.dev/schema.json"] = "Taskfile.yml",
           ["https://json.schemastore.org/catalog-info.json"] = "catalog-info.yaml",
-          ["https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/schemas/v3.0/schema.json"] = "openapi-specification.yaml",
+          ["https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/schemas/v3.0/schema.json"] =
+          "openapi-specification.yaml",
         },
       },
     },
@@ -223,20 +224,20 @@ M.setup = function()
   })
 
   local configs = require("lspconfig.configs")
-  local lsp_conf = require("lspconfig")
-  -- configs.n9lsp = {
-  --   default_config = {
-  --     cmd = { "n9lsp", "-logLevel=debug" },
-  --     filetypes = { "yaml" },
-  --     root_dir = function(fname)
-  --       return lsp_conf.util.find_git_ancestor(fname)
-  --     end,
-  --     settings = {},
-  --     message_level = vim.lsp.protocol.MessageType.Info,
-  --   },
-  -- }
-  -- servers["n9lsp"] = {}
+  configs.nobl9_language_server = {
+    default_config = {
+      cmd = { "nobl9-language-server", "-logFilePath=n9.log", "-logLevel=trace" },
+      filetypes = { "nobl9" },
+      root_dir = function(fname)
+        return vim.fs.dirname(vim.fs.find(".git", { path = fname, upward = true })[1])
+      end,
+      settings = {},
+      message_level = vim.lsp.protocol.MessageType.Info,
+    },
+  }
+  servers["nobl9_language_server"] = {}
 
+  local lsp_conf = require("lspconfig")
   for server, config in pairs(servers) do
     lsp_conf[server].setup(vim.tbl_deep_extend("force", {
       capabilities = capabilities,

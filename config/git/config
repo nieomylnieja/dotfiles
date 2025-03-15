@@ -54,6 +54,7 @@
 	pc = !"f() { remote=\"${1:-origin}\"; git push -u \"$remote\" $(git rev-parse --abbrev-ref HEAD); }; f"
 	staash = stash --all
 	me = !gitme.bash
+	stashlost = !recover-lost-stash.bash
 
 [interactive]
   diffFilter = delta --color-only
