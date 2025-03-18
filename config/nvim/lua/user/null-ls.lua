@@ -10,6 +10,7 @@ M.setup = function(lsp_config)
   local sources = {
     -- LINTING:
     lint.actionlint,
+    lint.terraform_validate,
     --
     -- FORMATTING:
     -- Lua
@@ -19,8 +20,8 @@ M.setup = function(lsp_config)
     -- fmt.goimports,
     -- OCaml
     fmt.ocamlformat,
-    -- Shell
     fmt.shfmt,
+    fmt.terraform_fmt,
     -- All types
 
     -- ACTIONS:

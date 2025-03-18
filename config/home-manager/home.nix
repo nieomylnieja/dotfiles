@@ -57,7 +57,7 @@ in
     gimp
     gnumake
     gnupg
-    go_1_23
+    go
     gdk
     httpie
     i3lock-color
@@ -98,6 +98,7 @@ in
     ripgrep
     rofi-power-menu
     rustup
+    tenv
     kubernetes-helm
     feh
     flameshot
