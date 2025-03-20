@@ -53,6 +53,7 @@ in
     git
     glibcLocales
     simple-scan
+    simplescreenrecorder
     sushi
     gimp
     gnumake
