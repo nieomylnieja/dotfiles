@@ -93,7 +93,7 @@ in
     pulseaudio # For pactl.
     pdm
     picom
-    pinentry-qt
+    pinentry-gnome3
     kubectl
     ripgrep
     rofi-power-menu
@@ -313,7 +313,7 @@ in
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryPackage = pkgs.pinentry-qt;
+    pinentryPackage = pkgs.pinentry-gnome3;
   };
 
   # Lock screen
