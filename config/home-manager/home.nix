@@ -109,6 +109,7 @@ in
     starship
     statix
     unzip
+    uv
     zathura
     zoxide
     xclip
