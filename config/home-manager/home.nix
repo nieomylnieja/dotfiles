@@ -258,7 +258,7 @@ in
         common = {
           search = {
             force = true;
-            default = "DuckDuckGo";
+            default = "ddg";
           };
           settings = {
             "general.smoothScroll" = true;
