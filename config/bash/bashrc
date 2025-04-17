@@ -1,7 +1,7 @@
 # If not running interactively, don't do anything
 case $- in
-    *i*) ;;
-      *) return;;
+*i*) ;;
+*) return ;;
 esac
 
 # allow aliases
@@ -81,22 +81,22 @@ source "$DOTFILES/config/fzf/config.sh"
 
 # haskell
 if [ -x "$(command -v stack)" ]; then
-	eval "$(stack --bash-completion-script stack)"
+  eval "$(stack --bash-completion-script stack)"
 fi
 
 # kubectl autocomplete
 if [ -x "$(command -v kubectl)" ]; then
-	source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
-	alias k=kubectl
-	# extend completion to work with the alias
-	complete -F __start_kubectl k
+  source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
+  alias k=kubectl
+  # extend completion to work with the alias
+  complete -F __start_kubectl k
   export KUBE_EDITOR=nvim
 fi
 
 # krew path
 if kubectl krew >&/dev/null; then
-	export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-	source <(kubectl krew completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
+  export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+  source <(kubectl krew completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
 fi
 
 # Avoid duplicates
@@ -111,12 +111,17 @@ if [ ! -f ~/.dir_colors ]; then
   ln "$DOTFILES/config/dircolors/dir_colors" "$HOME/.dir_colors"
 fi
 
+# Gemini API Key
+if [ -f ~/.password-store/gemini_api_key ]; then
+  export GEMINI_API_KEY="$(cat ~/.password-store/gemini_api_key)"
+fi
+
 # bat colors
 export BAT_THEME="Nord"
 
 # node version manager
 if [ -x "$(command -v fnm)" ]; then
-	eval "$(fnm env --use-on-cd)"
+  eval "$(fnm env --use-on-cd)"
 fi
 
 # colored man pages
@@ -134,15 +139,15 @@ export HISTFILESIZE=10000
 
 # Spicetify -- an awesome spotify customization cli
 if [ -x "$(command -v spicetify-cli)" ]; then
-	export SPICETIFY_INSTALL="$HOME/spicetify-cli"
-	export PATH="$SPICETIFY_INSTALL:$PATH"
+  export SPICETIFY_INSTALL="$HOME/spicetify-cli"
+  export PATH="$SPICETIFY_INSTALL:$PATH"
 fi
 
 # pyenv path -- place it toward the end of bashrc
 if [ -x "$(command -v pyenv)" ]; then
-	export PATH="$HOME/.pyenv/bin:$PATH"
-	eval "$(pyenv init --path)"
-	eval "$(pyenv virtualenv-init -)"
+  export PATH="$HOME/.pyenv/bin:$PATH"
+  eval "$(pyenv init --path)"
+  eval "$(pyenv virtualenv-init -)"
 fi
 
 # Run dircolors to set LS_COLORS in the envs
@@ -150,18 +155,18 @@ eval "$(dircolors)"
 
 # starship prompt init, should stay on the bottom
 if [ -x "$(command -v starship)" ]; then
-	eval "$(starship init bash)"
+  eval "$(starship init bash)"
 fi
 
 # Some lua bs...
 alias luamake=/home/mh/.dotfiles/clones/lua-language-server/3rd/luamake/luamake
 
 # OCaml
-test -r /home/mh/.opam/opam-init/init.sh && . /home/mh/.opam/opam-init/init.sh > /dev/null 2> /dev/null || true
+test -r /home/mh/.opam/opam-init/init.sh && . /home/mh/.opam/opam-init/init.sh >/dev/null 2>/dev/null || true
 
 # any other custom files to be sourced
 if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
-	source "$HOME"/nobl9/nobl9rc.bash
+  source "$HOME"/nobl9/nobl9rc.bash
 fi
 
 # Hook for direnv.
@@ -169,6 +174,6 @@ eval "$(direnv hook bash)"
 
 # Zoxide (cd replacement)
 if [ -x "$(command -v zoxide)" ]; then
-	eval "$(zoxide init bash)"
+  eval "$(zoxide init bash)"
   alias cd='z'
 fi

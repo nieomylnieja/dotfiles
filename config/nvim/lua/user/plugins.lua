@@ -109,7 +109,6 @@ return {
         "actionlint",
         "stylua",
         "luacheck",
-        "delve",
         "goimports",
         "ruff",   -- Serves ass an LSP too.
         "shfmt",
@@ -118,7 +117,7 @@ return {
         "gomodifytags",
         "impl",
         -- DAP
-        "delve",
+        -- "delve", WARNING: Sometimes I want to run it separately.
         -- "debugpy",
       },
       ui = { border = "rounded" },
@@ -311,7 +310,12 @@ return {
       "nvim-treesitter/nvim-treesitter",
       "antoinemadec/FixCursorHold.nvim",
       -- Adapters
-      "nvim-neotest/neotest-go",
+      {
+        "fredrikaverpil/neotest-golang",
+        dependencies = {
+          "leoluz/nvim-dap-go",
+        },
+      },
       "nvim-neotest/nvim-nio",
     },
     config = function()
@@ -333,6 +337,22 @@ return {
       require("user.dap")
     end,
   },
+  -- {
+  --   "leoluz/nvim-dap-go",
+  --   config = function()
+  --     require("dap-go").setup({
+  --       dap_configurations = {
+  --         {
+  --           type = "go",
+  --           name = "Debug (Build Flags & Arguments)",
+  --           request = "launch",
+  --           program = "${file}",
+  --           args = require("dap-go").get_arguments,
+  --         },
+  --       },
+  --     })
+  --   end,
+  -- },
   {
     "rcarriga/nvim-notify",
     config = function()

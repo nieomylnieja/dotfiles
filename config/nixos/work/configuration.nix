@@ -66,7 +66,11 @@
   }];
 
   # Keyring.
+  services.gnome.gnome-keyring.enable = true;
+  programs.seahorse.enable = true;
   security.pam.services.gdm.enableGnomeKeyring = true;
+  security.pam.services.login.enableGnomeKeyring = true;
+  security.pam.services.gdm-password.enableGnomeKeyring = true;
 
   # Configure keymap in X11
   services.xserver.xkb = {
@@ -128,6 +132,7 @@
     wget
     git
     inetutils
+    libsecret # For keyring.
   ];
 
   # Enable the OpenSSH daemon.

@@ -15,6 +15,9 @@ install/home-manager:
 install/nix:
 	sh <(curl -L https://nixos.org/nix/install) --no-daemon && . ~/.nix-profile/etc/profile.d/nix.sh
 
+install/devbox:
+	nix-env -iA nixos.devbox
+
 install/node:
 	fnm install --latest
 

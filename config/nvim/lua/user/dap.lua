@@ -50,28 +50,19 @@ dap_go.setup({
 })
 dap_python.setup()
 
----@param config {args?:string[]|fun():string[]?}
-local function dap_get_args(config)
-  local args = type(config.args) == "function" and (config.args() or {}) or config.args or {}
-  config = vim.deepcopy(config)
-  ---@cast args string[]
-  config.args = function()
-    local new_args = vim.fn.input("Run with args: ", table.concat(args, " "))
-    return vim.split(vim.fn.expand(new_args), " ")
-  end
-  return config
-end
-
 require("which-key").add({
     { "<leader>d", group = "Debug" },
     { "<leader>db", function() dap.toggle_breakpoint() end, desc = "Toggle Breakpoint" },
     { "<leader>dB", function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end, desc = "Breakpoint Condition" },
     { "<leader>dc", function() dap.continue() end, desc = "Continue" },
-    { "<leader>da", function() dap.continue({ before = dap_get_args }) end, desc = "Run with Args" },
     { "<leader>dm", function()
       local ft = vim.bo.filetype
       if ft == "go" then
-        dap_go.debug_test()
+        require("neotest").run.run({
+          suite = false,
+          strategy = "dap",
+          env = { CGO_ENABLED = "0" },
+        })
       elseif ft == "python" then
         dap_python.test_method()
       else

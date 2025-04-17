@@ -36,7 +36,7 @@ in
     cachix
     csvkit
     delta
-    devbox
+    delve
     direnv
     discord
     distrobox
@@ -94,7 +94,7 @@ in
     pulseaudio # For pactl.
     pdm
     picom
-    pinentry-gnome3
+    pinentry-qt
     kubectl
     ripgrep
     rofi-power-menu
@@ -113,6 +113,7 @@ in
     uv
     zathura
     zoxide
+    zip
     xclip
     xorg.xrandr
     xorg.xset
@@ -120,6 +121,7 @@ in
     yubikey-manager
     yq
     vlc
+    vivaldi
     winbox
   ];
 
@@ -151,6 +153,7 @@ in
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
+    "feh".source = ../feh;
   };
 
   xdg.mimeApps = {
@@ -173,7 +176,7 @@ in
 
   programs.browserpass = {
     enable = true;
-    browsers = [ "firefox" ];
+    browsers = [ "firefox" "vivaldi" ];
   };
 
   programs.vscode = {
@@ -314,7 +317,7 @@ in
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryPackage = pkgs.pinentry-gnome3;
+    pinentryPackage = pkgs.pinentry-qt;
   };
 
   # Lock screen
