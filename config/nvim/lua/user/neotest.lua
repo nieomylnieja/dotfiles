@@ -24,7 +24,8 @@ local neotest = require("neotest")
 neotest.setup({
   adapters = {
     require("neotest-golang")({
-      go_test_args = {},
+      go_test_args = { "-v", "-count=1" },
+      log_level = vim.log.levels.WARN,
     }),
   },
   consumers = {
