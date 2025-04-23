@@ -314,6 +314,7 @@ return {
         "fredrikaverpil/neotest-golang",
         dependencies = {
           "leoluz/nvim-dap-go",
+          "uga-rosa/utf8.nvim", -- For sanitize_output option to work
         },
       },
       "nvim-neotest/nvim-nio",

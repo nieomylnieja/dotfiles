@@ -26,6 +26,7 @@ neotest.setup({
     require("neotest-golang")({
       go_test_args = { "-v", "-count=1" },
       log_level = vim.log.levels.WARN,
+      sanitize_output = true,
     }),
   },
   consumers = {
