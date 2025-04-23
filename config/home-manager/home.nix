@@ -66,6 +66,7 @@ in
     jetbrains.idea-community
     jetbrains.jdk # JDK for plugin development.
     jq
+    krita
     lesspipe
     libsForQt5.qt5ct
     libnotify # For notify-send.
