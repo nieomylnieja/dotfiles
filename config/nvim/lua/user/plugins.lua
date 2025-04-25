@@ -611,9 +611,20 @@ return {
     },
     config = function()
       require("codecompanion").setup({
+        adapters = {
+          copilot = function()
+            return require("codecompanion.adapters").extend("copilot", {
+              schema = {
+                model = {
+                  default = "gpt-4.1",
+                },
+              },
+            })
+          end,
+        },
         strategies = {
           chat = {
-            adapter = "gemini",
+            adapter = "copilot",
           },
           inline = {
             adapter = "copilot",
