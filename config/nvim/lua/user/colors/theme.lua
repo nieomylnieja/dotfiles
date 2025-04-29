@@ -58,8 +58,8 @@ end
 
 theme.loadEditor = function()
   return {
-    NormalFloat = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
-    FloatBorder = { fg = nord.darkest_white, bg = nord.float },             -- normal text and background color
+    NormalFloat = { fg = nord.darkest_white, bg = nord.float }, -- normal text and background color
+    FloatBorder = { fg = nord.darkest_white, bg = nord.float }, -- normal text and background color
     WinBar = { bg = nord.black },
     WinBarNC = { bg = nord.black },
     ColorColumn = { fg = nord.none, bg = nord.dark_gray },                  -- used for the columns set with 'colorcolumn'
@@ -511,6 +511,22 @@ theme.loadPlugins = function()
     NeotestMakred = { fg = nord.orange },
     NeotestNamespace = { fg = nord.glacier },
     NeotestAdapterName = { fg = nord.glacier },
+
+    -- Markview
+    MarkviewCode = { bg = nord.dark_gray },
+    MarkviewInlineCode = { bg = nord.dark_gray },
+    MarkviewHeading1 = { fg = nord.green },
+    MarkviewHeading2 = { fg = nord.yellow },
+    MarkviewHeading3 = { fg = nord.purple },
+    MarkviewHeading4 = { fg = nord.teal },
+    MarkviewHeading5 = { fg = nord.off_blue },
+    MarkviewHeading6 = { fg = nord.blue },
+    MarkviewHeading1Sign = { fg = nord.green },
+    MarkviewHeading2Sign = { fg = nord.yellow },
+    MarkviewHeading3Sign = { fg = nord.purple },
+    MarkviewHeading4Sign = { fg = nord.teal },
+    MarkviewHeading5Sign = { fg = nord.off_blue },
+    MarkviewHeading6Sign = { fg = nord.klue },
   }
 end
 

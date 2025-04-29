@@ -1,33 +1,7 @@
 local M = {}
 
 local servers = {
-  lua_ls = {
-    settings = {
-      Lua = {
-        runtime = {
-          version = "LuaJIT",
-        },
-        diagnostics = {
-          globals = { "vim" },
-          disable = {
-            "missing-fields",
-            "incomplete-signature-doc",
-          },
-        },
-        workspace = {
-          library = {
-            [vim.fn.expand("$VIMRUNTIME/lua")] = true,
-            [vim.fn.expand("$VIMRUNTIME/lua/vim/lsp")] = true,
-            [vim.fn.stdpath("data") .. "/lazy/lazy.nvim/lua/lazy"] = true,
-          },
-          maxPreload = 100000,
-          preloadFileSize = 10000,
-          checkThirdParty = false,
-        },
-        telemetry = { enable = false },
-      },
-    },
-  },
+  lua_ls = {}, -- configured via lazydev.nvim
   gopls = {
     init_options = {
       usePlaceholders = true,
@@ -196,7 +170,6 @@ end
 
 M.setup = function()
   require("mason").setup()
-  require("neodev").setup()
 
   for _, sign in ipairs({
     { name = "DiagnosticSignError", text = "" },
@@ -226,8 +199,12 @@ M.setup = function()
   local configs = require("lspconfig.configs")
   configs.nobl9_language_server = {
     default_config = {
-      cmd = { "nobl9-language-server", "-logFilePath=n9.log", "-logLevel=trace" },
-      filetypes = { "nobl9" },
+      cmd = {
+        "nobl9-language-server",
+        "-logFilePath=~/.local/state/nobl9-language-server/n9.log",
+        "-logLevel=trace",
+      },
+      filetypes = { "yaml" },
       root_dir = function(fname)
         return vim.fs.dirname(vim.fs.find(".git", { path = fname, upward = true })[1])
       end,

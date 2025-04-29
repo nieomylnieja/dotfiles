@@ -50,9 +50,9 @@ cmp.setup({
   sources = {
     { name = "nvim_lsp" },
     { name = "luasnip" },
-    -- { name = "cmp_tabnine" },
     { name = "copilot" },
     { name = "path" },
+    { name = "lazydev", group_index = 0 }, -- set group index to 0 to skip loading LuaLS completions
   },
   formatting = {
     fields = { "kind", "abbr", "menu" },
