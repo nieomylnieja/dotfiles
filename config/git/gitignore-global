@@ -5,3 +5,4 @@
 .run
 node_modules
 .metals
+postgrestools.jsonc

@@ -99,7 +99,7 @@ in
     kubectl
     ripgrep
     rofi-power-menu
-    rustup
+    # rustup
     tenv
     kubernetes-helm
     feh
@@ -312,6 +312,12 @@ in
     enable = true;
     plugins = with pkgs; [ rofi-calc ];
     pass.enable = true;
+  };
+
+  # Easily find linked libraries.
+  programs.nix-index = {
+    enable = true;
+    enableBashIntegration = true;
   };
 
   # GPG

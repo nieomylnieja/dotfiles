@@ -22,5 +22,11 @@
             "icon": "terminal-powershell"
         },
     },
-    "terminal.integrated.defaultProfile.linux": "bash"
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.shellIntegration.environmentReporting": true,
+    "terminal.integrated.suggest.enabled": true,
+    "nobl9.languageServer.logFilePath": "foo",
+    "editor.quickSuggestions": {
+        "strings": "on"
+    }
 }

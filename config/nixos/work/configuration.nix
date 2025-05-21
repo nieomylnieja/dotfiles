@@ -72,6 +72,9 @@
   security.pam.services.login.enableGnomeKeyring = true;
   security.pam.services.gdm-password.enableGnomeKeyring = true;
 
+  # Lockscreen.
+  security.pam.services.i3lock.enable = true;
+
   # Configure keymap in X11
   services.xserver.xkb = {
     layout = "pl";
