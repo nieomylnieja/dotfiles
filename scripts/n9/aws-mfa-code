@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# See https://aws.amazon.com/blogs/security/enhance-programmatic-access-for-iam-users-using-yubikey-for-multi-factor-authentication/
+# for more details.
+
 AWS_PROFILE=$(aws-vault list --credentials | fzf)
 
 SERIAL_NUMBER=$(awk '

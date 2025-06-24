@@ -28,5 +28,9 @@
     "nobl9.languageServer.logFilePath": "foo",
     "editor.quickSuggestions": {
         "strings": "on"
-    }
+    },
+    "makefile.configureOnOpen": true,
+    "git.replaceTagsWhenPull": true,
+    "git.autofetch": true,
+    "go.toolsManagement.autoUpdate": true
 }
