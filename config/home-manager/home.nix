@@ -20,6 +20,7 @@ in
   };
 
   home.packages = with pkgs; [
+    aider-chat
     anki
     awscli2
     aws-vault
@@ -52,6 +53,7 @@ in
     gh
     git
     glibcLocales
+    gotestsum
     simple-scan
     simplescreenrecorder
     sushi
@@ -220,6 +222,7 @@ in
       libxkbcommon
       libGL
       vulkan-loader
+      openssl
     ]);
   };
 

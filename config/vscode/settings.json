@@ -3,8 +3,14 @@
     "vim.useSystemClipboard": true,
     "terminal.integrated.profiles.linux": {
         "bash": {
-            "path": "bash",
-            "args": ["-i"],
+            "path": "/usr/bin/env",
+            "args": [
+                "bash"
+            ],
+            "icon": "terminal-bash"
+        },
+        "nixos-bash": {
+            "path": "/run/current-system/sw/bin/bash",
             "icon": "terminal-bash"
         },
         "zsh": {
@@ -22,15 +28,19 @@
             "icon": "terminal-powershell"
         },
     },
-    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.defaultProfile.linux": "nixos-bash",
     "terminal.integrated.shellIntegration.environmentReporting": true,
     "terminal.integrated.suggest.enabled": true,
-    "nobl9.languageServer.logFilePath": "foo",
+    // Ensure environment inheritance is enabled (usually default)
+    "terminal.integrated.inheritEnv": true,
     "editor.quickSuggestions": {
         "strings": "on"
     },
     "makefile.configureOnOpen": true,
     "git.replaceTagsWhenPull": true,
     "git.autofetch": true,
-    "go.toolsManagement.autoUpdate": true
+    "go.toolsManagement.autoUpdate": true,
+    "files.associations": {
+        "*.bats": "shellscript"
+    }
 }

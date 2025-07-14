@@ -581,6 +581,7 @@ return {
   },
   {
     "tpope/vim-fugitive",
+    dependencies = { "tpope/vim-rhubarb" },
   },
   {
     "iamcco/markdown-preview.nvim",
@@ -616,7 +617,7 @@ return {
             return require("codecompanion.adapters").extend("copilot", {
               schema = {
                 model = {
-                  default = "gpt-4.1",
+                  default = "claude-sonnet-4",
                 },
               },
             })

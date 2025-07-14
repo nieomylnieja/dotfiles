@@ -55,6 +55,7 @@
 	staash = stash --all
 	me = !gitme.bash
 	stashlost = !recover-lost-stash.bash
+	c = !aider-commit.bash
 
 [interactive]
   diffFilter = delta --color-only
