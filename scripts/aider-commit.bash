@@ -7,7 +7,8 @@ COMMIT_PROMPT=$(
   cat <<EOF
 use conventional commits with multi-paragraph body,
 you can describe these changes in the body if they are more complex,
-do not wrap the commit in markdown code fences"
+do not wrap the commit in markdown code fences,
+keep the line length to 100 at most
 EOF
 )
 
