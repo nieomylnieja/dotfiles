@@ -6,7 +6,9 @@ STASH_NAME="aider: only unstaged changes"
 COMMIT_PROMPT=$(
   cat <<EOF
 use conventional commits with multi-paragraph body,
-you can describe these changes in the body if they are more complex,
+only describe the changes in the body if they are complex,
+when desribing changes, only summarize and do not add any suggestions,
+otherwise provide only commit title,
 do not wrap the commit in markdown code fences,
 keep the line length to 120 at most,
 split the long lines using semantic line breaks
