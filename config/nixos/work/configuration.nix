@@ -2,7 +2,7 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   imports =
@@ -136,7 +136,12 @@
     git
     inetutils
     libsecret # For keyring.
+    clamav
   ];
+
+  # Anti-virus
+  services.clamav.daemon.enable = true;
+  services.clamav.updater.enable = true;
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
@@ -181,6 +186,19 @@
     remotePlay.openFirewall = true; # Open ports in the firewall for Steam Remote Play
     dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
     localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
+  };
+
+  systemd.services.jumpcloud-agent = {
+    enable = true;
+    description = "Jumpcloud agent";
+    after = [ "network.target" ];
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = ''/opt/jc/bin/jumpcloud-agent'';
+      Restart = "always";
+      RestartSec = 5;
+    };
   };
 
   # This value determines the NixOS release from which the default

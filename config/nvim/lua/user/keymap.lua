@@ -47,6 +47,29 @@ map("o", "N", "'nN'[v:searchforward]", { expr = true, desc = "Prev search result
 map("v", "<", "<gv")
 map("v", ">", ">gv")
 
+-- git permalink
+map("n", "<leader>glc", "", {
+  expr = true,
+  desc = "Copy a git permalink",
+  callback = function()
+    require("user.git-permalink").create_copy(".")
+  end,
+})
+map("v", "<leader>glc", "", {
+  expr = true,
+  desc = "Copy a git permalink",
+  callback = function()
+    require("user.git-permalink").create_copy("v")
+  end,
+})
+map("n", "<leader>glo", "", {
+  expr = true,
+  desc = "Copy a git permalink and open it in a browser",
+  callback = function()
+    require("user.git-permalink").create_open(".")
+  end,
+})
+
 -- spelling
 map("n", "z=", "<cmd>:lua require'telescope.builtin'.spell_suggest{}<cr>", { desc = "Spelling suggestions" })
 

@@ -35,6 +35,7 @@ in
     bottom
     browserpass
     cachix
+    claude-code
     csvkit
     delta
     delve
@@ -192,6 +193,7 @@ in
       cairo
       cups
       dbus
+      distrobox
       expat
       gdk-pixbuf
       glib
