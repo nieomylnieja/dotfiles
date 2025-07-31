@@ -105,6 +105,7 @@ return {
         "htmx-lsp",
         "tailwindcss-language-server",
         "postgrestools",
+        "ansible-language-server",
         -- Linters/formatters
         "actionlint",
         "stylua",

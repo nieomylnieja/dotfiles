@@ -9,6 +9,9 @@ let
   gdk = pkgs.google-cloud-sdk.withExtraComponents (with pkgs.google-cloud-sdk.components; [
     gke-gcloud-auth-plugin
   ]);
+  golandOverridden = pkgs.jetbrains.goland.override {
+    jdk = pkgs.jdk;
+  };
 in
 {
   programs.home-manager.enable = true;
@@ -32,8 +35,8 @@ in
     bat
     bash-completion
     bashmount
+    bazecor
     bottom
-    browserpass
     cachix
     claude-code
     csvkit
@@ -65,9 +68,11 @@ in
     gdk
     httpie
     i3lock-color
-    jetbrains.goland
-    jetbrains.idea-community
-    jetbrains.jdk # JDK for plugin development.
+    # Once https://github.com/NixOS/nixpkgs/issues/425328 is resolved, uncomment and remove overrides.
+    # jetbrains.goland
+    # jetbrains.idea-community
+    # jetbrains.jdk # JDK for plugin development.
+    golandOverridden
     jq
     krita
     lesspipe
@@ -102,6 +107,7 @@ in
     kubectl
     ripgrep
     rofi-power-menu
+    rpi-imager
     # rustup
     tenv
     kubernetes-helm
@@ -177,11 +183,6 @@ in
   };
 
   fonts.fontconfig.enable = true;
-
-  programs.browserpass = {
-    enable = true;
-    browsers = [ "firefox" "vivaldi" ];
-  };
 
   programs.vscode = {
     enable = true;
@@ -287,7 +288,6 @@ in
           name = "work";
           extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
             vimium
-            browserpass
             ublock-origin
             privacy-badger
             clearurls
@@ -301,7 +301,6 @@ in
           name = "home";
           extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
             vimium
-            browserpass
             ublock-origin
             privacy-badger
             clearurls
@@ -329,7 +328,9 @@ in
   services.gpg-agent = {
     enable = true;
     enableSshSupport = true;
-    pinentryPackage = pkgs.pinentry-qt;
+    pinentry = {
+      package = pkgs.pinentry-qt;
+    };
   };
 
   # Lock screen

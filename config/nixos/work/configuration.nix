@@ -55,7 +55,7 @@
   services.xserver.enable = true;
 
   # Configure desktop environment.
-  services.xserver.displayManager.gdm.enable = true;
+  services.displayManager.gdm.enable = true;
   services.displayManager.defaultSession = "none+qtile";
   services.xserver.windowManager.session = [{
     name = "qtile";

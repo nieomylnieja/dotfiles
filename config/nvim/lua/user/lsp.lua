@@ -111,6 +111,7 @@ local servers = {
   htmx = {},
   tailwindcss = {},
   postgres_lsp = {},
+  ansiblels = {},
 }
 
 local function lsp_format()
