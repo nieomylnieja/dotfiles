@@ -35,7 +35,6 @@ in
     bat
     bash-completion
     bashmount
-    bazecor
     bottom
     cachix
     claude-code
@@ -109,7 +108,6 @@ in
     rofi-power-menu
     rpi-imager
     # rustup
-    tenv
     kubernetes-helm
     feh
     flameshot
@@ -119,6 +117,7 @@ in
     spotify
     starship
     statix
+    tree
     unzip
     uv
     zathura
@@ -133,6 +132,7 @@ in
     vlc
     vivaldi
     winbox
+    pkgs.stable.zoom-us
   ];
 
   # Neovim has to be linked as the directory has to be writable.

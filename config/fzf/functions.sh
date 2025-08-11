@@ -330,7 +330,6 @@ fco() {
   target="$(
     printf '%s\n%s' "$tags" "$branches" |
       fzf \
-        -l40 \
         -- \
         --no-hscroll \
         --ansi \

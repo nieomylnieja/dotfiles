@@ -6,7 +6,7 @@ export XDG_SESSION_TYPE=x11
 export GDK_BACKEND=x11
 export DESKTOP_SESSION=qtile
 # Defailt programs
-export BROWSER=firefox
+export BROWSER=vivaldi
 export EDITOR=nvim
 # Adhere to xdg specification
 export XDG_CONFIG_HOME="$HOME/.config"
