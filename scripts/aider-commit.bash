@@ -65,7 +65,13 @@ if aider --commit --commit-prompt="$COMMIT_PROMPT"; then
   case "$push_choice" in
   [Yy] | [Yy][Ee][Ss])
     echo "Pushing commit..."
-    git push
+    # Check if current branch has upstream set
+    if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+      echo "No upstream set, pushing with --set-upstream..."
+      git push --set-upstream origin "$(git branch --show-current)"
+    else
+      git push
+    fi
     ;;
   *)
     echo "Skipping push."
