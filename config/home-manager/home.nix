@@ -26,7 +26,6 @@ in
     aider-chat
     anki
     awscli2
-    aws-vault
     apg
     alacritty
     alejandra
@@ -117,6 +116,7 @@ in
     spotify
     starship
     statix
+    terraform
     tree
     unzip
     uv
@@ -170,6 +170,11 @@ in
     enable = true;
     defaultApplications = {
       "application/pdf" = [ "zathura" ];
+      "text/html" = "vivaldi-stable.desktop";
+      "x-scheme-handler/http" = "vivaldi-stable.desktop";
+      "x-scheme-handler/https" = "vivaldi-stable.desktop";
+      "x-scheme-handler/about" = "vivaldi-stable.desktop";
+      "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
     };
   };
 
