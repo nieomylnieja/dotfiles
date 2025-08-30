@@ -55,6 +55,7 @@ in
     gh
     git
     glibcLocales
+    go
     gotestsum
     simple-scan
     simplescreenrecorder
@@ -62,7 +63,6 @@ in
     gimp
     gnumake
     gnupg
-    go
     gdk
     httpie
     i3lock-color
@@ -82,6 +82,7 @@ in
     man
     man-pages
     mesa
+    mirrord
     moreutils
     nemo-with-extensions
     nerd-fonts.mononoki
@@ -169,7 +170,7 @@ in
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {
-      "application/pdf" = [ "zathura" ];
+      "application/pdf" = [ "zathura.desktop" ];
       "text/html" = "vivaldi-stable.desktop";
       "x-scheme-handler/http" = "vivaldi-stable.desktop";
       "x-scheme-handler/https" = "vivaldi-stable.desktop";
