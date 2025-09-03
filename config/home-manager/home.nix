@@ -150,6 +150,7 @@ in
     ".xprofile".source = ../xorg/xprofile;
     ".xinitrc".source = ../xorg/xinitrc;
     ".profile".source = ../xorg/xinitrc;
+    ".claude/settings.json".source = ../claude/settings.json;
   };
 
   xdg.configFile = {

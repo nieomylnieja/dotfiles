@@ -147,7 +147,7 @@
   users.users.mh = {
     isNormalUser = true;
     description = "Mateusz";
-    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" ];
+    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" "vboxusers" ];
   };
 
   # Support unpatched binaries out of the box.
