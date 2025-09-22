@@ -132,7 +132,6 @@ in
     yq
     vlc
     vivaldi
-    winbox
     pkgs.stable.zoom-us
   ];
 

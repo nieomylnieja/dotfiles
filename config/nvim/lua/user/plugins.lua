@@ -499,7 +499,7 @@ return {
     end,
   },
   {
-    "ahmedkhalf/project.nvim",
+    "DrKJeff16/project.nvim",
     dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
     config = function()
       require("project_nvim").setup({})
@@ -614,15 +614,17 @@ return {
     config = function()
       require("codecompanion").setup({
         adapters = {
-          copilot = function()
-            return require("codecompanion.adapters").extend("copilot", {
-              schema = {
-                model = {
-                  default = "claude-sonnet-4",
+          http = {
+            copilot = function()
+              return require("codecompanion.adapters").extend("copilot", {
+                schema = {
+                  model = {
+                    default = "claude-sonnet-4",
+                  },
                 },
-              },
-            })
-          end,
+              })
+            end,
+          },
         },
         strategies = {
           chat = {

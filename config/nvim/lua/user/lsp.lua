@@ -217,13 +217,16 @@ M.setup = function()
   }
   servers["nobl9_language_server"] = {}
 
-  local lsp_conf = require("lspconfig")
   for server, config in pairs(servers) do
-    lsp_conf[server].setup(vim.tbl_deep_extend("force", {
-      capabilities = capabilities,
-      on_attach = get_on_attach(server),
-      message_level = vim.lsp.protocol.MessageType.Info,
-    }, config))
+    vim.lsp.config(
+      server,
+      vim.tbl_deep_extend("force", {
+        capabilities = capabilities,
+        on_attach = get_on_attach(server),
+        message_level = vim.lsp.protocol.MessageType.Info,
+      }, config)
+    )
+    vim.lsp.enable(server)
   end
 end
 
