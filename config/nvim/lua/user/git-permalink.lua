@@ -34,7 +34,7 @@ end
 -- @param mode either '.' or 'v'. Used by vim.fn.line
 M.create_link = function(mode)
   local origin = vim.trim(vim.fn.system("git remote get-url --push origin"))
-  local origin_url, _ = string.gsub(origin, "git@(.+):(.+)/(.+).git", "https://%1/%2/%3")
+  local origin_url, _ = string.gsub(origin, "git@(.+):(.+)%.git", "https://%1/%2")
 
   local sha = vim.trim(vim.fn.system("git rev-parse HEAD"))
   local repo = trim_prefix(vim.api.nvim_buf_get_name(0), vim.fn.getcwd())
