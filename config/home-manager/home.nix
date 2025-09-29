@@ -39,7 +39,6 @@ in
     claude-code
     csvkit
     delta
-    delve
     direnv
     discord
     distrobox
