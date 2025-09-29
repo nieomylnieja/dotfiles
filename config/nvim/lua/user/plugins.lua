@@ -502,7 +502,7 @@ return {
     "DrKJeff16/project.nvim",
     dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
     config = function()
-      require("project_nvim").setup({})
+      require("project").setup({})
       require("telescope").load_extension("projects")
     end,
   },

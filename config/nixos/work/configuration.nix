@@ -210,18 +210,18 @@
   };
 
   # VritualBox.
-  virtualisation.virtualbox = {
-    host = {
-      enable = true;
-      enableExtensionPack = true;
-    };
-    guest = {
-      enable = true;
-      dragAndDrop = true;
-      clipboard = true;
-    };
-  };
-  users.extraGroups.vboxusers.members = [ "mh" ];
+  # virtualisation.virtualbox = {
+  #   host = {
+  #     enable = true;
+  #     enableExtensionPack = true;
+  #   };
+  #   guest = {
+  #     enable = true;
+  #     dragAndDrop = true;
+  #     clipboard = true;
+  #   };
+  # };
+  # users.extraGroups.vboxusers.members = [ "mh" ];
 
   programs.steam = {
     enable = true;
