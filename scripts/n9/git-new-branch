@@ -1,18 +1,58 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 SCRIPT_PATH="$DOTFILES/scripts"
 
-read -r -d '\n' email token domain user_id jira_project <<<"\
-  $(sops --config "$SCRIPT_PATH/.sops.yaml" -d "$SCRIPT_PATH/atlassian-secrets.enc.json" |
-  jq -r '.email, .token, .domain, .user_id, .jira_project')"
+# Read credentials
+read -r -d '' email token domain user_id jira_project <<< \
+  "$(sops --config "$SCRIPT_PATH/.sops.yaml" -d "$SCRIPT_PATH/atlassian-secrets.enc.json" |
+    jq -r '.email, .token, .domain, .user_id, .jira_project')" || true
 
-curl -s "https://$domain/rest/api/2/search?jql=assignee=$user_id+and+project=$jira_project+and+statusCategory=indeterminate" \
-  --user "$email:$token" |
-  jq -r '.issues[] | (.key) + "-" + (.fields.summary | ascii_downcase | .)' |
+# Build JQL query
+jql="assignee=$user_id AND project=$jira_project AND statusCategory=indeterminate"
+
+# Make API request using GET with the /search/jql endpoint
+tmpfile=$(mktemp)
+http_code=$(curl -s -w "%{http_code}" -o "$tmpfile" \
+  -G "https://$domain/rest/api/3/search/jql" \
+  --user "$email:$token" \
+  --header "Accept: application/json" \
+  --data-urlencode "jql=$jql" \
+  --data-urlencode "maxResults=50" \
+  --data-urlencode "startAt=0" \
+  --data-urlencode "fields=key,summary")
+
+body=$(cat "$tmpfile")
+rm -f "$tmpfile"
+
+# Check if request was successful
+if [ "$http_code" -ne 200 ]; then
+  echo "Error: API request failed with status code $http_code" >&2
+  echo "Response: $body" >&2
+  exit 1
+fi
+
+# Check if response contains issues
+if ! echo "$body" | jq -e '.issues | length > 0' >/dev/null 2>&1; then
+  echo "No issues found matching the criteria" >&2
+  exit 0
+fi
+
+# Process and select issue
+selected=$(echo "$body" |
+  jq -r '.issues[] | (.key) + "-" + (.fields.summary | ascii_downcase)' |
   sed "s/[\/:^~,\"()']//g" |
   sed 's/[ .]/-/g' |
   sed -E 's/-{2,}/-/g' |
   sed 's/-*$//' |
   tr -d '[]' |
-  fzf | 
-  xargs git checkout -b
+  fzf --prompt="Select issue to create branch: ")
+
+# Create branch if selection was made
+if [ -n "$selected" ]; then
+  git checkout -b "$selected"
+else
+  echo "No issue selected" >&2
+  exit 1
+fi

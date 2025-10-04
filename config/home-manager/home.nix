@@ -65,6 +65,7 @@ in
     gdk
     httpie
     i3lock-color
+    pkgs.stable.inkscape-with-extensions
     # Once https://github.com/NixOS/nixpkgs/issues/425328 is resolved, uncomment and remove overrides.
     # jetbrains.goland
     # jetbrains.idea-community
