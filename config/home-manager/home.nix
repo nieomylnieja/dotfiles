@@ -119,6 +119,8 @@ in
     statix
     terraform
     tree
+    # Required for new verison of nvim-treesitter to work.
+    tree-sitter
     unzip
     uv
     zathura
@@ -150,6 +152,7 @@ in
     ".xinitrc".source = ../xorg/xinitrc;
     ".profile".source = ../xorg/xinitrc;
     ".claude/settings.json".source = ../claude/settings.json;
+    ".claude/CLAUDE.md".source = ../claude/CLAUDE.md;
   };
 
   xdg.configFile = {

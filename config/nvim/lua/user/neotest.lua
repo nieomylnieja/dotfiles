@@ -27,6 +27,7 @@ neotest.setup({
       go_test_args = { "-v", "-count=1" },
       log_level = vim.log.levels.WARN,
       sanitize_output = true,
+      warn_test_name_dupes = false,
     }),
   },
   consumers = {

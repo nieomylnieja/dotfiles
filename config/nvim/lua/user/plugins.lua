@@ -34,15 +34,10 @@ return {
   {
     "nvim-treesitter/nvim-treesitter",
     build = ":TSUpdate",
+    branch = "main",
     config = function()
-      local configs = require("nvim-treesitter.configs")
-      configs.setup({
-        ensure_installed = { "lua", "vim", "vimdoc", "go", "bash", "ocaml", "regex", "markdown_inline" },
-        auto_install = true,
-        sync_install = false,
-        highlight = { enable = true },
-        indent = { enable = true },
-      })
+      local ts = require("nvim-treesitter")
+      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "ocaml", "regex", "markdown_inline" })
     end,
   },
   {
@@ -163,12 +158,11 @@ return {
           return vim.fn.executable("make") == 1
         end,
       },
-      "edolphin-ydf/goimpl.nvim",
     },
     config = function()
       local ts = require("telescope")
       ts.load_extension("fzf")
-      ts.load_extension("goimpl")
+      require("telescope._extensions.goimpl")
       require("telescope._extensions.env")
       require("telescope._extensions.live_grep_dir")
       ts.load_extension("env")
@@ -306,7 +300,9 @@ return {
   },
   {
     "nvim-neotest/neotest",
+    lazy = true,
     dependencies = {
+      "nvim-neotest/nvim-nio",
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
       "antoinemadec/FixCursorHold.nvim",
@@ -318,7 +314,6 @@ return {
           "uga-rosa/utf8.nvim", -- For sanitize_output option to work
         },
       },
-      "nvim-neotest/nvim-nio",
     },
     config = function()
       require("user.neotest")
