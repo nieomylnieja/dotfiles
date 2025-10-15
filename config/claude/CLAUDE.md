@@ -19,6 +19,7 @@
 - Continue when core requirements are unclear
 - Do not overwrite changes I made while you were working on a file, instead, incorporate them
 - Do not edit generated files (usually there are comments in the file which indicate that)
+- Avoid adding code comments, unless told otherwise, only function/type docs are ok
 
 ## Escalation Examples:
 
@@ -45,3 +46,4 @@
 ## Go
 
 - Prefer switch statements over if/else
+- Be aware of build tags, like `//go:build unit_test`, if these are present make sure you run go build and test commands with them

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://www.schemastore.org/claude-code-settings.json",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "statusLine": {
     "type": "command",
     "command": "npx -y ccusage statusline",
@@ -7,13 +7,13 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git log:*)",
-      "Bash(git show:*)",
-      "Bash(fd:*)",
-      "Bash(ls:*)",
-      "Bash(rg:*)",
-      "Bash(make:*)",
-      "Bash(go:*)"
+      "Bash(git log :*)",
+      "Bash(git show :*)",
+      "Bash(fd :*)",
+      "Bash(ls :*)",
+      "Bash(rg :*)",
+      "Bash(make :*)",
+      "Bash(go :*)"
     ],
     "deny": [
       "Read(*.env)"
