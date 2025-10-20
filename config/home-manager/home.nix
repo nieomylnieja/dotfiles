@@ -9,9 +9,6 @@ let
   gdk = pkgs.google-cloud-sdk.withExtraComponents (with pkgs.google-cloud-sdk.components; [
     gke-gcloud-auth-plugin
   ]);
-  golandOverridden = pkgs.jetbrains.goland.override {
-    jdk = pkgs.jdk;
-  };
 in
 {
   programs.home-manager.enable = true;
@@ -67,11 +64,9 @@ in
     httpie
     i3lock-color
     pkgs.stable.inkscape-with-extensions
-    # Once https://github.com/NixOS/nixpkgs/issues/425328 is resolved, uncomment and remove overrides.
-    # jetbrains.goland
-    # jetbrains.idea-community
-    # jetbrains.jdk # JDK for plugin development.
-    golandOverridden
+    jetbrains.goland
+    jetbrains.idea-community
+    jetbrains.jdk # JDK for plugin development.
     jq
     krita
     lesspipe
@@ -109,7 +104,6 @@ in
     rofi-power-menu
     rpi-imager
     rustc
-    # rustup
     kubernetes-helm
     feh
     flameshot

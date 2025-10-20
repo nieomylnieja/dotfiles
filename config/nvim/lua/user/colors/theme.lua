@@ -457,7 +457,7 @@ theme.loadPlugins = function()
     BlinkCmpMenuSelection = { fg = nord.darkest_white, bg = nord.light_gray_bright },
     BlinkCmpLabelDeprecated = { fg = nord.light_gray_bright },
     BlinkCmpLabelMatch = { fg = nord.off_blue, bold = true },
-    BlinkCmpGhostText = { fg = nord.dark_gray },
+    BlinkCmpGhostText = { fg = nord.light_gray_bright },
     BlinkCmpDocBorder = { fg = nord.dark_gray },
     BlinkCmpSignatureHelpBorder = { fg = nord.dark_gray },
     BlinkCmpKindArray = { link = "@lsp.type.array" },
@@ -499,9 +499,9 @@ theme.loadPlugins = function()
     BlinkCmpKindCopilot = { fg = nord.green },
     BlinkCmpKind = { fg = nord.glacier },
 
-    BlinkPairsOrange = { fg = nord.orange },
+    BlinkPairsOrange = { fg = nord.off_blue },
     BlinkPairsPurple = { fg = nord.purple },
-    BlinkPairsBlue = { fg = nord.blue },
+    BlinkPairsBlue = { fg = nord.glacier },
 
     -- Indent Blankline
     IndentBlanklineChar = { fg = nord.light_gray },
