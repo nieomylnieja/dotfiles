@@ -36,6 +36,7 @@ in
     bashmount
     bottom
     cachix
+    cargo
     claude-code
     csvkit
     delta
@@ -107,6 +108,7 @@ in
     ripgrep
     rofi-power-menu
     rpi-imager
+    rustc
     # rustup
     kubernetes-helm
     feh

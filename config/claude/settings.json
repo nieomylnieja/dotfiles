@@ -7,13 +7,14 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git log :*)",
-      "Bash(git show :*)",
-      "Bash(fd :*)",
-      "Bash(ls :*)",
-      "Bash(rg :*)",
-      "Bash(make :*)",
-      "Bash(go :*)"
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(fd:*)",
+      "Bash(ls:*)",
+      "Bash(rg:*)",
+      "Bash(make:*)",
+      "Bash(go:*)",
+      "Bash(gh issue view:*)"
     ],
     "deny": [
       "Read(*.env)"

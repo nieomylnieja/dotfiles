@@ -72,3 +72,8 @@ vim.opt.fixeol = false
 -- grep configuration
 opt.grepprg = "rg --vimgrep --no-heading --smart-case"
 opt.grepformat = "%f:%l:%c:%m"
+
+-- Treesitter folding
+vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+-- Treesitter indentation
+vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"

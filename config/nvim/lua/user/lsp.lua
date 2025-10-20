@@ -182,7 +182,7 @@ M.setup = function()
     vim.fn.sign_define(sign.name, { texthl = sign.name, text = sign.text, numhl = "" })
   end
 
-  local capabilities = require("cmp_nvim_lsp").default_capabilities()
+  local capabilities = require('blink.cmp').get_lsp_capabilities({})
 
   local get_on_attach = function(server)
     return function(client, bufnr)

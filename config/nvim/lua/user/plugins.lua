@@ -38,6 +38,7 @@ return {
     config = function()
       local ts = require("nvim-treesitter")
       ts.install({ "lua", "vim", "vimdoc", "go", "bash", "ocaml", "regex", "markdown_inline" })
+      require("user.treesitter").install_and_start()
     end,
   },
   {
@@ -57,28 +58,49 @@ return {
     },
   },
   {
-    -- Autocompletion
-    "hrsh7th/nvim-cmp",
-    dependencies = {
-      -- Snippet Engine & its associated nvim-cmp source
-      "L3MON4D3/LuaSnip",
-      "saadparwaiz1/cmp_luasnip",
-      -- Adds LSP completion capabilities
-      "hrsh7th/cmp-nvim-lsp",
-      -- Adds a number of user-friendly snippets
-      "rafamadriz/friendly-snippets",
-      -- Ready to go LSP symbols
-      "onsails/lspkind.nvim",
-      -- Other
-      "hrsh7th/cmp-path",
-      "hrsh7th/cmp-cmdline",
-      "hrsh7th/cmp-buffer",
-      "rcarriga/cmp-dap",
+    "saghen/blink.cmp",
+    version = "1.*",
+    ---@module "blink.cmp"
+    ---@type blink.cmp.Config
+    opts = {
+      keymap = {
+        preset = "super-tab",
+        ["<CR>"] = { "accept", "fallback" },
+      },
     },
-    config = function()
-      require("user.cmp")
-    end,
   },
+  {
+    "saghen/blink.pairs",
+    version = "*",
+    dependencies = "saghen/blink.download",
+    --- @module 'blink.pairs'
+    --- @type blink.pairs.Config
+    opts = {},
+  },
+  -- {
+  --   -- Autocompletion
+  --   "hrsh7th/nvim-cmp",
+  --   dependencies = {
+  --     -- Snippet Engine & its associated nvim-cmp source
+  --     "L3MON4D3/LuaSnip",
+  --     "saadparwaiz1/cmp_luasnip",
+  --     -- Adds LSP completion capabilities
+  --     "hrsh7th/cmp-nvim-lsp",
+  --     -- Adds a number of user-friendly snippets
+  --     "rafamadriz/friendly-snippets",
+  --     -- Ready to go LSP symbols
+  --     "onsails/lspkind.nvim",
+  --     -- Other
+  --     "hrsh7th/cmp-path",
+  --     "hrsh7th/cmp-cmdline",
+  --     "hrsh7th/cmp-buffer",
+  --     "rcarriga/cmp-dap",
+  --   },
+  --   config = function()
+  --     require("user.cmp")
+  --   end,
+  -- },
+  --
   {
     "williamboman/mason.nvim",
     cmd = "Mason",
@@ -224,18 +246,18 @@ return {
       open_no_results = true,
     },
   },
-  {
-    "windwp/nvim-autopairs",
-    event = "InsertEnter",
-    dependencies = { "hrsh7th/nvim-cmp" },
-    config = function()
-      require("nvim-autopairs").setup({
-        -- Use fast wrap with <M-e>
-        fast_wrap = {},
-      })
-      require("cmp").event:on("confirm_done", require("nvim-autopairs.completion.cmp").on_confirm_done())
-    end,
-  },
+  -- {
+  --   "windwp/nvim-autopairs",
+  --   event = "InsertEnter",
+  --   dependencies = { "hrsh7th/nvim-cmp" },
+  --   config = function()
+  --     require("nvim-autopairs").setup({
+  --       -- Use fast wrap with <M-e>
+  --       fast_wrap = {},
+  --     })
+  --     require("cmp").event:on("confirm_done", require("nvim-autopairs.completion.cmp").on_confirm_done())
+  --   end,
+  -- },
   {
     "lukas-reineke/indent-blankline.nvim",
     opts = {
@@ -461,32 +483,6 @@ return {
       },
     },
   },
-  -- EVALUATION OVER --
-  -- Once they have a better chat support I might reconsider.
-  --
-  -- {
-  -- 	"codota/tabnine-nvim",
-  -- 	build = {
-  -- 		"./dl_binaries.sh",
-  -- 		"cd chat/ && cargo build --release",
-  -- 	},
-  -- 	config = function()
-  -- 		require("tabnine").setup({
-  -- 			disable_auto_comment = true,
-  -- 			accept_keymap = "<M-Tab>",
-  -- 			dismiss_keymap = "<C-]>",
-  -- 			debounce_ms = 800,
-  -- 			-- suggestion_color = { gui = "#808080", cterm = 244 },
-  -- 			exclude_filetypes = { "TelescopePrompt", "NvimTree" },
-  -- 			log_file_path = nil, -- absolute path to Tabnine log file
-  -- 		})
-  -- 	end,
-  -- },
-  -- {
-  -- 	"tzachar/cmp-tabnine",
-  -- 	build = "./install.sh",
-  -- 	dependencies = "hrsh7th/nvim-cmp",
-  -- },
   {
     "NvChad/nvim-colorizer.lua",
     config = function()
@@ -664,12 +660,9 @@ return {
         ignore_buftypes = {},
       },
     },
-
-    -- For blink.cmp's completion
-    -- source
-    -- dependencies = {
-    --     "saghen/blink.cmp"
-    -- },
+    dependencies = {
+      "saghen/blink.cmp",
+    },
   },
   {
     "folke/lazydev.nvim",
