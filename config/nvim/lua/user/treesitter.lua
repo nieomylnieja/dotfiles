@@ -45,6 +45,10 @@ function M.install_and_start()
 
       -- Start treesitter for this buffer
       vim.treesitter.start(bufnr, parser_name)
+
+      -- This way injections Tree-sitter injections actually work.
+      -- Otherwise, the semantic token has higher priority and overrides injection.
+      vim.api.nvim_set_hl(0, "@lsp.type.string.go", {})
     end,
   })
 end

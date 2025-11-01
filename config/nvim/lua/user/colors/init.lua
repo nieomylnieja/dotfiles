@@ -80,19 +80,19 @@ function M.setup()
 
   -- Fix priority collision for builtin and readonly mods.
   -- This makes it so that for example `const` is bold white, but `nil` is glacier.
-  vim.api.nvim_create_autocmd("LspTokenUpdate", {
-    callback = function(args)
-      local token = args.data.token
-      if not token.modifiers.readonly then
-        return
-      end
-      if token.modifiers.builtin or token.modifiers.defaultLibrary then
-        vim.lsp.semantic_tokens.highlight_token(
-          token, args.buf, args.data.client_id, '@lsp.mod.builtin'
-        )
-      end
-    end,
-  })
+  -- vim.api.nvim_create_autocmd("LspTokenUpdate", {
+  --   callback = function(args)
+  --     local token = args.data.token
+  --     if not token.modifiers.readonly then
+  --       return
+  --     end
+  --     if token.modifiers.builtin or token.modifiers.defaultLibrary then
+  --       vim.lsp.semantic_tokens.highlight_token(
+  --         token, args.buf, args.data.client_id, '@lsp.mod.builtin'
+  --       )
+  --     end
+  --   end,
+  -- })
 end
 
 return M

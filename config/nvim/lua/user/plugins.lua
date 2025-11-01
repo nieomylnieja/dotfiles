@@ -37,7 +37,7 @@ return {
     branch = "main",
     config = function()
       local ts = require("nvim-treesitter")
-      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "ocaml", "regex", "markdown_inline" })
+      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "regex", "markdown_inline", "sql", "json", "yaml" })
       require("user.treesitter").install_and_start()
     end,
   },
@@ -63,9 +63,14 @@ return {
     ---@module "blink.cmp"
     ---@type blink.cmp.Config
     opts = {
+      -- Disable completion in ceratain scenarios, like LSP rename.
+      enabled = function()
+        return not vim.list_contains({ "DressingInput" }, vim.bo.filetype)
+            and vim.bo.buftype ~= "prompt"
+            and vim.b.completion ~= false
+      end,
       keymap = {
         preset = "super-tab",
-        ["<CR>"] = { "accept", "fallback" },
       },
       completion = {
         ghost_text = {
@@ -136,6 +141,7 @@ return {
         "ruff",   -- Serves ass an LSP too.
         "shfmt",
         "shellcheck", -- For bashls
+        "gofumpt",
         -- Code Actions
         "gomodifytags",
         "impl",

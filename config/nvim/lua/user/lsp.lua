@@ -8,6 +8,7 @@ local servers = {
     },
     settings = {
       gopls = {
+        gofumpt = true,
         buildFlags = { "-tags=integration_test e2e_test unit_test" },
         experimentalPostfixCompletions = true,
         usePlaceholders = false,

@@ -11,6 +11,7 @@ M.setup = function(lsp_config)
     -- LINTING:
     lint.actionlint,
     lint.terraform_validate,
+    lint.golangci_lint,
     --
     -- FORMATTING:
     -- Lua

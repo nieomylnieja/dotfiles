@@ -1,4 +1,5 @@
-; extends
+;; extends
+
 ((inline) @injection.content
   (#lua-match? @injection.content "^%s*import")
   (#set! injection.language "typescript"))
