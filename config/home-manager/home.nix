@@ -40,7 +40,7 @@ in
     direnv
     discord
     distrobox
-    du-dust
+    dust
     dunst
     eza
     fd
