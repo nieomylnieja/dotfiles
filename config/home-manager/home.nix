@@ -102,7 +102,7 @@ in
     kubectl
     ripgrep
     rofi-power-menu
-    rpi-imager
+    # rpi-imager
     rustc
     kubernetes-helm
     feh

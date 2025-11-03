@@ -60,7 +60,7 @@
   services.xserver.windowManager.session = [{
     name = "qtile";
     start = ''
-      ${pkgs.qtile-unwrapped}/bin/qtile start -b x11 &
+      ${pkgs.python3.pkgs.qtile}/bin/qtile start -b x11 &
       waitPID=$!
     '';
   }];
