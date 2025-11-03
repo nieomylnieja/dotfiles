@@ -1,5 +1,9 @@
 local M = {}
 
+M._cspell_config = {
+  cspell_config_dirs = { "~/.config/cspell/" },
+}
+
 M.setup = function(lsp_config)
   local null_ls = require("null-ls")
 
@@ -7,11 +11,14 @@ M.setup = function(lsp_config)
   local lint = null_ls.builtins.diagnostics
   local action = null_ls.builtins.code_actions
 
+  local cspell = require("cspell")
+
   local sources = {
     -- LINTING:
     lint.actionlint,
     lint.terraform_validate,
     lint.golangci_lint,
+    cspell.diagnostics.with({ config = M._cspell_config }),
     --
     -- FORMATTING:
     -- Lua
@@ -30,6 +37,7 @@ M.setup = function(lsp_config)
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },
     }),
+    cspell.code_actions.with({ config = M._cspell_config }),
   }
 
   null_ls.setup(vim.tbl_deep_extend("force", lsp_config, { sources = sources }))

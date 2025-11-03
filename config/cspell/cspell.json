@@ -1,0 +1,33 @@
+{
+  "allowCompoundWords": true,
+  "language": "en_US",
+  "dictionaries": [
+    "misc",
+    "softwareTerms",
+    "go",
+    "bash",
+    "typescript",
+    "node",
+    "npm"
+  ],
+  "ignoreRegExpList": [
+    "/\\|\\s+[T|G]{2,}\\s+\\|/g",
+    "/https?:\\/\\/.*/g",
+    "/github.*/g",
+    "/nolint.*/g",
+    "/nosec.*/g"
+  ],
+  "ignorePaths": [
+    "**/cspell.json",
+    ".golangci.yml",
+    "**/*.lock",
+    "**/go.mod",
+    "**/go.sum",
+    "**/node_modules/**",
+    "CODEOWNERS",
+    "bin/**"
+  ],
+  "words": [
+    "folke"
+  ]
+}

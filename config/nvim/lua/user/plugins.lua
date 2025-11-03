@@ -55,7 +55,21 @@ return {
     lazy = true,
     dependencies = {
       "nvim-lua/plenary.nvim",
+      "davidmh/cspell.nvim",
     },
+    opts = function(_, opts)
+      local cspell = require("cspell")
+      opts.sources = opts.sources or {}
+      table.insert(
+        opts.sources,
+        cspell.diagnostics.with({
+          diagnostics_postprocess = function(diagnostic)
+            diagnostic.severity = vim.diagnostic.severity.HINT
+          end,
+        })
+      )
+      table.insert(opts.sources, cspell.code_actions)
+    end,
   },
   {
     "saghen/blink.cmp",
@@ -131,17 +145,18 @@ return {
         "html-lsp",
         "htmx-lsp",
         "tailwindcss-language-server",
-        "postgrestools",
+        "postgres-language-server",
         "ansible-language-server",
         -- Linters/formatters
         "actionlint",
         "stylua",
         "luacheck",
         "goimports",
-        "ruff",   -- Serves ass an LSP too.
+        "ruff",       -- Serves ass an LSP too.
         "shfmt",
         "shellcheck", -- For bashls
         "gofumpt",
+        "cspell",
         -- Code Actions
         "gomodifytags",
         "impl",
@@ -644,7 +659,7 @@ return {
             callback = "mcphub.extensions.codecompanion",
             opts = {
               show_result_in_chat = true, -- Show mcp tool results in chat
-              make_vars = true,    -- Convert resources to #variables
+              make_vars = true,           -- Convert resources to #variables
               make_slash_commands = true, -- Add prompts as /slash commands
             },
           },
@@ -655,7 +670,7 @@ return {
   {
     "ravitemer/mcphub.nvim",
     dependencies = {
-      "nvim-lua/plenary.nvim", -- Required for Job and HTTP requests
+      "nvim-lua/plenary.nvim", -- Required for Job and HTTP request
     },
     build = "npm install -g mcp-hub@latest",
     config = function()
