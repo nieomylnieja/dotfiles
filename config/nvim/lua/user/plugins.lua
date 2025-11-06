@@ -147,6 +147,7 @@ return {
         "tailwindcss-language-server",
         "postgres-language-server",
         "ansible-language-server",
+        "golangci-lint-langserver",
         -- Linters/formatters
         "actionlint",
         "stylua",
@@ -157,6 +158,7 @@ return {
         "shellcheck", -- For bashls
         "gofumpt",
         "cspell",
+        "golangci-lint",
         -- Code Actions
         "gomodifytags",
         "impl",

@@ -1,5 +1,7 @@
 local M = {}
 
+local go_config = require("user.go-config")
+
 local servers = {
   lua_ls = {}, -- configured via lazydev.nvim
   gopls = {
@@ -9,7 +11,7 @@ local servers = {
     settings = {
       gopls = {
         gofumpt = true,
-        buildFlags = { "-tags=integration_test e2e_test unit_test" },
+        buildFlags = { "-tags=" .. go_config.build_tags },
         experimentalPostfixCompletions = true,
         usePlaceholders = false,
         staticcheck = true,
@@ -113,6 +115,7 @@ local servers = {
   tailwindcss = {},
   postgres_lsp = {},
   ansiblels = {},
+  golangci_lint_ls = {},
 }
 
 local function lsp_format()

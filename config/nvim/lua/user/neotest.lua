@@ -19,12 +19,19 @@ local _notif_consumer = function(client)
   return {}
 end
 
+local go_config = require("user.go-config")
 local neotest = require("neotest")
 
 neotest.setup({
   adapters = {
     require("neotest-golang")({
-      go_test_args = { "-v", "-count=1" },
+      go_test_args = { "-v", "-count=1", "-tags=" .. go_config.build_tags },
+      go_list_args = { "-tags=" .. go_config.build_tags },
+      dap_go_opts = {
+        delve = {
+          build_flags = { "-tags=" .. go_config.build_tags },
+        },
+      },
       log_level = vim.log.levels.WARN,
       sanitize_output = true,
       warn_test_name_dupes = false,

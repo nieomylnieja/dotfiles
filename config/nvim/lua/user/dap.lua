@@ -1,3 +1,4 @@
+local go_config = require("user.go-config")
 local dap = require("dap")
 local dapui = require("dapui")
 
@@ -45,7 +46,7 @@ local dap_python = require("dap-python")
 
 dap_go.setup({
   delve = {
-    build_flags = "-tags=integration_test,e2e_test,unit_test",
+    build_flags = "-tags=" .. go_config.build_tags,
   }
 })
 dap_python.setup()
