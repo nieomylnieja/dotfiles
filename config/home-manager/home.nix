@@ -100,6 +100,7 @@ in
     picom
     pinentry-qt
     kubectl
+    kubecolor
     ripgrep
     rofi-power-menu
     # rpi-imager
