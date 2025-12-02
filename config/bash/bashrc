@@ -8,7 +8,7 @@ esac
 shopt -s expand_aliases
 
 # more powerful pattern matching
-shopt -s extglob
+shopt -s extglob globstar
 
 # expand env variables
 shopt -s direxpand
