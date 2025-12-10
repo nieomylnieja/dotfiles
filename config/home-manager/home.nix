@@ -6,7 +6,7 @@
 let
   homeDir = "/home/mh";
   dotfilesDir = "${homeDir}/.dotfiles";
-  gdk = pkgs.google-cloud-sdk.withExtraComponents (with pkgs.google-cloud-sdk.components; [
+  gdk = pkgs.stable.google-cloud-sdk.withExtraComponents (with pkgs.stable.google-cloud-sdk.components; [
     gke-gcloud-auth-plugin
   ]);
 in
@@ -195,7 +195,7 @@ in
     enable = true;
     package = pkgs.vscode.fhsWithPackages (ps: with ps; [
       # Essentially everything Electron needs to run.
-      # This is neccessary for Extension Test Runner to spawn a test VS Code instance.
+      # This is necessary for Extension Test Runner to spawn a test VS Code instance.
       alsa-lib
       at-spi2-atk
       cairo
