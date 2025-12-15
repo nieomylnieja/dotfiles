@@ -56,6 +56,7 @@ return {
     dependencies = {
       "nvim-lua/plenary.nvim",
       "davidmh/cspell.nvim",
+      "nvimtools/none-ls-extras.nvim",
     },
     opts = function(_, opts)
       local cspell = require("cspell")

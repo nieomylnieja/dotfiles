@@ -19,21 +19,13 @@ M.setup = function(lsp_config)
     lint.terraform_validate,
     lint.golangci_lint,
     cspell.diagnostics.with({ config = M._cspell_config }),
-    --
     -- FORMATTING:
-    -- Lua
     fmt.stylua,
-    -- Go
-    -- FIXME: goimports is not working properly, it lags the hell out of null-ls formatting.
-    -- fmt.goimports,
-    -- OCaml
+    require("none-ls.formatting.golangci_lint"),
     fmt.ocamlformat,
     fmt.shfmt,
     fmt.terraform_fmt,
-    -- All types
-
     -- ACTIONS:
-    -- custom.gomodifytags(),
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },
     }),
