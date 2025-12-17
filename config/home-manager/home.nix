@@ -148,7 +148,6 @@ in
     ".xprofile".source = ../xorg/xprofile;
     ".xinitrc".source = ../xorg/xinitrc;
     ".profile".source = ../xorg/xinitrc;
-    ".claude/settings.json".source = ../claude/settings.json;
     ".claude/CLAUDE.md".source = ../claude/CLAUDE.md;
   };
 
@@ -307,6 +306,7 @@ in
   # Claude code
   programs.claude-code = {
     enable = true;
+    settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
     mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
     skills = {
       "golang" = ../claude/skills/golang;
