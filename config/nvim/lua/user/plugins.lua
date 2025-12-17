@@ -625,52 +625,6 @@ return {
     "bullets-vim/bullets.vim",
   },
   {
-    "olimorris/codecompanion.nvim",
-    opts = {},
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-      "nvim-treesitter/nvim-treesitter",
-    },
-    config = function()
-      require("codecompanion").setup({
-        adapters = {
-          http = {
-            copilot = function()
-              return require("codecompanion.adapters").extend("copilot", {
-                schema = {
-                  model = {
-                    default = "claude-sonnet-4",
-                  },
-                },
-              })
-            end,
-          },
-        },
-        strategies = {
-          chat = {
-            adapter = "copilot",
-          },
-          inline = {
-            adapter = "copilot",
-          },
-          cmd = {
-            adapter = "copliot",
-          },
-        },
-        extensions = {
-          mcphub = {
-            callback = "mcphub.extensions.codecompanion",
-            opts = {
-              show_result_in_chat = true, -- Show mcp tool results in chat
-              make_vars = true,           -- Convert resources to #variables
-              make_slash_commands = true, -- Add prompts as /slash commands
-            },
-          },
-        },
-      })
-    end,
-  },
-  {
     "ravitemer/mcphub.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim", -- Required for Job and HTTP request
@@ -690,5 +644,11 @@ return {
         { path = "${3rd}/luv/library", words = { "vim%.uv" } },
       },
     },
+  },
+  {
+    "supermaven-inc/supermaven-nvim",
+    config = function()
+      require("supermaven-nvim").setup({})
+    end,
   },
 }
