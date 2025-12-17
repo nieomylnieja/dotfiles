@@ -308,7 +308,9 @@ in
   programs.claude-code = {
     enable = true;
     mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
-    skillsDir = ../claude/skills;
+    skills = {
+      "golang" = ../claude/skills/golang;
+    };
   };
 
   # Notifications

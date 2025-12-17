@@ -5,6 +5,18 @@
     "command": "npx -y ccusage statusline",
     "padding": 0
   },
+  "extraKnownMarketplaces": {
+    "anthropic-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "pr-review-toolkit@anthropic-plugins": true,
+    "frontend-design@anthropic-plugins": true
+  },
   "permissions": {
     "allow": [
       "Bash(git log:*)",

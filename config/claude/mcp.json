@@ -8,11 +8,15 @@
       ]
     },
     "pg-aiguide": {
+      "type": "http",
       "url": "https://mcp.tigerdata.com/docs"
     },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/"
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
     }
   }
 }

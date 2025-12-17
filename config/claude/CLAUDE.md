@@ -9,6 +9,7 @@
 - Say "I need to check" or "I cannot verify" when uncertain
 - Document exact error messages, not summaries
 - Always test your changes, either by building the program or running tests, If there is a Makefile (or equivalent, like justfile) available, see If there are lints to be run
+- Use `gh` CLI to interact with GitHub
 
 ## What I MUST NOT Do:
 
