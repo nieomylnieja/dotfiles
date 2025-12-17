@@ -6,16 +6,23 @@
     "padding": 0
   },
   "extraKnownMarketplaces": {
-    "anthropic-plugins": {
+    "claude-code-plugins": {
       "source": {
         "source": "github",
         "repo": "anthropics/claude-code"
       }
+    },
+    "aiguide": {
+      "source": {
+        "source": "github",
+        "repo": "timescale/pg-aiguide"
+      }
     }
   },
   "enabledPlugins": {
-    "pr-review-toolkit@anthropic-plugins": true,
-    "frontend-design@anthropic-plugins": true
+    "pr-review-toolkit@claude-code-plugins": true,
+    "frontend-design@claude-code-plugins": true,
+    "pg@aiguide": true
   },
   "permissions": {
     "allow": [
