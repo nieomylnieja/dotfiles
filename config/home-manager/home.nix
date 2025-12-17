@@ -34,7 +34,6 @@ in
     bottom
     cachix
     cargo
-    claude-code
     csvkit
     delta
     direnv
@@ -245,79 +244,6 @@ in
     };
   };
 
-  programs.firefox = {
-    enable = true;
-    package = pkgs.wrapFirefox pkgs.firefox-unwrapped {
-      extraPolicies = {
-        CaptivePortal = false;
-        DisableFirefoxStudies = true;
-        DisablePocket = true;
-        DisableTelemetry = true;
-        DisableFirefoxAccounts = false;
-        NoDefaultBookmarks = true;
-        OfferToSaveLogins = false;
-        OfferToSaveLoginsDefault = false;
-        PasswordManagerEnabled = false;
-        FirefoxHome = {
-          Search = true;
-          Pocket = false;
-          Snippets = false;
-          TopSites = false;
-          Highlights = false;
-        };
-        UserMessaging = {
-          ExtensionRecommendations = false;
-          SkipOnboarding = true;
-        };
-      };
-    };
-    profiles =
-      let
-        common = {
-          search = {
-            force = true;
-            default = "ddg";
-          };
-          settings = {
-            "general.smoothScroll" = true;
-          };
-          extraConfig = ''
-            user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
-            user_pref("full-screen-api.ignore-widgets", true);
-            user_pref("media.ffmpeg.vaapi.enabled", true);
-            user_pref("media.rdd-vpx.enabled", true);
-          '';
-        };
-      in
-      {
-        work = {
-          id = 0;
-          name = "work";
-          extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
-            vimium
-            ublock-origin
-            privacy-badger
-            clearurls
-            decentraleyes
-            duckduckgo-privacy-essentials
-            onepassword-password-manager
-          ];
-        } // common;
-        home = {
-          id = 1;
-          name = "home";
-          extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
-            vimium
-            ublock-origin
-            privacy-badger
-            clearurls
-            decentraleyes
-            duckduckgo-privacy-essentials
-          ];
-        } // common;
-      };
-  };
-
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
@@ -377,6 +303,13 @@ in
         }
       ];
     };
+
+  # Claude code
+  programs.claude-code = {
+    enable = true;
+    mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
+    skillsDir = ../claude/skills;
+  };
 
   # Notifications
   services.dunst.enable = true;

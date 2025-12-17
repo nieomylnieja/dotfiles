@@ -40,10 +40,3 @@
 
 - Use [rg](https://github.com/BurntSushi/ripgrep) instead of grep
 - Use [fd](https://github.com/sharkdp/fd) instead of find
-
-# LANGUAGE SPECIFIC
-
-## Go
-
-- Prefer switch statements over if/else
-- Be aware of build tags, like `//go:build unit_test`, if these are present make sure you run go build and test commands with them
