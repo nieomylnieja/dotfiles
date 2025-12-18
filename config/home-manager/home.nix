@@ -31,6 +31,7 @@ in
     bat
     bash-completion
     bashmount
+    bazecor
     bottom
     cachix
     cargo

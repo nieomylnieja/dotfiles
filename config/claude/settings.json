@@ -33,7 +33,9 @@
       "Bash(rg:*)",
       "Bash(make:*)",
       "Bash(go:*)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "Bash(gh pr view:*)",
+      "mcp__Context7__resolve-library-id"
     ],
     "deny": [
       "Read(*.env)"
