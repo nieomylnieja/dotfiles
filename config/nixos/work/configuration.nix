@@ -171,6 +171,7 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
+    bazecor
     neovim
     wget
     git
@@ -190,7 +191,7 @@
   services.openssh.enable = true;
 
   # Yubikey support.
-  services.udev.packages = [ pkgs.yubikey-personalization ];
+  services.udev.packages = [ pkgs.yubikey-personalization pkgs.bazecor ];
   services.pcscd.enable = true;
 
   # Podman.
