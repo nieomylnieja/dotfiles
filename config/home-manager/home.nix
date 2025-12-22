@@ -115,6 +115,7 @@ in
     sops
     spotify
     starship
+    swayimg
     statix
     terraform
     tree
@@ -165,16 +166,19 @@ in
     "swappy".source = ../swappy;
   };
 
-  xdg.mimeApps = {
+  xdg.mimeApps = let
+    imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
+    imageAssociations = builtins.listToAttrs (map (t: { name = "image/${t}"; value = [ "swayimg.desktop" ]; }) imageTypes);
+  in {
     enable = true;
     defaultApplications = {
-      "application/pdf" = [ "zathura.desktop" ];
+      "application/pdf" = [ "org.pwmt.zathura.desktop" ];
       "text/html" = "vivaldi-stable.desktop";
       "x-scheme-handler/http" = "vivaldi-stable.desktop";
       "x-scheme-handler/https" = "vivaldi-stable.desktop";
       "x-scheme-handler/about" = "vivaldi-stable.desktop";
       "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
-    };
+    } // imageAssociations;
   };
 
   # User session variables (inherited by Hyprland and all launched programs)
