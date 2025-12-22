@@ -1,5 +1,5 @@
 * {
-    font-family: monospace;
+    font-family: "Mononoki Nerd Font";
     font-size: 13px;
 }
 
@@ -14,9 +14,15 @@ window#waybar {
     background: transparent;
 }
 
+#workspaces button:not(.empty) {
+    color: #81A1C1;
+    background-color: rgba(129, 161, 193, 0.2);
+}
+
 #workspaces button.active {
     color: #88C0D0;
     border-bottom: 2px solid #88C0D0;
+    background-color: rgba(136, 192, 208, 0.3);
 }
 
 #window, #cpu, #memory, #battery, #pulseaudio, #clock, #tray {

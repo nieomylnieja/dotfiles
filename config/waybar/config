@@ -32,12 +32,15 @@
     },
 
     "battery": {
-        "format": "BAT {capacity}%"
+        "format": "{icon} {capacity}%",
+        "format-charging": "󰂄 {capacity}%",
+        "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
     },
 
     "pulseaudio": {
-        "format": "VOL {volume}%",
-        "format-muted": "MUTE",
+        "format": "{icon} {volume}%",
+        "format-muted": "󰝟 muted",
+        "format-icons": ["󰕿", "󰖀", "󰕾"],
         "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle"
     },
 
