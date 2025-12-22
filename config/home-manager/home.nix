@@ -162,6 +162,7 @@ in
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
+    "swappy".source = ../swappy;
   };
 
   xdg.mimeApps = {
