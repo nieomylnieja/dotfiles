@@ -91,7 +91,6 @@ in
     neovim
     nwg-displays
     nixpkgs-fmt
-    nordic
     nushell
     obsidian
     ocaml
@@ -319,5 +318,13 @@ in
     enable = true;
     platformTheme.name = "gtk";
     style.name = "gtk2";
+  };
+
+  # Dark mode preference for Electron apps
+  dconf.settings = {
+    "org/gnome/desktop/interface" = {
+      color-scheme = "prefer-dark";
+      gtk-theme = "Nordic";
+    };
   };
 }
