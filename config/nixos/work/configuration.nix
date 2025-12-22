@@ -56,31 +56,49 @@
   services.xserver.enable = true;
 
   # Configure desktop environment.
-  services.displayManager.gdm.enable = true;
-  services.displayManager.defaultSession = "none+qtile";
-  services.xserver.windowManager.session = [{
-    name = "qtile";
-    start = ''
-      ${pkgs.python3.pkgs.qtile}/bin/qtile start -b x11 &
-      waitPID=$!
-    '';
-  }];
+  services.displayManager.sddm = {
+    enable = true;
+    wayland.enable = true;
+    theme = "sddm-astronaut-theme";
+    extraPackages = with pkgs; [ sddm-astronaut ];
+  };
+  services.displayManager.defaultSession = "hyprland-uwsm";
 
-  # Keyring.
-  services.gnome.gnome-keyring.enable = true;
-  programs.seahorse.enable = true;
-  security.pam.services.gdm.enableGnomeKeyring = true;
-  security.pam.services.login.enableGnomeKeyring = true;
-  security.pam.services.gdm-password.enableGnomeKeyring = true;
+  # Enable Hyprland
+  programs.hyprland = {
+    enable = true;
+    withUWSM = true;
+    xwayland.enable = true;
+  };
 
-  # Lockscreen.
-  security.pam.services.i3lock.enable = true;
+  # PAM for hyprlock
+  security.pam.services.hyprlock = { };
 
   # Configure keymap in X11
   services.xserver.xkb = {
     layout = "pl";
     variant = "";
   };
+
+  # Nord colors for boot console
+  console.colors = [
+    "2E3440" # color0 - black
+    "BF616A" # color1 - red
+    "A3BE8C" # color2 - green
+    "EBCB8B" # color3 - yellow
+    "81A1C1" # color4 - blue
+    "B48EAD" # color5 - magenta
+    "88C0D0" # color6 - cyan
+    "E5E9F0" # color7 - white
+    "4C566A" # color8 - bright black
+    "BF616A" # color9 - bright red
+    "A3BE8C" # color10 - bright green
+    "EBCB8B" # color11 - bright yellow
+    "81A1C1" # color12 - bright blue
+    "B48EAD" # color13 - bright magenta
+    "8FBCBB" # color14 - bright cyan
+    "ECEFF4" # color15 - bright white
+  ];
 
   # Configure fast keyboard typing.
   services.xserver.autoRepeatDelay = 200;
@@ -91,52 +109,6 @@
 
   # Enable sound with pipewire.
   security.rtkit.enable = true;
-  # services.pipewire = {
-  #   enable = true;
-  #   wireplumber.enable = true;
-  #   alsa.enable = true;
-  #   alsa.support32Bit = true;
-  #   pulse.enable = true;
-  #   extraConfig.pipewire."99-rnnoise.conf" = {
-  #     "context.modules" = [
-  #       {
-  #         name = "libpipewire-module-filter-chain";
-  #         args = {
-  #           "node.description" = "Noise Canceling source";
-  #           "media.name" = "Noise Canceling source";
-  #
-  #           "filter.graph" = {
-  #             nodes = [
-  #               {
-  #                 type = "ladspa";
-  #                 name = "rnnoise";
-  #                 plugin = "${pkgs.rnnoise-plugin}/lib/ladspa/librnnoise_ladspa.so";
-  #                 label = "noise_suppressor_mono";
-  #                 control = {
-  #                   "VAD Threshold (%)" = 80.0;
-  #                   "VAD Grace Period (ms)" = 200;
-  #                   "Retroactive VAD Grace (ms)" = 0;
-  #                 };
-  #               }
-  #             ];
-  #           };
-  #
-  #           "capture.props" = {
-  #             "node.name" = "capture.rnnoise_source";
-  #             "node.passive" = true;
-  #             "audio.rate" = 48000;
-  #           };
-  #
-  #           "playback.props" = {
-  #             "node.name" = "rnnoise_source";
-  #             "media.class" = "Audio/Source";
-  #             "audio.rate" = 48000;
-  #           };
-  #         };
-  #       }
-  #     ];
-  #   };
-  # };
 
   # Bluetooth
   hardware.bluetooth.enable = true;
@@ -176,9 +148,8 @@
     wget
     git
     inetutils
-    libsecret # For keyring.
     clamav
-    # rnnoise-plugin
+    sddm-astronaut
   ];
 
   programs.noisetorch.enable = true;

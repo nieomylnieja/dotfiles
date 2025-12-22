@@ -67,7 +67,7 @@ in
 
   # Configure keymap in X11
   services.libinput.enable = true; # Touchpad support.
-  services.displayManager.defaultSession = "none+qtile";
+  services.displayManager.defaultSession = "hyprland-uwsm";
   services.xserver = {
     enable = true;
     xkb = {
@@ -77,13 +77,6 @@ in
     displayManager = {
       lightdm.enable = true;
     };
-    windowManager.session = [{
-      name = "qtile";
-      start = ''
-        ${pkgs.stable.qtile-unwrapped}/bin/qtile start -b x11 &
-        waitPID=$!
-      '';
-    }];
   };
 
   # Enable printing
@@ -169,6 +162,25 @@ in
 
   # Configure UI
   programs.dconf.enable = true;
+
+  # Enable Hyprland
+  programs.hyprland = {
+    enable = true;
+    xwayland.enable = true;
+  };
+
+  # XDG portal for dark mode detection, screen sharing, file dialogs
+  xdg.portal = {
+    enable = true;
+    extraPortals = [
+      pkgs.xdg-desktop-portal-gtk
+      pkgs.xdg-desktop-portal-hyprland
+    ];
+    config.common.default = "*";
+  };
+
+  # PAM for hyprlock
+  security.pam.services.hyprlock = {};
 
   # Steam
   programs.steam = {

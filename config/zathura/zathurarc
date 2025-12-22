@@ -34,14 +34,9 @@ set selection-notification	"false"
 set inputbar-fg			"#d8dee9"
 set inputbar-bg 		"#2e3440"
 
-set recolor			        "true"
+set recolor			        "false"
 set recolor-lightcolor	"#2e3440"
 set recolor-darkcolor		"#d8dee9"
-
-set index-fg			    "#d8dee9"
-set index-bg			    "#2e3440"
-set index-active-fg		"#d8dee9"
-set index-active-bg		"#4c566a"
 
 set render-loading-bg		"#2e3440"
 set render-loading-fg		"#d8dee9"

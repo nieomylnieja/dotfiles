@@ -41,7 +41,7 @@ alias cp="rsync --archive --human-readable --progress --verbose --whole-file"
 alias v='vim'
 alias open='xdg-open'
 alias py='python3'
-alias c="xclip -sel clip"
+alias c="wl-copy"
 # This one helps with the quasi-jsons produced by mongodb...
 alias rm_oid="sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/'"
 
@@ -52,7 +52,7 @@ alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" |
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
-alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | xclip -sel c'
+alias ktag='kubectl get deployments | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl describe deployment | grep Image | grep -oE "[^:]+$" | tr -d "\n" | wl-copy'
 alias podEnv='kubectl get pod -o name | ag intake | xargs -I {} kubectl exec {} -- env | ag -v _SERVICE | ag INTAKE'
 
 # docker aliases
