@@ -56,8 +56,12 @@
   services.xserver.enable = true;
 
   # Configure desktop environment.
-  services.displayManager.sddm.enable = true;
-  services.displayManager.sddm.wayland.enable = true;
+  services.displayManager.sddm = {
+    enable = true;
+    wayland.enable = true;
+    theme = "sddm-astronaut-theme";
+    extraPackages = with pkgs; [ sddm-astronaut ];
+  };
   services.displayManager.defaultSession = "hyprland-uwsm";
 
   # Enable Hyprland
@@ -75,6 +79,26 @@
     layout = "pl";
     variant = "";
   };
+
+  # Nord colors for boot console
+  console.colors = [
+    "2E3440" # color0 - black
+    "BF616A" # color1 - red
+    "A3BE8C" # color2 - green
+    "EBCB8B" # color3 - yellow
+    "81A1C1" # color4 - blue
+    "B48EAD" # color5 - magenta
+    "88C0D0" # color6 - cyan
+    "E5E9F0" # color7 - white
+    "4C566A" # color8 - bright black
+    "BF616A" # color9 - bright red
+    "A3BE8C" # color10 - bright green
+    "EBCB8B" # color11 - bright yellow
+    "81A1C1" # color12 - bright blue
+    "B48EAD" # color13 - bright magenta
+    "8FBCBB" # color14 - bright cyan
+    "ECEFF4" # color15 - bright white
+  ];
 
   # Configure fast keyboard typing.
   services.xserver.autoRepeatDelay = 200;
@@ -125,6 +149,7 @@
     git
     inetutils
     clamav
+    sddm-astronaut
   ];
 
   programs.noisetorch.enable = true;

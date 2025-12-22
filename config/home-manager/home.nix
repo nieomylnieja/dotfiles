@@ -107,7 +107,6 @@ in
     kubectl
     kubecolor
     ripgrep
-    rofi-power-menu
     # rpi-imager
     rustc
     kubernetes-helm
