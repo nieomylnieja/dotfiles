@@ -164,6 +164,7 @@ in
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
     "swappy".source = ../swappy;
+    "swayimg".source = ../swayimg;
   };
 
   xdg.mimeApps = let
