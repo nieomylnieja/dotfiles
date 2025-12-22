@@ -56,25 +56,19 @@
   services.xserver.enable = true;
 
   # Configure desktop environment.
-  services.displayManager.gdm.enable = true;
-  services.displayManager.defaultSession = "none+qtile";
-  services.xserver.windowManager.session = [{
-    name = "qtile";
-    start = ''
-      ${pkgs.python3.pkgs.qtile}/bin/qtile start -b x11 &
-      waitPID=$!
-    '';
-  }];
+  services.displayManager.sddm.enable = true;
+  services.displayManager.sddm.wayland.enable = true;
+  services.displayManager.defaultSession = "hyprland-uwsm";
 
-  # Keyring.
-  services.gnome.gnome-keyring.enable = true;
-  programs.seahorse.enable = true;
-  security.pam.services.gdm.enableGnomeKeyring = true;
-  security.pam.services.login.enableGnomeKeyring = true;
-  security.pam.services.gdm-password.enableGnomeKeyring = true;
+  # Enable Hyprland
+  programs.hyprland = {
+    enable = true;
+    withUWSM = true;
+    xwayland.enable = true;
+  };
 
-  # Lockscreen.
-  security.pam.services.i3lock.enable = true;
+  # PAM for hyprlock
+  security.pam.services.hyprlock = { };
 
   # Configure keymap in X11
   services.xserver.xkb = {
@@ -176,7 +170,6 @@
     wget
     git
     inetutils
-    libsecret # For keyring.
     clamav
     # rnnoise-plugin
   ];

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Screenshot utility using grim + slurp + swappy
+
+case "${1:-area}" in
+    area)
+        grim -g "$(slurp)" - | swappy -f -
+        ;;
+    screen)
+        grim - | swappy -f -
+        ;;
+    *)
+        grim -g "$(slurp)" - | swappy -f -
+        ;;
+esac

@@ -27,13 +27,14 @@ in
     alacritty
     alejandra
     ansible
-    arandr
     bat
     bash-completion
     bashmount
     bottom
+    brightnessctl
     cachix
     cargo
+    cliphist
     csvkit
     delta
     direnv
@@ -53,15 +54,20 @@ in
     glibcLocales
     go
     gotestsum
+    grim
     simple-scan
     simplescreenrecorder
+    slurp
+    swappy
     sushi
     gimp
     gnumake
     gnupg
     gdk
     httpie
-    i3lock-color
+    hypridle
+    hyprlock
+    hyprpaper
     pkgs.stable.inkscape-with-extensions
     jetbrains.goland
     jetbrains.idea-community
@@ -83,6 +89,7 @@ in
     nerd-fonts.mononoki
     neofetch
     neovim
+    nwg-displays
     nixpkgs-fmt
     nordic
     nushell
@@ -94,9 +101,9 @@ in
     pass
     pavucontrol
     peek
+    playerctl
     pulseaudio # For pactl.
     pdm
-    picom
     pinentry-qt
     kubectl
     kubecolor
@@ -105,8 +112,6 @@ in
     # rpi-imager
     rustc
     kubernetes-helm
-    feh
-    flameshot
     signal-desktop
     slack
     sops
@@ -119,12 +124,12 @@ in
     tree-sitter
     unzip
     uv
+    waybar
+    wl-clipboard
+    wlr-randr
     zathura
     zoxide
     zip
-    xclip
-    xorg.xrandr
-    xorg.xset
     yarn
     yubikey-manager
     yq
@@ -133,10 +138,12 @@ in
     pkgs.stable.zoom-us
   ];
 
-  # Neovim has to be linked as the directory has to be writable.
+  # Directories that need to be writable are symlinked instead of copied.
   home.activation = {
     createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
+      run [ -d ${config.xdg.configHome}/hypr ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/hypr ${config.xdg.configHome}/hypr
+      run [ -d ${config.xdg.configHome}/waybar ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/waybar ${config.xdg.configHome}/waybar
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/vscode/settings.json ${config.xdg.configHome}/Code/User/settings.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/cspell/cspell.json ${config.xdg.configHome}/cspell/cspell.json
     '';
@@ -145,25 +152,18 @@ in
   home.file = {
     ".bashrc".source = ../bash/bashrc;
     ".bash_logout".source = ../bash/bash_logout;
-    ".xprofile".source = ../xorg/xprofile;
-    ".xinitrc".source = ../xorg/xinitrc;
-    ".profile".source = ../xorg/xinitrc;
     ".claude/CLAUDE.md".source = ../claude/CLAUDE.md;
   };
 
   xdg.configFile = {
-    "qtile".source = ../qtile;
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
     "rofi".source = ../rofi;
     "dunst".source = ../dunst;
     "alacritty".source = ../alacritty;
-    "picom".source = ../picom;
-    "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
-    "feh".source = ../feh;
   };
 
   xdg.mimeApps = {
@@ -178,9 +178,20 @@ in
     };
   };
 
-  home.sessionPath = [
-    "$HOME/.local/bin"
-  ];
+  # User session variables (inherited by Hyprland and all launched programs)
+  # PATH is set in hyprland.conf instead
+  systemd.user.sessionVariables = {
+    DOTFILES = "${dotfilesDir}";
+    XDG_SESSION_TYPE = "wayland";
+    XDG_CURRENT_DESKTOP = "Hyprland";
+    GDK_BACKEND = "wayland";
+    QT_QPA_PLATFORM = "wayland";
+    NIXOS_OZONE_WL = "1";
+    MOZ_ENABLE_WAYLAND = "1";
+    BROWSER = "vivaldi";
+    EDITOR = "nvim";
+    _JAVA_AWT_WM_NONREPARENTING = "1";
+  };
 
   programs.direnv = {
     enable = true;
@@ -265,44 +276,6 @@ in
     };
   };
 
-  # Lock screen
-  services.xidlehook =
-    let
-      paths = [
-        "$PATH"
-        "${pkgs.xorg.xrandr}/bin"
-        "${dotfilesDir}/scripts"
-        "${pkgs.i3lock-color}/bin"
-        "${pkgs.dunst}/bin"
-        "${pkgs.bash}/bin"
-        "${pkgs.gnugrep}/bin"
-        "${pkgs.coreutils-full}/bin"
-      ];
-    in
-    {
-      enable = true;
-      not-when-audio = true;
-      detect-sleep = true;
-      environment = {
-        "PATH" = builtins.concatStringsSep ":" paths;
-      };
-      timers = [
-        {
-          delay = 300;
-          command = "brightness set 50";
-          canceller = "brightness set 100";
-        }
-        {
-          delay = 10;
-          command = "brightness set 100; locker";
-        }
-        {
-          delay = 3600;
-          command = "systemctl hibernate || systemctl suspend";
-        }
-      ];
-    };
-
   # Claude code
   programs.claude-code = {
     enable = true;
@@ -326,7 +299,6 @@ in
     package = pkgs.nordzy-cursor-theme;
     name = "Nordzy-cursors";
     gtk.enable = true;
-    x11.enable = true;
   };
   gtk = {
     enable = true;

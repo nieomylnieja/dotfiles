@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+WALLPAPER_DIR="$HOME/.dotfiles/config/wallpapers"
+WALLPAPER_ZIP="${WALLPAPER_DIR}/wallpapers.zip"
+
+if ! command -v hyprctl &> /dev/null; then
+  echo >&2 "hyprctl not found. This script requires Hyprland."
+  exit 1
+fi
+
+if [ ! -d "$WALLPAPER_DIR" ]; then
+  echo >&2 "Wallpaper directory not found: $WALLPAPER_DIR"
+  exit 1
+fi
+
+if [ -f "$WALLPAPER_ZIP" ] && [ ! -f "${WALLPAPER_DIR}/1.jpg" ]; then
+  echo "Extracting wallpapers from wallpapers.zip..."
+  if command -v unzip &> /dev/null; then
+    unzip -q "$WALLPAPER_ZIP" -d "$WALLPAPER_DIR"
+    echo "Wallpapers extracted successfully"
+  else
+    echo >&2 "unzip not found. Install with: nix-shell -p unzip"
+    exit 1
+  fi
+fi
+
+mapfile -t WALLPAPERS < <(find "$WALLPAPER_DIR" -maxdepth 1 -type f -name "*.jpg")
+
+if [ "${#WALLPAPERS[@]}" -eq 0 ]; then
+  echo >&2 "No wallpapers found in $WALLPAPER_DIR"
+  exit 1
+fi
+
+RANDOM_WALLPAPER="${WALLPAPERS[$RANDOM % ${#WALLPAPERS[@]}]}"
+
+hyprctl hyprpaper preload "$RANDOM_WALLPAPER"
+
+mapfile -t MONITORS < <(hyprctl monitors -j | jq -r '.[].name')
+
+for monitor in "${MONITORS[@]}"; do
+  hyprctl hyprpaper wallpaper "${monitor},${RANDOM_WALLPAPER}"
+done
+
+if command -v notify-send &> /dev/null; then
+  notify-send "Wallpaper" "Applied: $(basename "$RANDOM_WALLPAPER")"
+fi
+
+echo "Wallpaper set to: $RANDOM_WALLPAPER"
+
+exit 0

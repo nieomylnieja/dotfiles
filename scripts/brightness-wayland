@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+if [ "$#" -ne 2 ]; then
+  echo >&2 "invalid number of arguments, provide exactly 2 --> <DIRECTION> <STEP>"
+  echo >&2 "Usage: brightness-wayland <up|down|set> <percentage>"
+  exit 1
+fi
+
+DIRECTION="$1"
+STEP="$2"
+
+if ! command -v brightnessctl &> /dev/null; then
+  echo >&2 "brightnessctl not found. Install with: nix-shell -p brightnessctl"
+  exit 1
+fi
+
+case $DIRECTION in
+  up)
+    brightnessctl set "${STEP}%+"
+    ;;
+  down)
+    brightnessctl set "${STEP}%-"
+    ;;
+  set)
+    brightnessctl set "${STEP}%"
+    ;;
+  *)
+    echo >&2 "$DIRECTION is invalid value for DIRECTION, should be one of {up, down, set}"
+    exit 1
+    ;;
+esac
+
+current_brightness=$(brightnessctl get)
+max_brightness=$(brightnessctl max)
+percentage=$((current_brightness * 100 / max_brightness))
+
+if command -v notify-send &> /dev/null; then
+  notify-send -t 2000 -h int:value:$percentage "Brightness" "${percentage}%"
+fi
+
+echo "Brightness: ${percentage}%"
+
+exit 0
