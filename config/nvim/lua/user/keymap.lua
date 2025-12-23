@@ -186,3 +186,19 @@ local function buf_kill()
 end
 
 map("n", "<leader>q", buf_kill, { desc = "Close Buffer", silent = true })
+
+--- Returns the current file's directory as a relative path with /** glob suffix for spectre searches.
+local function spectre_path()
+  return vim.fn.fnamemodify(vim.fn.expand("%:h"), ":~:.") .. "/**"
+end
+
+wk.add({
+  { "<leader>s",  group = "Search/Replace" },
+  { "<leader>ss", function() require("spectre").toggle({ path = spectre_path() }) end,                          desc = "Toggle Spectre" },
+  { "<leader>sw", function() require("spectre").open_visual({ select_word = true, path = spectre_path() }) end, desc = "Search current word" },
+  { "<leader>sp", '<cmd>lua require("spectre").open_file_search({select_word=true})<cr>',                       desc = "Search in current file" },
+})
+map("v", "<leader>sw", function()
+  vim.cmd('noautocmd normal! "vy')
+  require("spectre").open({ search_text = vim.fn.getreg("v"), path = spectre_path() })
+end, { desc = "Search selection" })

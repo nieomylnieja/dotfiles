@@ -249,6 +249,15 @@ return {
     opts = {},
   },
   {
+    "nvim-pack/nvim-spectre",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      require("spectre").setup({
+        use_trouble_qf = true,
+      })
+    end,
+  },
+  {
     "stevearc/dressing.nvim",
     opts = {
       input = {
