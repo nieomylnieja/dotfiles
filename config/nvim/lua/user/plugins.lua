@@ -37,7 +37,7 @@ return {
     branch = "main",
     config = function()
       local ts = require("nvim-treesitter")
-      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "regex", "markdown_inline", "sql", "json", "yaml" })
+      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "regex", "markdown_inline", "sql", "json", "yaml", "asm", "c" })
       require("user.treesitter").install_and_start()
     end,
   },
