@@ -116,6 +116,7 @@ local servers = {
   postgres_lsp = {},
   ansiblels = {},
   golangci_lint_ls = {},
+  clangd = {},
 }
 
 local function lsp_format()

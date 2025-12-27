@@ -136,6 +136,7 @@ return {
         "postgres-language-server",
         "ansible-language-server",
         "golangci-lint-langserver",
+        "clangd",
         -- Linters/formatters
         "actionlint",
         "stylua",
