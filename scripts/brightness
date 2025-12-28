@@ -35,7 +35,7 @@ max_brightness=$(brightnessctl max)
 percentage=$((current_brightness * 100 / max_brightness))
 
 if command -v notify-send &> /dev/null; then
-  notify-send -t 2000 -h int:value:$percentage "Brightness" "${percentage}%"
+  notify-send -t 2000 -h string:x-dunst-stack-tag:brightness -h int:value:$percentage "Brightness" "${percentage}%"
 fi
 
 echo "Brightness: ${percentage}%"
