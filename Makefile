@@ -1,6 +1,6 @@
 update:
 	nix flake update --commit-lock-file
-	nix flake update --flake ./config/home-manager/flake.nix --commit-lock-file
+	nix flake update --flake ./config/home-manager --commit-lock-file
 
 rebuild:
 	sudo nixos-rebuild switch --flake .#work
