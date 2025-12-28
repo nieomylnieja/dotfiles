@@ -74,6 +74,25 @@
   # PAM for hyprlock
   security.pam.services.hyprlock = { };
 
+  # XDG portal for screen sharing, file dialogs, etc.
+  # Side note: without this explicit configuration (although hyprland provides it),
+  # the home-manager controlled mime settings (xdg.mimeApps) worn't work.
+  xdg.portal = {
+    enable = true;
+    extraPortals = [
+      pkgs.xdg-desktop-portal-gtk
+      pkgs.xdg-desktop-portal-hyprland
+    ];
+    config = {
+      common = {
+        default = [ "gtk" ];
+      };
+      hyprland = {
+        default = [ "hyprland" "gtk" ];
+      };
+    };
+  };
+
   # Configure keymap in X11
   services.xserver.xkb = {
     layout = "pl";

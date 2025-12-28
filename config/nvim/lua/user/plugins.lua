@@ -37,7 +37,20 @@ return {
     branch = "main",
     config = function()
       local ts = require("nvim-treesitter")
-      ts.install({ "lua", "vim", "vimdoc", "go", "bash", "regex", "markdown_inline", "sql", "json", "yaml", "asm", "c" })
+      ts.install({
+        "lua",
+        "vim",
+        "vimdoc",
+        "go",
+        "bash",
+        "regex",
+        "markdown_inline",
+        "sql",
+        "json",
+        "yaml",
+        "asm",
+        "c",
+      })
       require("user.treesitter").install_and_start()
     end,
   },
@@ -137,12 +150,13 @@ return {
         "ansible-language-server",
         "golangci-lint-langserver",
         "clangd",
+        "asm-lsp",
         -- Linters/formatters
         "actionlint",
         "stylua",
         "luacheck",
         "goimports",
-        "ruff",       -- Serves ass an LSP too.
+        "ruff",   -- Serves ass an LSP too.
         "shfmt",
         "shellcheck", -- For bashls
         "gofumpt",
@@ -650,6 +664,17 @@ return {
           accept_suggestion = "<S-Tab>",
           clear_suggestion = "<C-]>",
           accept_word = "<C-j>",
+        },
+      })
+    end,
+  },
+  {
+    "p00f/godbolt.nvim",
+    config = function()
+      require("godbolt").setup({
+        quickfix = {
+          enable = true,
+          auto_open = true,
         },
       })
     end,

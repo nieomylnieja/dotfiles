@@ -117,6 +117,7 @@ local servers = {
   ansiblels = {},
   golangci_lint_ls = {},
   clangd = {},
+  asm_lsp = {},
 }
 
 local function lsp_format()
