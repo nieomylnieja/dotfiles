@@ -202,3 +202,12 @@ map("v", "<leader>sw", function()
   vim.cmd('noautocmd normal! "vy')
   require("spectre").open({ search_text = vim.fn.getreg("v"), path = spectre_path() })
 end, { desc = "Search selection" })
+
+-- Godbolt (C/C++ only)
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "c", "cpp" },
+  callback = function(ev)
+    map("n", "<leader>gc", "<cmd>GodboltCompiler telescope<cr>", { buffer = ev.buf, desc = "Godbolt compile" })
+    map("v", "<leader>gc", ":GodboltCompiler telescope<cr>", { buffer = ev.buf, desc = "Godbolt compile selection" })
+  end,
+})

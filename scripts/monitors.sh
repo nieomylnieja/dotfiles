@@ -72,6 +72,16 @@ SEL=$(gen_entries | rofi -dmenu -p "Monitor Setup:" -a 0 -no-custom | awk '{prin
 
 if [ -n "$SEL" ]; then
   eval "${COMMANDS[$SEL]}"
+
+  # Migrate all workspaces to the first active monitor
+  sleep 0.3
+  ACTIVE_MONITOR=$(hyprctl monitors -j | jq -r '.[0].name')
+  if [ -n "$ACTIVE_MONITOR" ]; then
+    for ws in $(hyprctl workspaces -j | jq -r '.[].id'); do
+      hyprctl dispatch moveworkspacetomonitor "$ws" "$ACTIVE_MONITOR" 2>/dev/null
+    done
+  fi
+
   if command -v notify-send &> /dev/null; then
     notify-send "Monitor Setup" "${TILES[$SEL]}"
   fi

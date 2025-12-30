@@ -148,7 +148,6 @@ return {
         "tailwindcss-language-server",
         "postgres-language-server",
         "ansible-language-server",
-        "golangci-lint-langserver",
         "clangd",
         "asm-lsp",
         -- Linters/formatters

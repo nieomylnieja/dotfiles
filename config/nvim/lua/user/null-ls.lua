@@ -25,7 +25,6 @@ M.setup = function(lsp_config)
     -- LINTING:
     lint.actionlint,
     lint.terraform_validate,
-    lint.golangci_lint,
     cspell.diagnostics.with({
       condition = cspell_condition,
       diagnostics_postprocess = function(diagnostic)
