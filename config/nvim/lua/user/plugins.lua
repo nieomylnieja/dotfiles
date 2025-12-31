@@ -44,6 +44,7 @@ return {
         "go",
         "bash",
         "regex",
+        "markdown",
         "markdown_inline",
         "sql",
         "json",
@@ -73,59 +74,29 @@ return {
     },
   },
   {
-    "saghen/blink.cmp",
-    version = "1.*",
-    ---@module "blink.cmp"
-    ---@type blink.cmp.Config
-    opts = {
-      -- Disable completion in ceratain scenarios, like LSP rename.
-      enabled = function()
-        return not vim.list_contains({ "DressingInput" }, vim.bo.filetype)
-            and vim.bo.buftype ~= "prompt"
-            and vim.b.completion ~= false
-      end,
-      keymap = {
-        preset = "super-tab",
-      },
-      completion = {
-        ghost_text = {
-          enabled = true,
-        },
-      },
+    -- Autocompletion
+    "hrsh7th/nvim-cmp",
+    dependencies = {
+      -- Snippet Engine & its associated nvim-cmp source
+      "L3MON4D3/LuaSnip",
+      "saadparwaiz1/cmp_luasnip",
+      -- Adds LSP completion capabilities
+      "hrsh7th/cmp-nvim-lsp",
+      -- Adds a number of user-friendly snippets
+      "rafamadriz/friendly-snippets",
+      -- Ready to go LSP symbols
+      "onsails/lspkind.nvim",
+      -- Other
+      "hrsh7th/cmp-path",
+      "hrsh7th/cmp-cmdline",
+      "hrsh7th/cmp-buffer",
+      "rcarriga/cmp-dap",
     },
+    config = function()
+      require("user.cmp")
+    end,
   },
-  {
-    "saghen/blink.pairs",
-    version = "*",
-    dependencies = "saghen/blink.download",
-    --- @module 'blink.pairs'
-    --- @type blink.pairs.Config
-    opts = {},
-  },
-  -- {
-  --   -- Autocompletion
-  --   "hrsh7th/nvim-cmp",
-  --   dependencies = {
-  --     -- Snippet Engine & its associated nvim-cmp source
-  --     "L3MON4D3/LuaSnip",
-  --     "saadparwaiz1/cmp_luasnip",
-  --     -- Adds LSP completion capabilities
-  --     "hrsh7th/cmp-nvim-lsp",
-  --     -- Adds a number of user-friendly snippets
-  --     "rafamadriz/friendly-snippets",
-  --     -- Ready to go LSP symbols
-  --     "onsails/lspkind.nvim",
-  --     -- Other
-  --     "hrsh7th/cmp-path",
-  --     "hrsh7th/cmp-cmdline",
-  --     "hrsh7th/cmp-buffer",
-  --     "rcarriga/cmp-dap",
-  --   },
-  --   config = function()
-  --     require("user.cmp")
-  --   end,
-  -- },
-  --
+
   {
     "williamboman/mason.nvim",
     cmd = "Mason",
@@ -268,13 +239,6 @@ return {
       },
     },
   },
-  -- I might not need it since nvim 0.10 comes with this functionality baked-in.
-  -- {
-  --   "numToStr/Comment.nvim",
-  --   config = function()
-  --     require("Comment").setup()
-  --   end,
-  -- },
   {
     "folke/trouble.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
@@ -285,18 +249,16 @@ return {
       open_no_results = true,
     },
   },
-  -- {
-  --   "windwp/nvim-autopairs",
-  --   event = "InsertEnter",
-  --   dependencies = { "hrsh7th/nvim-cmp" },
-  --   config = function()
-  --     require("nvim-autopairs").setup({
-  --       -- Use fast wrap with <M-e>
-  --       fast_wrap = {},
-  --     })
-  --     require("cmp").event:on("confirm_done", require("nvim-autopairs.completion.cmp").on_confirm_done())
-  --   end,
-  -- },
+  {
+    "windwp/nvim-autopairs",
+    event = "InsertEnter",
+    dependencies = { "hrsh7th/nvim-cmp" },
+    config = function()
+      require("nvim-autopairs").setup({
+        fast_wrap = {},
+      })
+    end,
+  },
   {
     "lukas-reineke/indent-blankline.nvim",
     opts = {
@@ -412,53 +374,45 @@ return {
   --   end,
   -- },
   {
-    "rcarriga/nvim-notify",
-    config = function()
-      require("notify").setup({
-        background_colour = "#000000",
-      })
-    end,
-  },
-  {
     "folke/noice.nvim",
     event = "VeryLazy",
     dependencies = {
       "MunifTanjim/nui.nvim",
-      "rcarriga/nvim-notify",
     },
-    -- opts = {
-    -- lsp = {
-    --   override = {
-    --     ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
-    --     ["vim.lsp.util.stylize_markdown"] = true,
-    --     ["cmp.entry.get_documentation"] = true,
-    --   },
-    -- },
-    -- messages = {
-    --   enabled = true,
-    -- },
-    -- routes = {
-    --   {
-    --     filter = {
-    --       event = "msg_show",
-    --       any = {
-    --         { find = "%d+L, %d+B" },
-    --         { find = "; after #%d+" },
-    --         { find = "; before #%d+" },
-    --         { find = "lines yanked" },
-    --         { find = "fewer lines" },
-    --       },
-    --     },
-    --     view = "mini",
-    --   },
-    -- },
-    -- presets = {
-    --   bottom_search = true,
-    --   command_palette = true,
-    --   long_message_to_split = true,
-    --   lsp_doc_border = true,
-    -- },
-    -- },
+    opts = {
+      notify = {
+        enabled = false,
+      },
+      messages = {
+        enabled = false,
+      },
+      lsp = {
+        override = {
+          ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
+          ["vim.lsp.util.stylize_markdown"] = true,
+          ["cmp.entry.get_documentation"] = true,
+        },
+      },
+      routes = {
+        {
+          filter = {
+            event = "msg_show",
+            any = {
+              { find = "%d+L, %d+B" },
+              { find = "; after #%d+" },
+              { find = "; before #%d+" },
+              { find = "lines yanked" },
+              { find = "fewer lines" },
+              { find = "more lines" },
+              { find = "line less" },
+              { find = "Already at" },
+              { find = "written" },
+            },
+          },
+          opts = { skip = true },
+        },
+      },
+    },
     keys = {
       {
         "<S-Enter>",

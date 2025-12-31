@@ -37,39 +37,19 @@ cmp.setup({
         fallback()
       end
     end, { "i", "s" }),
-    ["<S-Tab>"] = cmp.mapping(function(fallback)
-      if cmp.visible() then
-        cmp.select_prev_item()
-      elseif luasnip.locally_jumpable(-1) then
-        luasnip.jump(-1)
-      else
-        fallback()
-      end
-    end, { "i", "s" }),
   }),
   sources = {
     { name = "nvim_lsp" },
     { name = "luasnip" },
-    { name = "copilot" },
     { name = "path" },
     { name = "lazydev", group_index = 0 }, -- set group index to 0 to skip loading LuaLS completions
   },
   formatting = {
     fields = { "kind", "abbr", "menu" },
-    format = function(entry, vim_item)
+    format = function(_, vim_item)
       vim_item.kind = require("lspkind").symbolic(vim_item.kind, { mode = "symbol_text" })
       local strings = vim.split(vim_item.kind, "%s", { trimempty = true })
       local kind, menu = strings[1], strings[2]
-      if entry.source.name == "cmp_tabnine" or entry.source.name == "copilot" then
-        local detail = (entry.completion_item.labelDetails or {}).detail
-        kind = "󱙺"
-        if detail and detail:find(".*%%.*") then
-          menu = detail
-        end
-        if (entry.completion_item.data or {}).multiline then
-          menu = menu .. " " .. "[ML]"
-        end
-      end
 
       vim_item.kind = " " .. (kind or "") .. " "
       vim_item.menu = "    (" .. (menu or "") .. ")"
@@ -108,3 +88,40 @@ cmp.setup.filetype({ "dap-repl", "dapui_watches", "dapui_hover" }, {
     { name = "dap" },
   },
 })
+
+-- Autopairs integration: auto-insert {} for Go structs
+local cmp_autopairs = require("nvim-autopairs.completion.cmp")
+local handlers = require("nvim-autopairs.completion.handlers")
+cmp.event:on(
+  "confirm_done",
+  cmp_autopairs.on_confirm_done({
+    filetypes = {
+      ["*"] = {
+        ["("] = {
+          kind = {
+            cmp.lsp.CompletionItemKind.Function,
+            cmp.lsp.CompletionItemKind.Method,
+          },
+          handler = handlers["*"],
+        },
+      },
+      go = {
+        ["{"] = {
+          kind = {
+            cmp.lsp.CompletionItemKind.Struct,
+            cmp.lsp.CompletionItemKind.Keyword,
+          },
+          handler = function(char, item, bufnr, rules, commit_character)
+            if
+                item.kind == cmp.lsp.CompletionItemKind.Struct
+                or item.label == "struct"
+                or item.label == "interface"
+            then
+              handlers["*"](char, item, bufnr, rules, commit_character)
+            end
+          end,
+        },
+      },
+    },
+  })
+)
