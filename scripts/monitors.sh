@@ -15,7 +15,7 @@ if ! command -v jq &> /dev/null; then
   exit 1
 fi
 
-mapfile -t MONITORS < <(hyprctl monitors -j | jq -r '.[].name')
+mapfile -t MONITORS < <(hyprctl monitors all -j | jq -r '.[].name')
 
 NUM_MONITORS=${#MONITORS[@]}
 

@@ -69,10 +69,6 @@ alias rm='rm -I'
 # yay
 alias yayd='pacman -Qq | fzf --multi --preview "pacman -Qi {1}" | xargs -ro sudo pacman -Rns'
 
-# Completion
-if [[ $PS1 && -f /usr/share/bash-completion/bash_completion ]]; then
-  source /usr/share/bash-completion/bash_completion
-fi
 
 # Functions
 source "$DOTFILES/config/bash/functions"

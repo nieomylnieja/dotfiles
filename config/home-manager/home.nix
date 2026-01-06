@@ -106,6 +106,7 @@ in
     pinentry-qt
     kubectl
     kubecolor
+    kubefwd
     ripgrep
     # rpi-imager
     rustc
@@ -149,9 +150,14 @@ in
   };
 
   home.file = {
-    ".bashrc".source = ../bash/bashrc;
     ".bash_logout".source = ../bash/bash_logout;
     ".claude/CLAUDE.md".source = ../claude/CLAUDE.md;
+  };
+
+  programs.bash = {
+    enable = true;
+    enableCompletion = true;
+    initExtra = builtins.readFile ../bash/bashrc;
   };
 
   xdg.configFile = {

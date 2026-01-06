@@ -554,6 +554,17 @@ return {
     version = "*",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     config = function()
+      local api = require("nvim-tree.api")
+      local function on_attach(bufnr)
+        local function opts(desc)
+          return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
+        end
+        api.config.mappings.default_on_attach(bufnr)
+        vim.keymap.set("n", "H", function()
+          api.tree.toggle_hidden_filter()
+          api.tree.toggle_gitignore_filter()
+        end, opts("Toggle Hidden & Gitignored"))
+      end
       require("nvim-tree").setup({
         sync_root_with_cwd = true,
         respect_buf_cwd = true,
@@ -561,6 +572,11 @@ return {
           enable = true,
           update_root = true,
         },
+        filters = {
+          dotfiles = true,
+          git_ignored = true,
+        },
+        on_attach = on_attach,
       })
     end,
   },

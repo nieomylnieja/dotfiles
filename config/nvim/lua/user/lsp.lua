@@ -115,7 +115,6 @@ local servers = {
   tailwindcss = {},
   postgres_lsp = {},
   ansiblels = {},
-  golangci_lint_ls = {},
   clangd = {},
   asm_lsp = {},
 }
