@@ -1,0 +1,26 @@
+[general]
+destination = "$HOME/.config/hypr/monitors.conf"
+debounce_time_ms = 1000
+
+[tui.colors]
+source = "themes/nord.toml"
+
+[profiles.laptop_only]
+config_file = "hyprconfigs/laptop.conf"
+config_file_type = "static"
+
+[[profiles.laptop_only.conditions.required_monitors]]
+name = "eDP-1"
+
+[profiles.external_only]
+config_file = "hyprconfigs/external.go.tmpl"
+config_file_type = "template"
+
+[[profiles.external_only.conditions.required_monitors]]
+name = "eDP-1"
+monitor_tag = "laptop"
+
+[[profiles.external_only.conditions.required_monitors]]
+name = "DP-.*"
+match_name_using_regex = true
+monitor_tag = "external"

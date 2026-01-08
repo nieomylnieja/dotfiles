@@ -1,6 +1,7 @@
 { config
 , pkgs
 , lib
+, hyprdynamicmonitorsPkg
 , ...
 }:
 let
@@ -20,6 +21,7 @@ in
   };
 
   home.packages = with pkgs; [
+    hyprdynamicmonitorsPkg
     aider-chat
     anki
     awscli2
@@ -31,6 +33,7 @@ in
     bash-completion
     bashmount
     bottom
+    blesh
     brightnessctl
     cachix
     cargo
@@ -45,6 +48,7 @@ in
     eza
     fd
     file
+    flameshot
     flatpak
     fnm
     fzf
@@ -54,11 +58,9 @@ in
     glibcLocales
     go
     gotestsum
-    grim
+    grim # Required by flameshot to work on wayland.
     simple-scan
     simplescreenrecorder
-    slurp
-    swappy
     sushi
     gimp
     gnumake
@@ -70,7 +72,6 @@ in
     hyprpaper
     pkgs.stable.inkscape-with-extensions
     jetbrains.goland
-    jetbrains.idea-community
     jetbrains.jdk # JDK for plugin development.
     jq
     krita
@@ -89,7 +90,6 @@ in
     nerd-fonts.mononoki
     neofetch
     neovim
-    nwg-displays
     nixpkgs-fmt
     nushell
     obsidian
@@ -119,6 +119,7 @@ in
     swayimg
     statix
     terraform
+    tidal-hifi
     tree
     # Required for new verison of nvim-treesitter to work.
     tree-sitter
@@ -164,29 +165,30 @@ in
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
     "rofi".source = ../rofi;
-    "dunst".source = ../dunst;
     "alacritty".source = ../alacritty;
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
-    "swappy".source = ../swappy;
     "swayimg".source = ../swayimg;
+    "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
   };
 
-  xdg.mimeApps = let
-    imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
-    imageAssociations = builtins.listToAttrs (map (t: { name = "image/${t}"; value = [ "swayimg.desktop" ]; }) imageTypes);
-  in {
-    enable = true;
-    defaultApplications = {
-      "application/pdf" = [ "org.pwmt.zathura.desktop" ];
-      "text/html" = "vivaldi-stable.desktop";
-      "x-scheme-handler/http" = "vivaldi-stable.desktop";
-      "x-scheme-handler/https" = "vivaldi-stable.desktop";
-      "x-scheme-handler/about" = "vivaldi-stable.desktop";
-      "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
-    } // imageAssociations;
-  };
+  xdg.mimeApps =
+    let
+      imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
+      imageAssociations = builtins.listToAttrs (map (t: { name = "image/${t}"; value = [ "swayimg.desktop" ]; }) imageTypes);
+    in
+    {
+      enable = true;
+      defaultApplications = {
+        "application/pdf" = [ "org.pwmt.zathura.desktop" ];
+        "text/html" = "vivaldi-stable.desktop";
+        "x-scheme-handler/http" = "vivaldi-stable.desktop";
+        "x-scheme-handler/https" = "vivaldi-stable.desktop";
+        "x-scheme-handler/about" = "vivaldi-stable.desktop";
+        "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
+      } // imageAssociations;
+    };
 
   # User session variables (inherited by Hyprland and all launched programs)
   # PATH is set in hyprland.conf instead
@@ -297,7 +299,21 @@ in
   };
 
   # Notifications
-  services.dunst.enable = true;
+  services.dunst = {
+    enable = true;
+    configFile = ../dunst/dunstrc;
+  };
+
+  # Monitor management - use symlink so TUI changes persist
+  home.hyprdynamicmonitors = {
+    enable = true;
+    extraFlags = [ "--disable-power-events" ];
+    installExamples = false;
+    configPath = "${dotfilesDir}/config/hyprdynamicmonitors/config.toml";
+  };
+  # Symlink entire config dir so TUI finds themes and configs
+  xdg.configFile."hyprdynamicmonitors".source =
+    config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/hyprdynamicmonitors";
 
   # LLMs
   services.ollama = {
@@ -309,6 +325,7 @@ in
     package = pkgs.nordzy-cursor-theme;
     name = "Nordzy-cursors";
     gtk.enable = true;
+    hyprcursor.enable = true;
   };
   gtk = {
     enable = true;

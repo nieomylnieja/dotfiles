@@ -44,3 +44,11 @@ vnoremap y "+y
 
 " Clear highlight after pressing ESC
 nnoremap <esc> :noh<return><esc>
+
+" Focus the Project Tree (usually Alt+1)
+nnoremap <C-h> <Action>(ActivateProjectToolWindow)
+" Focus the Terminal (usually Alt+F12)
+nnoremap <C-j> <Action>(ActivateTerminalToolWindow)
+" Focus the Code Editor (Esc is usually enough, but this is explicit)
+nnoremap <C-k> <Action>(FocusEditor)
+nnoremap <C-l> <Action>(FocusEditor)

@@ -1,5 +1,26 @@
 local map = vim.keymap.set
 
+-- Override gx to handle both URLs and files
+map("n", "gx", function()
+  local target = vim.fn.expand("<cfile>")
+
+  -- If it's a URL, open directly
+  if target:match("^https?://") then
+    vim.ui.open(target)
+    return
+  end
+
+  -- For files, resolve to absolute path relative to current buffer's directory
+  local bufdir = vim.fn.expand("%:p:h")
+  local filepath = vim.fs.normalize(bufdir .. "/" .. target)
+
+  if vim.fn.filereadable(filepath) == 1 then
+    vim.ui.open(filepath)
+  else
+    vim.notify("File not found: " .. filepath, vim.log.levels.WARN)
+  end
+end, { desc = "Open URL or file under cursor" })
+
 -- Better up/down which works with wrapped lines.
 map({ "n", "x" }, "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
 map({ "n", "x" }, "k", "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })

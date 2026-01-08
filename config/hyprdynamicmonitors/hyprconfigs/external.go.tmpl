@@ -1,0 +1,8 @@
+{{- $external := index .MonitorsByTag "external" -}}
+{{- $laptop := index .MonitorsByTag "laptop" -}}
+{{- if $external -}}
+monitor={{$external.Name}},preferred,0x0,1
+{{- end }}
+{{- if $laptop }}
+monitor={{$laptop.Name}},disable
+{{- end }}
