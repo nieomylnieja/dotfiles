@@ -5,7 +5,7 @@
 
     "modules-left": ["hyprland/workspaces"],
     "modules-center": ["hyprland/window"],
-    "modules-right": ["tray", "cpu", "memory", "battery", "pulseaudio", "clock"],
+    "modules-right": ["tray", "cpu", "custom/memory", "battery", "pulseaudio", "clock"],
 
     "hyprland/workspaces": {
         "format": "{id}",
@@ -27,8 +27,10 @@
         "format": "CPU {usage}%"
     },
 
-    "memory": {
-        "format": "MEM {percentage}%"
+    "custom/memory": {
+        "exec": "~/.dotfiles/config/waybar/scripts/memory-info.sh",
+        "return-type": "json",
+        "interval": 5
     },
 
     "battery": {
