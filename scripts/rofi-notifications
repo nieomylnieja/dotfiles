@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+# Rofi script mode for browsing dunst notification history.
+# Usage:
+#   rofi -show notifications -modi notifications:rofi-notifications -show-icons
+
+set -e
+set -u
+
+# Check if dunstctl is available
+if ! command -v dunstctl &>/dev/null; then
+  echo "dunstctl not found"
+  exit 1
+fi
+
+# Check if jq is available
+if ! command -v jq &>/dev/null; then
+  echo "jq is required for parsing notification history"
+  exit 1
+fi
+
+# Get notification history as JSON
+history_json=$(dunstctl history)
+
+# Count notifications
+notification_count=$(echo "$history_json" | jq '.data[0] | length')
+
+# Handle selection
+if [[ -n "${1:-}" ]]; then
+  selection="$*"
+
+  if [[ "$selection" == *"Clear all"* ]]; then
+    dunstctl history-clear
+    exit 0
+  fi
+
+  # Extract notification ID from selection (stored at the end as #ID)
+  if [[ "$selection" =~ \#([0-9]+)$ ]]; then
+    notif_id="${BASH_REMATCH[1]}"
+    dunstctl history-pop "$notif_id"
+  fi
+  exit 0
+fi
+
+# Rofi options
+echo -e "\0no-custom\x1ftrue"
+echo -e "\0markup-rows\x1ftrue"
+
+if [[ "$notification_count" -eq 0 ]]; then
+  echo "No notifications in history"
+  exit 0
+fi
+
+# Clear all option
+echo -e "Clear all ($notification_count)\0icon\x1fedit-clear-all"
+
+# List notifications
+echo "$history_json" | jq -r '.data[0][] | "\(.appname.data)\t\(.summary.data)\t\(.body.data)\t\(.id.data)\t\(.icon_path.data // "")"' | while IFS=$'\t' read -r appname summary body notif_id icon_path; do
+  # Escape markup characters
+  summary=$(echo "$summary" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+  body=$(echo "$body" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+  # Truncate body if too long
+  if [[ ${#body} -gt 80 ]]; then
+    body="${body:0:77}..."
+  fi
+
+  # Format display - single line, body after summary
+  if [[ -n "$body" ]]; then
+    display="<b>$summary</b>: $body <span size='small'>($appname)</span>"
+  else
+    display="<b>$summary</b> <span size='small'>($appname)</span>"
+  fi
+
+  # Use notification's icon_path if available, otherwise use appname
+  if [[ -n "$icon_path" ]]; then
+    icon="$icon_path"
+  else
+    icon="${appname,,}"
+  fi
+
+  echo -e "$display #$notif_id\0icon\x1f$icon"
+done
