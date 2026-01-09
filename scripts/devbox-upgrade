@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+if ! [[ -f devbox.json ]]; then
+  echo -e "${RED}devbox.json not found${NC}" >&2
+  exit 1
+fi
+
+packages=$(jq -r .packages[] devbox.json)
+
+for package in $packages; do
+  read -r name version <<<"${package//@/ }"
+  latest=$(devbox search "$name" | awk -F'[ (,]' '
+    NR==3 {
+      for(i=1;i<=NF;i++)
+        if($i ~ /^[0-9]/ && $i !~ /rc/)
+          {print $i; exit}
+    }')
+  if [[ $version == "$latest" ]]; then
+    echo -e "${GREEN}$name is up to date${NC}"
+    continue
+  else
+    echo -e "${YELLOW}Upgrading $name from $version to $latest${NC}"
+    devbox add "$name@$latest"
+  fi
+done
