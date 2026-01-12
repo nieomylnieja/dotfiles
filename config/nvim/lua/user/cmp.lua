@@ -23,13 +23,22 @@ cmp.setup({
     ["<Tab>"] = cmp.mapping(function(fallback)
       if cmp.visible() then
         local entry = cmp.get_selected_entry()
-        if not entry then
-          cmp.select_next_item({ behavior = cmp.SelectBehavior.Select })
-        else
+        if entry then
           cmp.confirm({ behavior = cmp.ConfirmBehavior.Replace, select = true })
+        elseif luasnip.locally_jumpable(1) then
+          luasnip.jump(1)
+        else
+          cmp.select_next_item({ behavior = cmp.SelectBehavior.Select })
         end
       elseif luasnip.expand_or_locally_jumpable() then
         luasnip.expand_or_jump()
+      else
+        fallback()
+      end
+    end, { "i", "s" }),
+    ["<S-Tab>"] = cmp.mapping(function(fallback)
+      if luasnip.locally_jumpable(-1) then
+        luasnip.jump(-1)
       else
         fallback()
       end

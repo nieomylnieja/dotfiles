@@ -91,3 +91,23 @@ vim.api.nvim_create_autocmd({ "BufWritePre" }, {
     vim.fn.mkdir(vim.fn.fnamemodify(file, ":p:h"), "p")
   end,
 })
+
+local lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+
+vim.api.nvim_create_user_command("LoremIpsum", function(opts)
+  local count = tonumber(opts.args) or 40
+  local words = {}
+  for word in lorem:gmatch("%S+") do
+    table.insert(words, word)
+  end
+  local result = {}
+  for i = 1, count do
+    table.insert(result, words[((i - 1) % #words) + 1])
+  end
+  local text = table.concat(result, " ")
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+  local new_line = line:sub(1, col + 1) .. text .. line:sub(col + 2)
+  vim.api.nvim_set_current_line(new_line)
+  vim.api.nvim_win_set_cursor(0, { row, col + #text })
+end, { nargs = "?" })

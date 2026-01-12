@@ -134,7 +134,16 @@ local function lsp_format()
       end,
     })
   else
-    vim.lsp.buf.format()
+    -- Some LSPs (e.g. null-ls/shfmt, html) use full document replacement instead of
+    -- incremental edits, marking the buffer modified even when content is unchanged.
+    local bufnr = vim.api.nvim_get_current_buf()
+    local was_modified = vim.bo[bufnr].modified
+    local before = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    vim.lsp.buf.format({ async = false })
+    local after = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    if before == after and not was_modified then
+      vim.bo[bufnr].modified = false
+    end
   end
 end
 

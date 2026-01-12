@@ -230,7 +230,7 @@ theme.loadTreeSitter = function()
     ["@type.qualifier"] = { fg = nord.yellow },
     ["@tag"] = { fg = nord.darkest_white },
     ["@tag.delimiter"] = { fg = nord.purple },
-    ["@tag.attribute"] = { fg = nord.light_gray },
+    ["@tag.attribute"] = { fg = nord.light_gray_bright },
     ["@text"] = { fg = nord.darkest_white },
     ["@text.reference"] = { fg = nord.purple },
     ["@text.emphasis"] = { fg = nord.blue },
