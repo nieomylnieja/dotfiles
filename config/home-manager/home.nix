@@ -103,6 +103,7 @@ in
     playerctl
     pulseaudio # For pactl.
     pdm
+    python3
     pinentry-qt
     kubectl
     kubecolor

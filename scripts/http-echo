@@ -1,0 +1,126 @@
+#!/usr/bin/env python
+"""Simple HTTP echo server for debugging webhooks and API calls."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import signal
+import sys
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+MAGENTA = "\033[95m"
+WHITE = "\033[97m"
+RESET = "\033[0m"
+
+
+def make_handler(
+    response_code: int, response_body: str
+) -> type[BaseHTTPRequestHandler]:
+    """Factory to create handler with configured response settings."""
+
+    class EchoHandler(BaseHTTPRequestHandler):
+        def handle_request(self) -> None:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            path, _, query = self.path.partition("?")
+
+            print(
+                f"\n{MAGENTA}{timestamp}{RESET} {GREEN}{self.command}{RESET} {CYAN}{path}{RESET}",
+                end="",
+            )
+            if query:
+                print(f"{YELLOW}?{query}{RESET}")
+            else:
+                print()
+
+            for key, value in self.headers.items():
+                print(f"{BLUE}{key}:{RESET} {WHITE}{value}{RESET}")
+
+            content_len = int(self.headers.get("Content-Length", 0))
+            if content_len:
+                raw = self.rfile.read(content_len)
+                try:
+                    body = raw.decode()
+                except UnicodeDecodeError:
+                    body = f"<binary data: {len(raw)} bytes>"
+
+                if "json" in self.headers.get("Content-Type", ""):
+                    with suppress(json.JSONDecodeError):
+                        body = json.dumps(json.loads(body), indent=2)
+                print(body)
+
+            self.send_response(response_code)
+            self.end_headers()
+            if response_body:
+                self.wfile.write(response_body.encode())
+
+        do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_HEAD = (
+            handle_request
+        )
+
+        def log_message(self, *_) -> None:
+            pass
+
+    return EchoHandler
+
+
+class suppress:
+    """Minimal context manager to suppress specified exceptions."""
+
+    def __init__(self, *exceptions: type[BaseException]) -> None:
+        self._exceptions = exceptions
+
+    def __enter__(self) -> None:
+        pass
+
+    def __exit__(self, exc_type, *_) -> bool:
+        return exc_type is not None and issubclass(exc_type, self._exceptions)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "-p", "--port", type=int, default=8080, help="port to listen on (default: 8080)"
+    )
+    parser.add_argument(
+        "-b", "--bind", default="", help="address to bind to (default: all interfaces)"
+    )
+    parser.add_argument(
+        "-c", "--code", type=int, default=200, help="HTTP response code (default: 200)"
+    )
+    parser.add_argument("-r", "--response", default="", help="response body to return")
+    args = parser.parse_args()
+
+    handler = make_handler(args.code, args.response)
+    port = args.port
+    auto_port = "-p" not in sys.argv and "--port" not in sys.argv
+
+    while True:
+        try:
+            server = HTTPServer((args.bind, port), handler)
+            break
+        except OSError as e:
+            if e.errno == 98 and auto_port:  # Address already in use
+                port += 1
+            else:
+                raise
+
+    signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+    bind_addr = args.bind or "0.0.0.0"
+    print(
+        f"Listening on {CYAN}{bind_addr}:{port}{RESET} (responding with {args.code})"
+    )
+
+    server.serve_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
