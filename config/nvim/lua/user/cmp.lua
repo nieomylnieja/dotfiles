@@ -1,6 +1,7 @@
 local cmp = require("cmp")
 local luasnip = require("luasnip")
 require("luasnip.loaders.from_vscode").lazy_load()
+require("luasnip.loaders.from_lua").load({ paths = { vim.fn.stdpath("config") .. "/lua/user/snippets" } })
 luasnip.config.setup({})
 
 cmp.setup({
@@ -24,7 +25,7 @@ cmp.setup({
       if cmp.visible() then
         local entry = cmp.get_selected_entry()
         if entry then
-          cmp.confirm({ behavior = cmp.ConfirmBehavior.Replace, select = true })
+          cmp.confirm({ behavior = cmp.ConfirmBehavior.Insert, select = true })
         elseif luasnip.locally_jumpable(1) then
           luasnip.jump(1)
         else
@@ -114,15 +115,10 @@ cmp.event:on(
       go = {
         ["{"] = {
           kind = {
-            cmp.lsp.CompletionItemKind.Struct,
             cmp.lsp.CompletionItemKind.Keyword,
           },
           handler = function(char, item, bufnr, rules, commit_character)
-            if
-                item.kind == cmp.lsp.CompletionItemKind.Struct
-                or item.label == "struct"
-                or item.label == "interface"
-            then
+            if item.label == "struct" or item.label == "interface" then
               handlers["*"](char, item, bufnr, rules, commit_character)
             end
           end,

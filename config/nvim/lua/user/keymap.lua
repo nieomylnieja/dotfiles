@@ -214,10 +214,26 @@ local function spectre_path()
 end
 
 wk.add({
-  { "<leader>s",  group = "Search/Replace" },
-  { "<leader>ss", function() require("spectre").toggle({ path = spectre_path() }) end,                          desc = "Toggle Spectre" },
-  { "<leader>sw", function() require("spectre").open_visual({ select_word = true, path = spectre_path() }) end, desc = "Search current word" },
-  { "<leader>sp", '<cmd>lua require("spectre").open_file_search({select_word=true})<cr>',                       desc = "Search in current file" },
+  { "<leader>s", group = "Search/Replace" },
+  {
+    "<leader>ss",
+    function()
+      require("spectre").toggle({ path = spectre_path() })
+    end,
+    desc = "Toggle Spectre",
+  },
+  {
+    "<leader>sw",
+    function()
+      require("spectre").open_visual({ select_word = true, path = spectre_path() })
+    end,
+    desc = "Search current word",
+  },
+  {
+    "<leader>sp",
+    '<cmd>lua require("spectre").open_file_search({select_word=true})<cr>',
+    desc = "Search in current file",
+  },
 })
 map("v", "<leader>sw", function()
   vim.cmd('noautocmd normal! "vy')
@@ -229,6 +245,39 @@ vim.api.nvim_create_autocmd("FileType", {
   pattern = { "c", "cpp" },
   callback = function(ev)
     map("n", "<leader>gc", "<cmd>GodboltCompiler telescope<cr>", { buffer = ev.buf, desc = "Godbolt compile" })
-    map("v", "<leader>gc", ":GodboltCompiler telescope<cr>", { buffer = ev.buf, desc = "Godbolt compile selection" })
+    map(
+      "v",
+      "<leader>gc",
+      ":GodboltCompiler telescope<cr>",
+      { buffer = ev.buf, desc = "Godbolt compile selection" }
+    )
   end,
 })
+
+-- Treesitter text objects
+local function ts_select(key, query, desc)
+  map({ "x", "o" }, key, function()
+    require("nvim-treesitter-textobjects.select").select_textobject(query, "textobjects")
+  end, { desc = desc })
+end
+
+ts_select("af", "@function.outer", "Select around function")
+ts_select("if", "@function.inner", "Select inner function")
+ts_select("ac", "@class.outer", "Select around class")
+ts_select("ic", "@class.inner", "Select inner class")
+ts_select("aa", "@parameter.outer", "Select around parameter")
+ts_select("ia", "@parameter.inner", "Select inner parameter")
+
+-- Treesitter movement
+map({ "n", "x", "o" }, "]f", function()
+  require("nvim-treesitter-textobjects.move").goto_next_start("@function.outer", "textobjects")
+end, { desc = "Next function start" })
+map({ "n", "x", "o" }, "[f", function()
+  require("nvim-treesitter-textobjects.move").goto_previous_start("@function.outer", "textobjects")
+end, { desc = "Previous function start" })
+map({ "n", "x", "o" }, "]c", function()
+  require("nvim-treesitter-textobjects.move").goto_next_start("@class.outer", "textobjects")
+end, { desc = "Next class start" })
+map({ "n", "x", "o" }, "[c", function()
+  require("nvim-treesitter-textobjects.move").goto_previous_start("@class.outer", "textobjects")
+end, { desc = "Previous class start" })

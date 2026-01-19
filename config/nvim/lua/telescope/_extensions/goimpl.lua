@@ -1,6 +1,5 @@
 local actions = require("telescope.actions")
 local state = require("telescope.actions.state")
-local actions_set = require("telescope.actions.set")
 local conf = require("telescope.config").values
 local finders = require("telescope.finders")
 local make_entry = require("telescope.make_entry")
@@ -124,16 +123,16 @@ local function split(inputstr, sep)
   return t
 end
 
-local function handle_job_data(data)
+local function sanitize_job_data(data)
   if not data then
-    return nil
+    return {}
   end
   -- Because the nvim.stdout's data will have an extra empty line at end on some OS (e.g. maxOS), we should remove it.
   if data[#data] == "" then
     table.remove(data, #data)
   end
   if #data < 1 then
-    return nil
+    return {}
   end
   return data
 end
@@ -167,6 +166,20 @@ local type_parameter_name_query = vim.treesitter.query.parse(
   ]]
 )
 
+local method_declaration_query = vim.treesitter.query.parse(
+  "go",
+  [[
+(method_declaration
+  receiver: (parameter_list
+    (parameter_declaration
+      name: (identifier) @receiver_name
+      type: (_) @receiver_full_type
+    )
+  )
+) @method
+]]
+)
+
 local function get_type_parameter_name_list(node, buf)
   local type_parameter_names = {}
   for _, tnode, _ in type_parameter_name_query:iter_captures(node, buf or 0) do
@@ -174,6 +187,60 @@ local function get_type_parameter_name_list(node, buf)
   end
 
   return type_parameter_names
+end
+
+local function find_existing_receiver_name(type_name)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local parser = vim.treesitter.get_parser(bufnr, "go")
+  if not parser then
+    return nil
+  end
+
+  local tree = parser:parse()[1]
+  if not tree then
+    return nil
+  end
+  local root = tree:root()
+
+  for id, node in method_declaration_query:iter_captures(root, bufnr) do
+    local capture_name = method_declaration_query.captures[id]
+
+    if capture_name == "method" then
+      local receiver_name = nil
+      local receiver_full_type = nil
+      local receiver_type_node = nil
+
+      for mid, mnode in method_declaration_query:iter_captures(node, bufnr) do
+        local mcapture = method_declaration_query.captures[mid]
+        if mcapture == "receiver_name" then
+          receiver_name = vim.treesitter.get_node_text(mnode, bufnr)
+        elseif mcapture == "receiver_full_type" then
+          receiver_full_type = vim.treesitter.get_node_text(mnode, bufnr)
+          receiver_type_node = mnode
+        end
+      end
+
+      if receiver_full_type then
+        local is_pointer = receiver_type_node:type() == "pointer_type"
+        local base_type = receiver_full_type
+
+        -- Strip pointer prefix if present
+        if is_pointer then
+          base_type = base_type:match("^%*(.+)") or base_type
+        end
+
+        -- Check if this matches our type (with or without generic parameters)
+        if base_type == type_name or base_type:match("^" .. type_name .. "%[") then
+          return {
+            name = receiver_name,
+            is_pointer = is_pointer,
+          }
+        end
+      end
+    end
+  end
+
+  return nil
 end
 
 local function format_type_parameter_name_list(type_parameter_names)
@@ -194,9 +261,7 @@ local function load_file_to_buffer(filepath, buf)
   file:close()
   logger.info(content)
 
-  -- 将内容写入缓冲区
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(content, "\n"))
-
   return true
 end
 
@@ -204,8 +269,7 @@ local function get_interface_generic_type_parameters(file, interface_name)
   local buf = vim.api.nvim_create_buf(false, true)
   local ok, errmsg = pcall(vim.api.nvim_set_option_value, "filetype", "go", { buf = buf })
   if not ok then
-    local msg = ("can't set filetype to 'go' (%s). Formatting is canceled"):format(errmsg)
-    logger.info(msg)
+    logger.info(("can't set filetype to 'go' (%s). Formatting is canceled"):format(errmsg))
     return ""
   end
 
@@ -214,6 +278,10 @@ local function get_interface_generic_type_parameters(file, interface_name)
   end
 
   local parser = vim.treesitter.get_parser(buf, "go")
+  if parser == nil then
+    logger.error("Go parser is nil")
+    return ""
+  end
   local tree = parser:parse()[1]
   local root = tree:root()
 
@@ -247,60 +315,51 @@ local function get_interface_generic_type_parameters(file, interface_name)
   return ""
 end
 
-local function goimpl(tsnode, packageName, interface, type_parameter_list)
-  local rec2 = _get_node_text(tsnode, 0)
-  local rec1 = string.lower(string.sub(rec2, 1, 2))
+local function run_goimpl_command(dirname, rec_name, rec_type, interface)
+  local cmd = string.format('impl -comments=false -dir=%s "%s %s" "%s"', dirname, rec_name, rec_type, interface)
+  logger.info(cmd)
+  local data = vim.fn.systemlist(cmd)
+  return sanitize_job_data(data)
+end
+
+local function goimpl(tsnode, package_name, iface_name, type_parameter_list)
+  local rec_type = _get_node_text(tsnode, 0)
+  local base_type_name = rec_type
+
+  -- Try to find an existing receiver name and pointer preference from existing methods
+  local existing_receiver = find_existing_receiver_name(base_type_name)
+  local rec_name
+  local use_pointer = true -- Default to pointer receiver
+
+  if existing_receiver then
+    rec_name = existing_receiver.name
+    use_pointer = existing_receiver.is_pointer
+  else
+    -- Fall back to generating one from the type name
+    rec_name = string.lower(string.sub(rec_type, 1, 2))
+  end
+
   local type_parameter_names = format_type_parameter_name_list(get_type_parameter_name_list(tsnode:parent()))
-  rec2 = rec2 .. type_parameter_names
+  rec_type = rec_type .. type_parameter_names
 
   -- get the package source directory
   local dirname = vim.fn.fnameescape(vim.fn.expand("%:p:h"))
 
-  local setup = "cd "
-      .. dirname
-      .. " && impl"
-      .. " -dir "
-      .. ' "'
-      .. dirname
-      .. '" '
-      .. ' "'
-      .. rec1
-      .. " *"
-      .. rec2
-      .. '" "'
-      .. packageName
-      .. "."
-      .. interface
-      .. type_parameter_list
-      .. '"'
-
-  logger.info(setup)
-  local data = vim.fn.systemlist(setup)
-
-  data = handle_job_data(data)
+  local pointer_prefix = use_pointer and "*" or ""
+  local data = run_goimpl_command(
+    dirname,
+    rec_name,
+    pointer_prefix .. rec_type,
+    package_name .. "." .. iface_name .. type_parameter_list
+  )
   if not data or #data == 0 then
     return
   end
 
-  -- if not found the '$packageName.$interface' type, then try without the packageName
-  -- this works when in a main package, it's containerName will return the directory name which the interface file exist in.
+  -- if we didn't find the '$packageName.$interface' type, then try without the packageName
+  -- this works for instance, in a main package
   if string.find(data[1], "unrecognized interface:") or string.find(data[1], "couldn't find") then
-    setup = "impl"
-        .. " -dir "
-        .. dirname
-        .. ' "'
-        .. rec1
-        .. " *"
-        .. rec2
-        .. '" "'
-        .. interface
-        .. type_parameter_list
-        .. '"'
-
-    logger.debug(setup)
-    data = vim.fn.systemlist(setup)
-
-    data = handle_job_data(data)
+    data = run_goimpl_command(dirname, rec_name, pointer_prefix .. rec_type, iface_name .. type_parameter_list)
     if not data or #data == 0 then
       return
     end
@@ -340,7 +399,7 @@ M.goimpl = function(opts)
         previewer = conf.qflist_previewer(opts),
         sorter = conf.generic_sorter(),
         attach_mappings = function(prompt_bufnr)
-          actions_set.select:replace(function(_, _)
+          actions.select_default:replace(function()
             local entry = state.get_selected_entry()
             actions.close(prompt_bufnr)
             if not entry then

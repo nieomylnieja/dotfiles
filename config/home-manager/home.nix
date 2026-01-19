@@ -53,9 +53,11 @@ in
     fnm
     fzf
     gcc_multi
+    gemini-cli
     gh
     git
     glibcLocales
+    glow
     go
     gotestsum
     grim # Required by flameshot to work on wayland.
@@ -171,6 +173,7 @@ in
     "direnv/direnvrc".source = ../direnv/direnvrc;
     "zathura".source = ../zathura;
     "swayimg".source = ../swayimg;
+    "dunst".source = ../dunst;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
   };
 
@@ -204,6 +207,7 @@ in
     BROWSER = "vivaldi";
     EDITOR = "nvim";
     _JAVA_AWT_WM_NONREPARENTING = "1";
+    GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
   };
 
   programs.direnv = {
@@ -302,7 +306,6 @@ in
   # Notifications
   services.dunst = {
     enable = true;
-    configFile = ../dunst/dunstrc;
   };
 
   # Monitor management - use symlink so TUI changes persist

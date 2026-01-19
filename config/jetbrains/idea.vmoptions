@@ -1,0 +1,3 @@
+# Otherwise scaling doesn't work on Wayland
+-Dawt.toolkit.name=WLToolkit
+

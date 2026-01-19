@@ -20,6 +20,10 @@ opt.ignorecase = true
 opt.smartcase = true
 opt.mouse = "a"
 
+-- Enable automatic comment continuation
+opt.formatoptions:append("r") -- Auto-insert comment leader after <Enter> in insert mode
+opt.formatoptions:append("o") -- Auto-insert comment leader after 'o'/'O' in normal mode
+
 -- Numbers
 opt.number = true
 opt.relativenumber = true
