@@ -53,7 +53,6 @@ in
     fnm
     fzf
     gcc_multi
-    gemini-cli
     gh
     git
     glibcLocales
@@ -175,6 +174,7 @@ in
     "swayimg".source = ../swayimg;
     "dunst".source = ../dunst;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
+    "glow".source = ../glow;
   };
 
   xdg.mimeApps =
@@ -301,6 +301,11 @@ in
     skills = {
       "golang" = ../claude/skills/golang;
     };
+  };
+
+  programs.gemini-cli = {
+    enable = true;
+    settings = (builtins.fromJSON (builtins.readFile ../gemini/settings.json));
   };
 
   # Notifications

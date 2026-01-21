@@ -2,6 +2,9 @@
 {{- $laptop := index .MonitorsByTag "laptop" -}}
 {{- if $external -}}
 monitor={{$external.Name}},preferred,0x0,1
+$mod = SUPER
+bind = $mod, P, exec, flameshot gui --accept-on-select
+bind = $mod SHIFT, P, exec, flameshot gui
 {{- end }}
 {{- if $laptop }}
 monitor={{$laptop.Name}},disable

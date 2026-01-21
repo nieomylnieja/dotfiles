@@ -1,0 +1,209 @@
+{
+  "document": {
+    "block_prefix": "\n",
+    "block_suffix": "\n",
+    "color": "#d8dee9",
+    "background_color": "#2e3440"
+  },
+  "block_quote": {
+    "indent": 2,
+    "indent_token": "│ ",
+    "color": "#81a1c1"
+  },
+  "paragraph": {},
+  "list": {
+    "level_indent": 2,
+    "color": "#d8dee9"
+  },
+  "heading": {
+    "block_suffix": "\n",
+    "color": "#88c0d0",
+    "bold": true
+  },
+  "h1": {
+    "prefix": " ",
+    "suffix": " ",
+    "color": "#88c0d0",
+    "background_color": "#3b4252",
+    "bold": true
+  },
+  "h2": {
+    "prefix": "## ",
+    "color": "#88c0d0",
+    "bold": true
+  },
+  "h3": {
+    "prefix": "### ",
+    "color": "#81a1c1",
+    "bold": true
+  },
+  "h4": {
+    "prefix": "#### ",
+    "color": "#81a1c1"
+  },
+  "h5": {
+    "prefix": "##### ",
+    "color": "#5e81ac"
+  },
+  "h6": {
+    "prefix": "###### ",
+    "color": "#5e81ac",
+    "bold": false
+  },
+  "text": {
+    "color": "#d8dee9"
+  },
+  "strikethrough": {
+    "crossed_out": true,
+    "color": "#4c566a"
+  },
+  "emph": {
+    "italic": true,
+    "color": "#ebcb8b"
+  },
+  "strong": {
+    "bold": true,
+    "color": "#a3be8c"
+  },
+  "hr": {
+    "color": "#4c566a",
+    "format": "\n────────────────────────────────────────────────────\n"
+  },
+  "item": {
+    "block_prefix": "• "
+  },
+  "enumeration": {
+    "block_prefix": ". ",
+    "color": "#81a1c1"
+  },
+  "task": {
+    "ticked": "[✓] ",
+    "unticked": "[ ] "
+  },
+  "link": {
+    "color": "#88c0d0",
+    "underline": true
+  },
+  "link_text": {
+    "color": "#8fbcbb",
+    "bold": true
+  },
+  "image": {
+    "color": "#a3be8c",
+    "underline": true
+  },
+  "image_text": {
+    "color": "#a3be8c",
+    "format": "Image: {{.text}} →"
+  },
+  "code": {
+    "prefix": " ",
+    "suffix": " ",
+    "color": "#ebcb8b",
+    "background_color": "#3b4252"
+  },
+  "code_block": {
+    "color": "#d8dee9",
+    "background_color": "#3b4252",
+    "margin": 2,
+    "chroma": {
+      "text": {
+        "color": "#d8dee9"
+      },
+      "error": {
+        "color": "#bf616a",
+        "background_color": "#3b4252"
+      },
+      "comment": {
+        "color": "#616e88",
+        "italic": true
+      },
+      "comment_preproc": {
+        "color": "#5e81ac"
+      },
+      "keyword": {
+        "color": "#81a1c1",
+        "bold": true
+      },
+      "keyword_reserved": {
+        "color": "#81a1c1"
+      },
+      "keyword_namespace": {
+        "color": "#81a1c1"
+      },
+      "keyword_type": {
+        "color": "#81a1c1"
+      },
+      "operator": {
+        "color": "#81a1c1"
+      },
+      "punctuation": {
+        "color": "#d8dee9"
+      },
+      "name": {
+        "color": "#d8dee9"
+      },
+      "name_builtin": {
+        "color": "#81a1c1"
+      },
+      "name_tag": {
+        "color": "#81a1c1"
+      },
+      "name_attribute": {
+        "color": "#8fbcbb"
+      },
+      "name_class": {
+        "color": "#8fbcbb"
+      },
+      "name_constant": {
+        "color": "#d08770"
+      },
+      "name_decorator": {
+        "color": "#d08770"
+      },
+      "name_function": {
+        "color": "#88c0d0"
+      },
+      "literal_number": {
+        "color": "#b48ead"
+      },
+      "literal_string": {
+        "color": "#a3be8c"
+      },
+      "literal_string_escape": {
+        "color": "#ebcb8b"
+      },
+      "generic_deleted": {
+        "color": "#bf616a"
+      },
+      "generic_emph": {
+        "italic": true
+      },
+      "generic_inserted": {
+        "color": "#a3be8c"
+      },
+      "generic_strong": {
+        "bold": true
+      },
+      "generic_subheading": {
+        "color": "#88c0d0"
+      },
+      "background": {
+        "background_color": "#2e3440"
+      }
+    }
+  },
+  "table": {
+    "center_separator": "┼",
+    "column_separator": "│",
+    "row_separator": "─",
+    "color": "#81a1c1"
+  },
+  "definition_list": {},
+  "definition_term": {},
+  "definition_description": {
+    "block_prefix": "\n🠶 "
+  },
+  "html_block": {},
+  "html_span": {}
+}

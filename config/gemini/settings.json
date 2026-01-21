@@ -1,0 +1,21 @@
+{
+  "mcp": {
+    "allowed": [
+      "nobl9"
+    ]
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "mcpServers": {
+    "nobl9": {
+      "url": "https://dev-orange.nobl9.dev/api/mcp",
+      "oauth": {
+        "enabled": true,
+        "clientId": "0oadh504bGGVnJj1J4x6"
+      }
+    }
+  }
+}

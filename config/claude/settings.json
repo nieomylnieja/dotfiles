@@ -36,6 +36,7 @@
       "Bash(gh issue view:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr diff:*)",
+      "Bash(gh run view:*)",
       "mcp__Context7__resolve-library-id",
       "mcp__Context7__get-library-docs"
     ],
