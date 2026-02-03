@@ -55,7 +55,7 @@
 	staash = stash --all
 	me = !gitme.bash
 	stashlost = !recover-lost-stash.bash
-	c = !aider-commit.bash
+	c = !gmc
 	test = "!echo \"^$(pwd)$\""
 	worktree-switch = "!f() { worktree=$(git worktree list | grep -v \"^$(pwd)\\s\" | awk '{gsub(/[\\[\\]]/,\"\",$3); print}' | fzf --with-nth=3 --preview 'git -C $(echo {1} | cut -d: -f1) log' | awk '{print $1}'); [ -n \"$worktree\" ] && cd \"$worktree\" && exec $SHELL; }; f"
 
