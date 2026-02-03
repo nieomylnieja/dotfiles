@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+show_help() {
+  cat <<EOF
+pdf - PDF manipulation tool
+
+Usage:
+  pdf <command> [options]
+
+Commands:
+  extract <input> <range> <output>  Extract page range from PDF
+                                    Example: pdf extract doc.pdf 1-5 output.pdf
+                                    Range formats: 1-5, 1,3,5, 1-3,7-9
+
+  minify <input> <output>           Compress/minify PDF file
+                                    Example: pdf minify large.pdf small.pdf
+
+  help                              Show this help message
+
+Options:
+  -h, --help                        Show help for a command
+EOF
+}
+
+cmd_extract() {
+  if [ $# -lt 3 ]; then
+    echo >&2 "Error: extract requires 3 arguments"
+    echo >&2 "Usage: pdf extract <input.pdf> <page-range> <output.pdf>"
+    echo >&2 "Example: pdf extract document.pdf 1-5 output.pdf"
+    exit 1
+  fi
+
+  local input="$1"
+  local range="$2"
+  local output="$3"
+
+  if [ ! -f "$input" ]; then
+    echo >&2 "Error: Input file '$input' not found"
+    exit 1
+  fi
+
+  if ! command -v nix &>/dev/null; then
+    echo >&2 "Error: nix command not found"
+    exit 1
+  fi
+
+  echo "Extracting pages $range from $input to $output..."
+  nix run nixpkgs#qpdf -- "$input" --pages . "$range" -- "$output"
+  echo "Done!"
+}
+
+cmd_minify() {
+  if [ $# -lt 2 ]; then
+    echo >&2 "Error: minify requires 2 arguments"
+    echo >&2 "Usage: pdf minify <input.pdf> <output.pdf>"
+    exit 1
+  fi
+
+  local input="$1"
+  local output="$2"
+
+  if [ ! -f "$input" ]; then
+    echo >&2 "Error: Input file '$input' not found"
+    exit 1
+  fi
+
+  if ! command -v nix &>/dev/null; then
+    echo >&2 "Error: nix command not found"
+    exit 1
+  fi
+
+  echo "Minifying $input to $output..."
+
+  # Try qpdf compression first (lossless, good for mixed content)
+  local temp_qpdf="${output}.qpdf.tmp"
+  if nix run nixpkgs#qpdf -- --compress-streams=y --recompress-flate --object-streams=generate "$input" "$temp_qpdf" 2>/dev/null; then
+    local qpdf_size
+    qpdf_size=$(stat -c%s "$temp_qpdf" 2>/dev/null || stat -f%z "$temp_qpdf" 2>/dev/null)
+
+    # If qpdf didn't help much, try ghostscript (lossy but more aggressive)
+    local temp_gs="${output}.gs.tmp"
+    nix run nixpkgs#ghostscript -- \
+      -sDEVICE=pdfwrite \
+      -dCompatibilityLevel=1.4 \
+      -dPDFSETTINGS=/ebook \
+      -dNOPAUSE \
+      -dQUIET \
+      -dBATCH \
+      -dCompressFonts=true \
+      -dSubsetFonts=true \
+      -dColorImageDownsampleType=/Bicubic \
+      -dColorImageResolution=150 \
+      -dGrayImageDownsampleType=/Bicubic \
+      -dGrayImageResolution=150 \
+      -dMonoImageDownsampleType=/Bicubic \
+      -dMonoImageResolution=150 \
+      -sOutputFile="$temp_gs" \
+      "$input" 2>/dev/null
+
+    local gs_size
+    gs_size=$(stat -c%s "$temp_gs" 2>/dev/null || stat -f%z "$temp_gs" 2>/dev/null)
+
+    # Use whichever produced the smaller file
+    if [ "$qpdf_size" -le "$gs_size" ]; then
+      mv "$temp_qpdf" "$output"
+      rm -f "$temp_gs"
+      echo "Used qpdf (lossless compression)"
+    else
+      mv "$temp_gs" "$output"
+      rm -f "$temp_qpdf"
+      echo "Used ghostscript (lossy compression)"
+    fi
+  else
+    # Fallback to ghostscript only
+    nix run nixpkgs#ghostscript -- \
+      -sDEVICE=pdfwrite \
+      -dCompatibilityLevel=1.4 \
+      -dPDFSETTINGS=/ebook \
+      -dNOPAUSE \
+      -dQUIET \
+      -dBATCH \
+      -dCompressFonts=true \
+      -dSubsetFonts=true \
+      -dColorImageDownsampleType=/Bicubic \
+      -dColorImageResolution=150 \
+      -dGrayImageDownsampleType=/Bicubic \
+      -dGrayImageResolution=150 \
+      -dMonoImageDownsampleType=/Bicubic \
+      -dMonoImageResolution=150 \
+      -sOutputFile="$output" \
+      "$input"
+    echo "Used ghostscript (lossy compression)"
+  fi
+
+  # Show file size comparison
+  if [ -f "$input" ] && [ -f "$output" ]; then
+    local input_size
+    local output_size
+    input_size=$(stat -c%s "$input" 2>/dev/null || stat -f%z "$input" 2>/dev/null)
+    output_size=$(stat -c%s "$output" 2>/dev/null || stat -f%z "$output" 2>/dev/null)
+    echo "Original: $(numfmt --to=iec-i --suffix=B "$input_size" 2>/dev/null || echo "$input_size bytes")"
+    echo "Minified: $(numfmt --to=iec-i --suffix=B "$output_size" 2>/dev/null || echo "$output_size bytes")"
+
+    if [ "$output_size" -lt "$input_size" ]; then
+      local saved=$((input_size - output_size))
+      local percent=$((saved * 100 / input_size))
+      echo "Saved: $(numfmt --to=iec-i --suffix=B "$saved" 2>/dev/null || echo "$saved bytes") ($percent%)"
+    else
+      echo "Warning: Output file is larger than input. The PDF may already be compressed."
+    fi
+  fi
+
+  echo "Done!"
+}
+
+# Main command dispatcher
+case "${1:-help}" in
+extract)
+  shift
+  cmd_extract "$@"
+  ;;
+minify)
+  shift
+  cmd_minify "$@"
+  ;;
+help | -h | --help)
+  show_help
+  ;;
+*)
+  echo >&2 "Error: Unknown command '$1'"
+  echo >&2 "Run 'pdf help' for usage information"
+  exit 1
+  ;;
+esac

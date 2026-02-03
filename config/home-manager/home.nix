@@ -22,7 +22,6 @@ in
 
   home.packages = with pkgs; [
     hyprdynamicmonitorsPkg
-    aider-chat
     anki
     awscli2
     apg
@@ -33,7 +32,7 @@ in
     bash-completion
     bashmount
     bottom
-    blesh
+    # blesh TODO: try making it work better
     brightnessctl
     cachix
     cargo
@@ -53,6 +52,7 @@ in
     fnm
     fzf
     gcc_multi
+    geminicommit
     gh
     git
     glibcLocales
@@ -175,6 +175,7 @@ in
     "dunst".source = ../dunst;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "glow".source = ../glow;
+    "blesh/init.sh".source = ../blesh/blerc;
   };
 
   xdg.mimeApps =

@@ -133,11 +133,6 @@ fi
 # Run dircolors to set LS_COLORS in the envs
 eval "$(dircolors)"
 
-# starship prompt init, should stay on the bottom
-if [ -x "$(command -v starship)" ]; then
-  eval "$(starship init bash)"
-fi
-
 # any other custom files to be sourced
 if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
   source "$HOME"/nobl9/nobl9rc.bash
@@ -146,13 +141,34 @@ fi
 # Hook for direnv.
 eval "$(direnv hook bash)"
 
-# Zoxide (cd replacement)
+# Completions for programs with "cmd completion bash" generators
+for cmd in kubefwd; do
+  command -v "$cmd" &>/dev/null && eval "$($cmd completion bash)"
+done
+
+# Custom completions
+if [ -f "$DOTFILES/config/bash/completions/pdf" ]; then
+  source "$DOTFILES/config/bash/completions/pdf"
+fi
+
+# ALWAYS LOAD THESE LAST! ORDER MATTERS!
+# ble.sh - load with --attach=none first
+if [ -x "$(command -v blesh-share)" ]; then
+  source -- "$(blesh-share)"/ble.sh --attach=none
+fi
+
+# starship prompt init - must be BEFORE ble-attach
+if [ -x "$(command -v starship)" ]; then
+  eval "$(starship init bash)"
+fi
+
+# Zoxide (cd replacement) - before ble-attach
 if [ -x "$(command -v zoxide)" ]; then
   eval "$(zoxide init bash)"
   alias cd='z'
 fi
 
-# Completions for programs with "cmd completion bash" generators
-for cmd in kubefwd; do
-  command -v "$cmd" &>/dev/null && eval "$($cmd completion bash)"
-done
+# ble.sh - attach AFTER starship and other prompt/shell enhancements
+if [ -x "$(command -v blesh-share)" ]; then
+  [[ ! ${BLE_VERSION-} ]] || ble-attach
+fi

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+_pdf_completion() {
+  local cur commands
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  commands="extract minify help"
+
+  # Complete first argument (command name)
+  if [ "$COMP_CWORD" -eq 1 ]; then
+    mapfile -t COMPREPLY < <(compgen -W "$commands" -- "$cur")
+    return 0
+  fi
+
+  # Complete subsequent arguments based on command
+  local cmd="${COMP_WORDS[1]}"
+  case "$cmd" in
+  extract)
+    case "$COMP_CWORD" in
+    2 | 4)
+      # Complete PDF filenames for input (position 2) and output (position 4)
+      mapfile -t COMPREPLY < <(compgen -f -X '!*.pdf' -- "$cur")
+      ;;
+    esac
+    ;;
+  minify)
+    case "$COMP_CWORD" in
+    2 | 3)
+      # Complete PDF filenames for input (position 2) and output (position 3)
+      mapfile -t COMPREPLY < <(compgen -f -X '!*.pdf' -- "$cur")
+      ;;
+    esac
+    ;;
+  esac
+
+  return 0
+}
+
+complete -F _pdf_completion pdf

@@ -6,9 +6,12 @@ if [ -f "$XDG_CONFIG_HOME/fzf/fzf.bash" ]; then
 fi
 
 # Source key bindings like CTR+R and completion.
-if command -v fzf-share >/dev/null; then
-	source "$(fzf-share)/key-bindings.bash"
-	source "$(fzf-share)/completion.bash"
+# When using ble.sh, these are handled via ble-import in blerc
+if [[ -z "${BLE_VERSION:-}" ]]; then
+	if command -v fzf-share >/dev/null; then
+		source "$(fzf-share)/key-bindings.bash"
+		source "$(fzf-share)/completion.bash"
+	fi
 fi
 
 # Env variables.

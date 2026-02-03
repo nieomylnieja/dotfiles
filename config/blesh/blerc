@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+# Use LS_COLORS from dircolors for file name highlighting
+bleopt filename_ls_colors="$LS_COLORS"
+
+# Load Nord color scheme
+source "$DOTFILES/config/blesh/scheme/nord.bash"
+
+# Enable vi editing mode in ble.sh
+bleopt default_keymap=vi
+
+# Vi keymap configuration (must run after keymap_vi loads)
+function blerc/vim-mode-hook {
+  # Custom widget to copy yanked text to system clipboard
+  function ble/widget/my/copy-to-clipboard {
+    # Check if there's anything in the kill ring
+    if ((${#_ble_edit_kill_ring[@]})); then
+      # Copy the most recent kill ring entry to clipboard
+      printf '%s' "${_ble_edit_kill_ring[0]}" | wl-copy
+    fi
+  }
+
+  # Custom widget to yank and copy to clipboard
+  function ble/widget/my/visual-yank-and-copy {
+    ble/widget/vi-command/yank
+    ble/widget/my/copy-to-clipboard
+  }
+
+  # Disables the mode line (use empty value, not 0)
+  bleopt keymap_vi_mode_show=
+
+  # Change cursor for each mode
+  ble-bind -m vi_nmap --cursor 2
+  ble-bind -m vi_imap --cursor 5
+  ble-bind -m vi_omap --cursor 4
+  ble-bind -m vi_xmap --cursor 2
+  ble-bind -m vi_cmap --cursor 0
+
+  # Use vim-surround bindings like `ys` or `cs`
+  ble-import vim-surround
+
+  # Bind 'y' in visual mode to yank and copy to clipboard
+  ble-bind -m vi_xmap -f y my/visual-yank-and-copy
+}
+blehook/eval-after-load keymap_vi blerc/vim-mode-hook
+
+# FZF integration
+ble-import integration/fzf-completion
+ble-import integration/fzf-key-bindings
+
+# Load custom fzf configuration
+if [[ -f "$DOTFILES/config/fzf/config.sh" ]]; then
+  source "$DOTFILES/config/fzf/config.sh"
+fi
