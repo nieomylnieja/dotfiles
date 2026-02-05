@@ -112,6 +112,7 @@ local servers = {
   templ = {},
   html = {},
   htmx = {},
+  cssls = {},
   tailwindcss = {},
   postgres_lsp = {},
   ansiblels = {},

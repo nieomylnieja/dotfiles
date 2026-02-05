@@ -136,6 +136,7 @@ return {
         "templ",
         "html-lsp",
         "htmx-lsp",
+        "css-lsp",
         "tailwindcss-language-server",
         "postgres-language-server",
         "ansible-language-server",
@@ -584,6 +585,9 @@ return {
           api.tree.toggle_hidden_filter()
           api.tree.toggle_gitignore_filter()
         end, opts("Toggle Hidden & Gitignored"))
+        -- Replace C-X with C-H for horizontal split
+        vim.keymap.del("n", "<C-x>", { buffer = bufnr })
+        vim.keymap.set("n", "<C-h>", api.node.open.horizontal, opts("Open: Horizontal Split"))
       end
       require("nvim-tree").setup({
         sync_root_with_cwd = true,
@@ -645,6 +649,16 @@ return {
           accept_word = "<C-j>",
         },
       })
+    end,
+  },
+  {
+    "Jezda1337/nvim-html-css",
+    dependencies = {
+      "nvim-treesitter/nvim-treesitter",
+      "nvim-lua/plenary.nvim",
+    },
+    config = function()
+      require("html-css"):setup()
     end,
   },
   {
