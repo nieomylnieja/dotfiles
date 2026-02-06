@@ -205,6 +205,12 @@ M.setup = function()
         client.server_capabilities.hoverProvider = false
       end
       keymap(bufnr, server)
+
+      -- Attach nvim-navic only for HTML files
+      if vim.bo[bufnr].filetype == "html" and client.server_capabilities.documentSymbolProvider then
+        local navic = require("nvim-navic")
+        navic.attach(client, bufnr)
+      end
     end
   end
 

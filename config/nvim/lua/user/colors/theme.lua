@@ -578,6 +578,13 @@ theme.loadPlugins = function()
     MarkviewHeading4Sign = { fg = nord.teal },
     MarkviewHeading5Sign = { fg = nord.off_blue },
     MarkviewHeading6Sign = { fg = nord.klue },
+
+    -- Treesitter Context
+    TreesitterContext = { bg = nord.gray },
+    TreesitterContextLineNumber = { fg = nord.light_gray },
+    TreesitterContextSeparator = { fg = nord.light_gray },
+    TreesitterContextBottom = { style = "underline", sp = nord.light_gray },
+    TreesitterContextLineNumberBottom = { style = "underline", sp = nord.light_gray },
   }
 end
 

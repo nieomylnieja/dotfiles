@@ -35,6 +35,9 @@ return {
     "nvim-treesitter/nvim-treesitter",
     build = ":TSUpdate",
     branch = "main",
+    dependencies = {
+      "andymass/vim-matchup",
+    },
     config = function()
       local ts = require("nvim-treesitter")
       ts.install({
@@ -51,8 +54,15 @@ return {
         "yaml",
         "asm",
         "c",
+        "html",
       })
       require("user.treesitter").install_and_start()
+    end,
+  },
+  {
+    "andymass/vim-matchup",
+    config = function()
+      vim.g.matchup_matchparen_offscreen = {}
     end,
   },
   {
@@ -72,6 +82,56 @@ return {
         move = {
           set_jumps = true,
         },
+      })
+    end,
+  },
+  {
+    "nvim-treesitter/nvim-treesitter-context",
+    opts = {
+      enable = true,
+      max_lines = 3,
+      trim_scope = "outer",
+      mode = "topline",
+      separator = "-",
+      on_attach = function(buf)
+        return vim.bo[buf].filetype == "html"
+      end,
+    },
+  },
+  {
+    "SmiteshP/nvim-navic",
+    dependencies = { "neovim/nvim-lspconfig" },
+    opts = {
+      highlight = true,
+      separator = " > ",
+      depth_limit = 0,
+      depth_limit_indicator = "..",
+      icons = {
+        enabled = false,
+      },
+    },
+    config = function(_, opts)
+      require("nvim-navic").setup(opts)
+      -- Keybinding to show location on-demand for HTML files
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "html",
+        callback = function(ev)
+          vim.keymap.set("n", "<leader>.", function()
+            local navic = require("nvim-navic")
+            if not navic.is_available() then
+              return
+            end
+
+            local location = navic.get_location()
+            if location == "" then
+              return
+            end
+
+            -- Strip all statusline formatting codes and special characters
+            local clean = location:gsub("%%#[^#]+#", ""):gsub("%%*", ""):gsub("%*", "")
+            vim.notify(clean, vim.log.levels.INFO, { title = "HTML Context" })
+          end, { buffer = ev.buf, desc = "Show HTML context" })
+        end,
       })
     end,
   },
@@ -500,7 +560,18 @@ return {
   {
     "NvChad/nvim-colorizer.lua",
     config = function()
-      require("colorizer").setup({})
+      require("colorizer").setup({
+        filetypes = {
+          "*",
+          cmp_docs = { always_update = true },
+        },
+        user_default_options = {
+          mode = "background",
+          css = true,
+          tailwind = true,
+          sass = { enable = true, parsers = { "css" } },
+        },
+      })
     end,
   },
   {
@@ -624,6 +695,9 @@ return {
     config = function()
       require("nvim-ts-autotag").setup()
     end,
+  },
+  {
+    "RRethy/nvim-treesitter-endwise",
   },
   {
     "bullets-vim/bullets.vim",

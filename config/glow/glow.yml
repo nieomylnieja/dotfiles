@@ -1,5 +1,5 @@
 # Nord theme for glow
-style: "nord.json"
+style: "~/.config/glow/nord.json"
 
 # show local files only; no network (TUI-mode only)
 local: false
