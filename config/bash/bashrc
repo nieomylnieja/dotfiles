@@ -16,6 +16,8 @@ shopt -s direxpand
 # Set VIM prompt
 alias vim='nvim'
 set -o vi
+export EDITOR=nvim
+export VISUAL=nvim
 
 #ignore upper and lowercase when TAB completion
 bind "set completion-ignore-case on"
@@ -121,6 +123,14 @@ export HISTFILESIZE=10000
 if [ -x "$(command -v spicetify-cli)" ]; then
   export SPICETIFY_INSTALL="$HOME/spicetify-cli"
   export PATH="$SPICETIFY_INSTALL:$PATH"
+fi
+
+# goenv - place before pyenv as recommended in docs
+# goenv init manipulates PATH, so should be toward the end
+if [ -d "$HOME/.goenv" ]; then
+  export GOENV_ROOT="$HOME/.goenv"
+  export PATH="$GOENV_ROOT/bin:$PATH"
+  eval "$(goenv init -)"
 fi
 
 # pyenv path -- place it toward the end of bashrc

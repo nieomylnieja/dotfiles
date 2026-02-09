@@ -41,7 +41,7 @@ set recolor-darkcolor		"#d8dee9"
 set render-loading-bg		"#2e3440"
 set render-loading-fg		"#d8dee9"
 
-set highlight-color		      "#88c0d0"
-set highlight-active-color	"#5e81ac"
+set highlight-color		      "#88c0d080"
+set highlight-active-color	"#5e81acB0"
 
 set adjust-open			"width"
