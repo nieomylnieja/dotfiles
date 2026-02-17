@@ -31,12 +31,14 @@ M.setup = function(lsp_config)
         diagnostic.severity = vim.diagnostic.severity.HINT
       end,
     }),
+    lint.markdownlint,
     -- FORMATTING:
     fmt.stylua,
     require("none-ls.formatting.golangci_lint"),
     fmt.ocamlformat,
     fmt.shfmt,
     fmt.terraform_fmt,
+    fmt.markdownlint,
     -- ACTIONS:
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },

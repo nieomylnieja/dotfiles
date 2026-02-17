@@ -57,6 +57,7 @@ in
     git
     glibcLocales
     glow
+    go
     gotestsum
     grim # Required by flameshot to work on wayland.
     simple-scan
@@ -74,6 +75,7 @@ in
     jetbrains.goland
     jetbrains.jdk # JDK for plugin development.
     jq
+    jc
     krita
     lesspipe
     libsForQt5.qt5ct
@@ -149,24 +151,6 @@ in
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/vscode/settings.json ${config.xdg.configHome}/Code/User/settings.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/cspell/cspell.json ${config.xdg.configHome}/cspell/cspell.json
     '';
-
-    # In order to be able to have the latest Go version we can't rely on nixpkgs.
-    installGoenv = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      GOENV_ROOT="${homeDir}/.goenv"
-
-      if [ ! -d "$GOENV_ROOT" ]; then
-        run echo "Installing goenv..."
-        # Use git with explicit HTTPS protocol and make ssh available
-        export PATH="${pkgs.openssh}/bin:$PATH"
-        $DRY_RUN_CMD ${pkgs.git}/bin/git clone --config url."https://".insteadOf=git:// https://github.com/go-nv/goenv.git "$GOENV_ROOT"
-        run echo "goenv installed to $GOENV_ROOT"
-        run echo "To install Go, run: goenv install <version>"
-        run echo "To set global version: goenv global <version>"
-        run echo "List available versions: goenv install --list"
-      else
-        run echo "goenv already installed at $GOENV_ROOT"
-      fi
-    '';
   };
 
   home.file = {
@@ -226,8 +210,8 @@ in
     EDITOR = "nvim";
     _JAVA_AWT_WM_NONREPARENTING = "1";
     GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
-    GOENV_ROOT = "${homeDir}/.goenv";
     GOPATH = "${homeDir}/go";
+    STARSHIP_LOG = "error";
   };
 
   programs.direnv = {
@@ -314,14 +298,19 @@ in
   };
 
   # Claude code
-  programs.claude-code = {
-    enable = true;
-    settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
-    mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
-    skills = {
-      "golang" = ../claude/skills/golang;
+  programs.claude-code =
+    let
+      skillsDir = ../claude/skills;
+      skillEntries = builtins.readDir skillsDir;
+      skillDirs = lib.filterAttrs (name: type: type == "directory") skillEntries;
+      skillsPaths = builtins.mapAttrs (name: _: skillsDir + "/${name}") skillDirs;
+    in
+    {
+      enable = true;
+      settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
+      mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
+      skills = skillsPaths;
     };
-  };
 
   programs.gemini-cli = {
     enable = true;

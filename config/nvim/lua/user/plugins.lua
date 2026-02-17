@@ -202,6 +202,7 @@ return {
         "ansible-language-server",
         "clangd",
         "asm-lsp",
+        "marksman",
         -- Linters/formatters
         "actionlint",
         "stylua",
@@ -213,6 +214,7 @@ return {
         "gofumpt",
         "cspell",
         "golangci-lint",
+        "markdownlint",
         -- Code Actions
         "gomodifytags",
         "impl",
@@ -575,14 +577,6 @@ return {
     end,
   },
   {
-    "DrKJeff16/project.nvim",
-    dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
-    config = function()
-      require("project").setup({})
-      require("telescope").load_extension("projects")
-    end,
-  },
-  {
     "sindrets/diffview.nvim",
     config = function()
       require("diffview").setup({
@@ -751,5 +745,9 @@ return {
         },
       })
     end,
+  },
+  {
+    "timantipov/md-table-tidy.nvim",
+    opts = { padding = 1 },
   },
 }

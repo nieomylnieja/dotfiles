@@ -29,6 +29,18 @@
   boot.loader.systemd-boot.graceful = true;
   boot.loader.efi.canTouchEfiVariables = false;
 
+  # Intel GPU optimizations for gaming
+  boot.kernelParams = [
+    "i915.enable_guc=2"           # Enable GuC/HuC firmware loading
+    "i915.enable_fbc=1"            # Enable framebuffer compression
+    "i915.fastboot=1"              # Fastboot support
+  ];
+
+  # Allow debuggers (like GoLand) to attach to running processes.
+  boot.kernel.sysctl = {
+    "kernel.yama.ptrace_scope" = 0;
+  };
+
   # Define your hostname.
   networking.hostName = "nixos";
   # Uses NetworkManager to obtain an IP address and other configuration
@@ -132,6 +144,17 @@
   # Bluetooth
   hardware.bluetooth.enable = true;
 
+  # Intel GPU graphics drivers and OpenGL/Vulkan support
+  hardware.graphics = {
+    enable = true;
+    enable32Bit = true; # Required for 32-bit games like Mount & Blade
+    extraPackages = with pkgs; [
+      intel-media-driver  # LIBVA_DRIVER_NAME=iHD
+      intel-vaapi-driver  # LIBVA_DRIVER_NAME=i965
+      vpl-gpu-rt          # For Intel Quick Sync Video
+    ];
+  };
+
   # Enable touchpad support (enabled default in most desktopManager).
   services.libinput.enable = true;
 
@@ -144,6 +167,10 @@
 
   # Support unpatched binaries out of the box.
   programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    # Required for marksman Markdown LSP.
+    icu
+  ];
 
   # Execute shebangs which assume hard coded locations.
   services.envfs.enable = true;

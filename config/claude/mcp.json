@@ -17,6 +17,23 @@
         "-y",
         "@modelcontextprotocol/server-sequential-thinking"
       ]
+    },
+    "atlassian": {
+      "type": "sse",
+      "url": "https://mcp.atlassian.com/v1/sse"
+    },
+    "nobl9": {
+      "command": "sloctl",
+      "args": [
+        "mcp"
+      ]
+    },
+    "grafana": {
+      "command": "mcp-grafana",
+      "env": {
+        "GRAFANA_URL": "${GRAFANA_API_URL}",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_API_TOKEN}"
+      }
     }
   }
 }

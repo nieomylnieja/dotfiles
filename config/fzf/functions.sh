@@ -576,6 +576,33 @@ fkill() {
 }
 
 # -----------------------------------------------------------------------------
+# kubernetes
+# -----------------------------------------------------------------------------
+
+# fzf-kpod-widget - Select and copy kubernetes pod name
+fzf-kpod-widget() {
+  local pod
+
+  pod="$(
+    kubectl get pod 2>/dev/null |
+      sed 1d |
+      fzf \
+        --header='Select pod to copy' \
+        --preview='kubectl describe pod {1}' \
+        --preview-window='right:60%:wrap' |
+      awk '{print $1}'
+  )" || return
+
+  if [[ -n "$pod" ]]; then
+    echo -n "$pod" | wl-copy
+    echo "Pod name copied to clipboard: $pod"
+  fi
+}
+
+# Bind Ctrl+P to the kpod widget
+bind -x '"\C-p": fzf-kpod-widget'
+
+# -----------------------------------------------------------------------------
 # tags
 # -----------------------------------------------------------------------------
 

@@ -15,20 +15,33 @@ local servers = {
         experimentalPostfixCompletions = true,
         usePlaceholders = false,
         staticcheck = true,
-        -- Remove poorly supported tokens.
-        -- For example, currently gopls does not allow to discern between a boolean and a variable...
         semanticTokens = true,
         completeUnimported = true,
+        completeFunctionCalls = true,
         -- Symbols are important for things like goimpl.
         symbolMatcher = "FastFuzzy",
         symbolStyle = "Package",
         symbolScope = "all",
+        linksInHover = true,
+        vulncheck = "Imports",
+        -- Compiler optimization annotations
+        annotations = {
+          bounds = true,
+          escape = true,
+          inline = true,
+          ["nil"] = true,
+        },
         analyses = {
           unreachable = true,
           nilness = true,
           shadow = true,
           unusedparams = true,
           unusewrites = true,
+          fillreturns = true,
+          nonewvars = true,
+          fieldalignment = true,
+          undeclaredname = true,
+          unusedvariable = true,
         },
         hints = {
           assignVariableTypes = true,
@@ -118,6 +131,7 @@ local servers = {
   ansiblels = {},
   clangd = {},
   asm_lsp = {},
+  marksman = {},
 }
 
 local function lsp_format()
@@ -203,6 +217,9 @@ M.setup = function()
     return function(client, bufnr)
       if server == "ruff_lsp" then
         client.server_capabilities.hoverProvider = false
+      end
+      if server == "cssls" then
+        client.server_capabilities.documentFormattingProvider = false
       end
       keymap(bufnr, server)
 
