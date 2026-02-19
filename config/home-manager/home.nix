@@ -38,6 +38,7 @@ in
     cargo
     cliphist
     csvkit
+    codex
     delta
     direnv
     discord
@@ -97,6 +98,7 @@ in
     obsidian
     ocaml
     opam
+    opencode
     openssl
     pamixer
     pass
@@ -239,15 +241,15 @@ in
       gtk4
       nss
       nspr
-      xorg.libX11
-      xorg.libxcb
-      xorg.libXcomposite
-      xorg.libXdamage
-      xorg.libXext
-      xorg.libXfixes
-      xorg.libXrandr
-      xorg.libxkbfile
-      xorg.libxshmfence
+      libx11
+      libxcb
+      libxcomposite
+      libxdamage
+      libxext
+      libxfixes
+      libxrandr
+      libxkbfile
+      libxshmfence
       pango
       pciutils
       stdenv.cc.cc
