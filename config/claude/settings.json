@@ -32,7 +32,7 @@
   },
   "permissions": {
     "allow": [
-      "Skill(find-skills)",
+      "Skill",
       "WebSearch",
       "WebFetch(domain:github.com)",
       "Bash(git log:*)",

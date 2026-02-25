@@ -34,6 +34,7 @@ in
     bottom
     # blesh TODO: try making it work better
     brightnessctl
+    bun
     cachix
     cargo
     cliphist
