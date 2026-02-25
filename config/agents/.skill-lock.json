@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "skills": {
+    "pdf": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/skills.git",
+      "skillPath": "skills/pdf/SKILL.md",
+      "skillFolderHash": "6369f4649de69bd6857c9bc3b058a77206009238",
+      "installedAt": "2026-02-24T17:09:00.935Z",
+      "updatedAt": "2026-02-24T17:09:00.935Z"
+    }
+  },
+  "dismissed": {}
+}

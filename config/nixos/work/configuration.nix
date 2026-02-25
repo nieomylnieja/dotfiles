@@ -31,9 +31,9 @@
 
   # Intel GPU optimizations for gaming
   boot.kernelParams = [
-    "i915.enable_guc=2"           # Enable GuC/HuC firmware loading
-    "i915.enable_fbc=1"            # Enable framebuffer compression
-    "i915.fastboot=1"              # Fastboot support
+    "i915.enable_guc=2" # Enable GuC/HuC firmware loading
+    "i915.enable_fbc=1" # Enable framebuffer compression
+    "i915.fastboot=1" # Fastboot support
   ];
 
   # Allow debuggers (like GoLand) to attach to running processes.
@@ -149,9 +149,9 @@
     enable = true;
     enable32Bit = true; # Required for 32-bit games like Mount & Blade
     extraPackages = with pkgs; [
-      intel-media-driver  # LIBVA_DRIVER_NAME=iHD
-      intel-vaapi-driver  # LIBVA_DRIVER_NAME=i965
-      vpl-gpu-rt          # For Intel Quick Sync Video
+      intel-media-driver # LIBVA_DRIVER_NAME=iHD
+      intel-vaapi-driver # LIBVA_DRIVER_NAME=i965
+      vpl-gpu-rt # For Intel Quick Sync Video
     ];
   };
 
@@ -162,7 +162,7 @@
   users.users.mh = {
     isNormalUser = true;
     description = "Mateusz";
-    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" "vboxusers" ];
+    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" "vboxusers" "input" ];
   };
 
   # Support unpatched binaries out of the box.
@@ -248,6 +248,8 @@
     dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
     localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
   };
+
+  programs.gamemode.enable = true;
 
   systemd.services.jumpcloud-agent = {
     enable = true;

@@ -1,6 +1,11 @@
-update:
+update: update/flakes update/skills
+
+update/flakes:
 	nix flake update --commit-lock-file
 	nix flake update --flake ./config/home-manager --commit-lock-file
+
+update/skills:
+	npx skills update
 
 rebuild:
 	sudo nixos-rebuild switch --flake .#work

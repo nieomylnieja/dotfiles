@@ -39,4 +39,13 @@ gh api graphql -f query="query {
       }
     }
   }
-}" --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | {path: .comments.nodes[0].path, line: .comments.nodes[0].line, body: .comments.nodes[0].body, isOutdated}'
+}" \
+  --jq '
+    .data.repository.pullRequest.reviewThreads.nodes[] |
+      select(.isResolved == false) |
+      {
+        path: .comments.nodes[0].path,
+        line: .comments.nodes[0].line,
+        body: .comments.nodes[0].body,
+        isOutdated
+      }'

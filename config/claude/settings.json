@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "statusLine": {
     "type": "command",
-    "command": "python3 /home/mh/.dotfiles/config/claude/scripts/statusline.py",
+    "command": "npx -y @owloops/claude-powerline@latest --theme=nord --style=powerline",
     "padding": 0
   },
   "extraKnownMarketplaces": {
@@ -32,21 +32,28 @@
   },
   "permissions": {
     "allow": [
+      "Skill(find-skills)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(fd:*)",
       "Bash(ls:*)",
       "Bash(rg:*)",
       "Bash(make:*)",
+      "Bash(just:*)",
       "Bash(go:*)",
       "Bash(gh issue view:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr diff:*)",
       "Bash(gh run view:*)",
-      "mcp__Context7__resolve-library-id",
-      "mcp__Context7__get-library-docs",
       "Bash(kubectl get:*)",
-      "mcp__grafana__get_*"
+      "Bash(kubectl describe:*)",
+      "Bash(kubectl explain:*)",
+      "mcp__Context7__*",
+      "mcp__grafana__get_*",
+      "mcp__atlassian__get*",
+      "mcp__deepwiki__*"
     ],
     "deny": [
       "Read(*.env)"

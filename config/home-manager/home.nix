@@ -41,7 +41,10 @@ in
     codex
     delta
     direnv
-    discord
+    # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
+    (pkgs.writeShellScriptBin "discord" ''
+      exec env NIXOS_OZONE_WL="" ${pkgs.discord}/bin/discord "$@"
+    '')
     distrobox
     dust
     dunst
@@ -75,8 +78,9 @@ in
     pkgs.stable.inkscape-with-extensions
     jetbrains.goland
     jetbrains.jdk # JDK for plugin development.
-    jq
     jc
+    jq
+    just
     krita
     lesspipe
     libsForQt5.qt5ct
@@ -113,6 +117,7 @@ in
     kubecolor
     kubefwd
     ripgrep
+    repomix
     # rpi-imager
     rustc
     kubernetes-helm
@@ -152,12 +157,13 @@ in
       run [ -d ${config.xdg.configHome}/waybar ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/waybar ${config.xdg.configHome}/waybar
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/vscode/settings.json ${config.xdg.configHome}/Code/User/settings.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/cspell/cspell.json ${config.xdg.configHome}/cspell/cspell.json
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents ${homeDir}/.agents
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/skills ${homeDir}/.claude/skills
     '';
   };
 
   home.file = {
     ".bash_logout".source = ../bash/bash_logout;
-    ".claude/CLAUDE.md".source = ../claude/CLAUDE.md;
   };
 
   programs.bash = {
@@ -214,6 +220,7 @@ in
     GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
     GOPATH = "${homeDir}/go";
     STARSHIP_LOG = "error";
+    SKILLS_AGENTS = "opencode"; # claude-code is already linked, so no need to install it
   };
 
   programs.direnv = {
@@ -299,20 +306,13 @@ in
     };
   };
 
-  # Claude code
-  programs.claude-code =
-    let
-      skillsDir = ../claude/skills;
-      skillEntries = builtins.readDir skillsDir;
-      skillDirs = lib.filterAttrs (name: type: type == "directory") skillEntries;
-      skillsPaths = builtins.mapAttrs (name: _: skillsDir + "/${name}") skillDirs;
-    in
-    {
-      enable = true;
-      settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
-      mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
-      skills = skillsPaths;
-    };
+  # Claude Code - settings and CLAUDE.md via HM module (stable config)
+  programs.claude-code = {
+    enable = true;
+    settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
+    mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
+    memory.source = ../claude/CLAUDE.md;
+  };
 
   programs.gemini-cli = {
     enable = true;
