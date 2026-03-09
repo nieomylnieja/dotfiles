@@ -90,6 +90,12 @@ map("n", "<leader>glo", "", {
     require("user.git-permalink").create_open(".")
   end,
 })
+map("n", "<leader>glb", "", {
+  desc = "Open commit that modified current line in GitHub",
+  callback = function()
+    require("user.git-permalink").open_line_commit()
+  end,
+})
 
 -- spelling
 map("n", "z=", "<cmd>:lua require'telescope.builtin'.spell_suggest{}<cr>", { desc = "Spelling suggestions" })

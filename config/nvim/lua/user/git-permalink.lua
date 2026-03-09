@@ -66,4 +66,45 @@ M.create_copy_open = function(mode)
   return permalink
 end
 
+M.open_line_commit = function()
+  local file = vim.fn.expand("%:p")
+  local line = vim.fn.line(".")
+
+  -- Check if file is tracked by git
+  local is_tracked = vim.fn.system("git ls-files --error-unmatch " .. vim.fn.shellescape(file) .. " 2>/dev/null")
+  if vim.v.shell_error ~= 0 then
+    print("File not tracked by git")
+    return
+  end
+
+  -- Get commit hash for the line using git blame
+  local blame_output = vim.trim(vim.fn.system(
+    string.format("git blame -L %d,%d --porcelain %s", line, line, vim.fn.shellescape(file))
+  ))
+
+  if vim.v.shell_error ~= 0 then
+    print("Failed to run git blame")
+    return
+  end
+
+  -- Extract commit hash (first line of porcelain output)
+  local commit_hash = blame_output:match("^([%w]+)")
+
+  if not commit_hash or commit_hash == "0000000000000000000000000000000000000000" then
+    print("Line not committed yet")
+    return
+  end
+
+  -- Get remote URL
+  local origin = vim.trim(vim.fn.system("git remote get-url --push origin"))
+  local origin_url, _ = string.gsub(origin, "git@(.+):(.+)%.git", "https://%1/%2")
+
+  -- Construct commit URL
+  local commit_url = origin_url .. "/commit/" .. commit_hash
+
+  print("Opening commit: " .. commit_hash:sub(1, 7))
+  open_link(commit_url)
+  return commit_url
+end
+
 return M
