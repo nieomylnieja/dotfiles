@@ -4,15 +4,17 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/fatih/color"
 )
 
-//go:embed git-commit-rules.md
-var systemPrompt string
+//go:embed base-system-prompt.md
+var baseSystemPrompt string
 
 // LLMProvider is an interface for LLM providers
 type LLMProvider interface {
@@ -25,6 +27,13 @@ type ClaudeClient struct {
 }
 
 func NewClaudeClient() *ClaudeClient {
+	systemPrompt := baseSystemPrompt
+
+	// Try to load and append the Overview section from the skill file
+	if overview := loadSkillOverview(); overview != "" {
+		systemPrompt = systemPrompt + "\n\n" + overview
+	}
+
 	return &ClaudeClient{
 		systemPrompt: systemPrompt,
 	}
@@ -121,4 +130,42 @@ func (c *ClaudeClient) cleanResponse(response string) string {
 	}
 
 	return strings.TrimSpace(strings.Join(cleanedLines, "\n"))
+}
+
+// loadSkillOverview reads the Overview section from the git-commit skill file
+func loadSkillOverview() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	skillPath := filepath.Join(home, ".dotfiles", "config", "agents", "skills", "git-commit", "SKILL.md")
+	content, err := os.ReadFile(skillPath)
+	if err != nil {
+		return ""
+	}
+	return extractOverviewSection(string(content))
+}
+
+// extractOverviewSection extracts the ## Overview section and all its subsections
+func extractOverviewSection(content string) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+	inOverview := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "## Overview") {
+			inOverview = true
+			result = append(result, line)
+			continue
+		}
+		if inOverview && strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "## Overview") {
+			break
+		}
+		if inOverview {
+			result = append(result, line)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(result, "\n"))
 }
