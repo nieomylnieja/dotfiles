@@ -48,6 +48,7 @@
       "Search",
       "WebSearch",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:githubusercontent.com)",
       "Bash(git log*)",
       "Bash(git show*)",
       "Bash(git status*)",

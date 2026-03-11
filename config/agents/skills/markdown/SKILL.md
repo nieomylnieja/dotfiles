@@ -1,6 +1,9 @@
 ---
-name: markdown-format
-description: Use this skill when writing or formatting Markdown files.
+name: markdown
+description: |
+  Use this skill when writing or formatting Markdown files.
+  For instance, when writing or modyfing a SKILL.md file, or documenting README.md.
+allowed-tools: Bash(markdownlint *) Bash(markdownfmt *) Bash(markdown-link-check *)
 ---
 
 
@@ -8,6 +11,31 @@ description: Use this skill when writing or formatting Markdown files.
 
 Guidelines for writing well-formatted markdown documents
 with emphasis on semantic line breaks.
+
+## Linting
+
+Use `markdownlint --config=~/.dotfiles/.makrdownlint.yaml '<filepath>'`
+to lint the files.
+You can automatically do some formatting with `markdownfmt` command too.
+
+## Links vs Code Fences
+
+When referencing a named external resource (library, package, tool, URL),
+prefer a **markdown link** over a bare code fence:
+
+```md
+<!-- WRONG — just a code fence, not navigable: -->
+`github.com/go-chi/chi`
+
+<!-- RIGHT — linked and formatted: -->
+[github.com/go-chi/chi](https://github.com/go-chi/chi)
+```
+
+Use a bare code fence only for:
+
+- Standard library packages with no meaningful canonical URL
+  (e.g., `` `log/slog` ``, `` `encoding/json` ``)
+- Inline code that is not a reference to an external resource
 
 ## Semantic Line Breaks
 
@@ -34,16 +62,20 @@ To understand the benefit of semantic line breaks,
 consider the following paragraph from the
 [*Universal Declaration of Human Rights*](http://www.un.org/en/universal-declaration-human-rights/):
 
+<!-- markdownlint-disable MD013 -->
 > All human beings are born free and equal in dignity and rights. They are endowed with reason and> conscience and should act towards one another in a spirit of brotherhood.
+<!-- markdownlint-enable MD013 -->
 
 Without any line breaks at all,
 this paragraph appears in source as a long, continuous line of text
 (which may be automatically wrapped at a fixed column length,
 depending on your editor settings):
 
+<!-- markdownlint-disable MD013 -->
 ```md
 All human beings are born free and equal in dignity and rights. They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.
 ```
+<!-- markdownlint-enable MD013 -->
 
 Adding a line break after each sentence
 makes it easier to understand the shape and structure of the source text:
@@ -69,6 +101,7 @@ and should act towards one another in a spirit of brotherhood.
 Despite these changes made to the source,
 the final rendered output remains the same:
 
+<!-- markdownlint-disable-next-line MD013 -->
 > All human beings are born free and equal in dignity and rights. They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.
 
 By inserting line breaks at semantic boundaries,

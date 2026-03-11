@@ -1,7 +1,7 @@
 ---
 name: html-to-markdown
 description: Extract clean markdown content from web pages, removing clutter and navigation to save tokens. Use instead of WebFetch when the user provides a URL to read or analyze, for online documentation, articles, blog posts, or any standard web page.
-allowed-tools: Bash(bun run scripts/index.ts*)
+allowed-tools: Bash(*bun run scripts/index.ts*)
 ---
 
 # HTML to Markdown

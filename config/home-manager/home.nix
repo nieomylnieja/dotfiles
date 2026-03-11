@@ -99,6 +99,8 @@ in
     man-pages
     mesa
     mirrord
+    markdownlint-cli
+    markdown-link-check
     moreutils
     nemo-with-extensions
     nerd-fonts.mononoki
