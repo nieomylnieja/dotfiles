@@ -56,6 +56,7 @@ in
     dust
     dunst
     eza
+    fastfetch
     fd
     file
     flameshot
@@ -101,7 +102,6 @@ in
     moreutils
     nemo-with-extensions
     nerd-fonts.mononoki
-    neofetch
     neovim
     nixpkgs-fmt
     nushell
