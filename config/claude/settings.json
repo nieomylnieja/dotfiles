@@ -6,6 +6,10 @@
     "padding": 0
   },
   "cleanupPeriodDays": 99999,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "extraKnownMarketplaces": {
     "anthropic-agent-skills": {
       "source": {
@@ -24,12 +28,19 @@
         "source": "github",
         "repo": "timescale/pg-aiguide"
       }
+    },
+    "my-plugins": {
+      "source": {
+        "source": "directory",
+        "path": "/home/mh/.dotfiles/config/claude/my-plugins"
+      }
     }
   },
   "enabledPlugins": {
     "pr-review-toolkit@claude-code-plugins": true,
     "frontend-design@claude-code-plugins": true,
-    "pg@aiguide": true
+    "pg@aiguide": true,
+    "gopls-lsp@my-plugins": true
   },
   "permissions": {
     "allow": [

@@ -18,6 +18,15 @@
       "skillFolderHash": "5c26c1472b98de33a48074ba5d3efe3a727b8e37",
       "installedAt": "2026-02-25T16:17:31.991Z",
       "updatedAt": "2026-02-25T16:17:31.991Z"
+    },
+    "gh-cli": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/github/awesome-copilot.git",
+      "skillPath": "skills/gh-cli/SKILL.md",
+      "skillFolderHash": "437437f7f20bcdbbdb3081cf164435a388c0a39a",
+      "installedAt": "2026-03-11T10:31:33.399Z",
+      "updatedAt": "2026-03-11T10:31:33.399Z"
     }
   },
   "dismissed": {}

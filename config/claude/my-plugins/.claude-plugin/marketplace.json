@@ -1,0 +1,14 @@
+{
+  "name": "my-plugins",
+  "owner": {
+    "name": "nieomylnieja"
+  },
+  "plugins": [
+    {
+      "name": "gopls-lsp",
+      "source": "./gopls-lsp",
+      "version": "1.0.0",
+      "description": "Go language server (gopls) integration for real-time code intelligence"
+    }
+  ]
+}
