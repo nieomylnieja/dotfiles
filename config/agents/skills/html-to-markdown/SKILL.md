@@ -1,11 +1,14 @@
 ---
 name: html-to-markdown
 description: Extract clean markdown content from web pages, removing clutter and navigation to save tokens. Use instead of WebFetch when the user provides a URL to read or analyze, for online documentation, articles, blog posts, or any standard web page.
+allowed-tools: Bash(bun run scripts/index.ts*)
 ---
 
 # HTML to Markdown
 
-Convert web pages to clean markdown. Uses `html-to-markdown-node` library to fetch URLs and convert HTML to markdown, removing clutter and reducing token usage compared to raw HTML.
+Convert web pages to clean markdown.
+Uses `html-to-markdown-node` library to fetch URLs and convert HTML to markdown,
+removing clutter and reducing token usage compared to raw HTML.
 
 ## Usage
 

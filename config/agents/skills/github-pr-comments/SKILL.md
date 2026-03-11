@@ -1,11 +1,11 @@
 ---
 name: github
-description: Use this skill when working with GitHub PRs, issues, and reviews.
+description: Use this skill when addressing GitHub PR comments.
 allowed-tools: Bash(scripts/get-unresolved-comments.sh)
 compatibility: Requires gh CLI to work
 ---
 
-## Addressing review comments
+# Addressing review comments
 
 **DO NOT resolve review threads. The user will resolve them manually.**
 
@@ -23,9 +23,11 @@ The user maintains control over comment resolution to ensure proper review workf
 
 ### Get Unresolved comments on Current PR
 
-Run the [script](./scripts/get-unresolved-comments.sh) to fetch unresolved review comments for the current branch's PR:
+Run the [script](./scripts/get-unresolved-comments.sh) to fetch unresolved
+review comments for the current branch's PR:
 
 This script automatically:
+
 - Detects the current repo and branch
 - Finds the associated PR
 - Fetches only unresolved review comments via GraphQL

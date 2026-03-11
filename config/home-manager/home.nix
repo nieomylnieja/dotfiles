@@ -43,9 +43,15 @@ in
     delta
     direnv
     # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
-    (pkgs.writeShellScriptBin "discord" ''
-      exec env NIXOS_OZONE_WL="" ${pkgs.discord}/bin/discord "$@"
-    '')
+    (pkgs.symlinkJoin {
+      name = "discord";
+      paths = [ pkgs.discord ];
+      buildInputs = [ pkgs.makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/bin/discord \
+          --set NIXOS_OZONE_WL ""
+      '';
+    })
     distrobox
     dust
     dunst
@@ -57,7 +63,6 @@ in
     fnm
     fzf
     gcc_multi
-    geminicommit
     gh
     git
     glibcLocales
