@@ -1,0 +1,23 @@
+{
+  "skill_name": "repo-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to understand how ripgrep works. Can you analyze https://github.com/BurntSushi/ripgrep and explain how it integrates the regex engine? I'm particularly interested in the architecture and how it achieves such fast search speeds.",
+      "expected_output": "A detailed explanation of ripgrep's regex engine integration, including file references to the relevant modules, explanation of the architecture (likely mentioning the regex-automata crate), and insights into performance optimizations. Should include specific file paths and code references.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Analyze the anthropics/anthropic-sdk-python repository and find examples of how to use streaming responses with the Messages API. Show me the code patterns and best practices.",
+      "expected_output": "Code examples showing streaming response usage, file references to examples or documentation within the repo, explanation of the streaming API patterns, and any relevant client setup required. Should include file:line references.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I want to understand FastAPI's dependency injection system. Clone tiangolo/fastapi and explain how Depends() works internally. What's the magic that makes it work?",
+      "expected_output": "Explanation of FastAPI's dependency injection mechanism, file references to the core implementation (likely in fastapi/dependencies.py or similar), code examples showing how Depends() is resolved at runtime, and explanation of the inspection/introspection mechanisms used.",
+      "files": []
+    }
+  ]
+}
