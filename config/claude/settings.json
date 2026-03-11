@@ -63,6 +63,7 @@
       "Bash(gh pr view*)",
       "Bash(gh pr diff*)",
       "Bash(gh run view*)",
+      "Bash(gh api repos*)",
       "Bash(kubectl get*)",
       "Bash(kubectl describe*)",
       "Bash(kubectl explain*)",
