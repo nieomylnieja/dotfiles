@@ -234,7 +234,35 @@ are not expected or are handled inside each goroutine.
 
 **Struct field ordering.**
 Group related fields.
-Place `sync.Mutex` directly above the fields it protects.
+Place `sync.Mutex` or `sync.RWMutex` directly above the fields it protects.
+
+**`sync.RWMutex` — only when reads dominate.**
+Default to `sync.Mutex`. Switch to `sync.RWMutex` only when profiling shows
+read contention and reads are overwhelmingly more frequent than writes (~90%+).
+`RWMutex` has higher internal overhead; for balanced or write-heavy workloads
+it is slower than a plain `Mutex`.
+
+```go
+type Cache struct {
+    mu    sync.RWMutex
+    items map[string]string
+}
+
+func (c *Cache) Get(key string) (string, bool) {
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    return c.items[key]
+}
+
+func (c *Cache) Set(key, value string) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.items[key] = value
+}
+```
+
+Never upgrade a read lock to a write lock without releasing first —
+it always deadlocks. Release `RUnlock`, then call `Lock`, then re-validate state.
 
 ---
 

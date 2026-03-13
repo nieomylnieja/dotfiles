@@ -3,6 +3,23 @@
 
 set -euo pipefail
 
+if [[ "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+get-unresolved-comments.sh — Fetch unresolved review comments for the current PR.
+
+Usage: get-unresolved-comments.sh
+
+Outputs one JSON object per unresolved review thread (to stdout):
+  path        File path the comment is on
+  line        Line number
+  body        Comment text
+  isOutdated  Whether the comment is outdated
+
+Exits with code 1 if no PR is found for the current branch.
+EOF
+  exit 0
+fi
+
 # Auto-detect repo and PR info
 REPO_INFO=$(gh repo view --json owner,name --jq '{owner: .owner.login, name: .name}')
 OWNER=$(echo "$REPO_INFO" | jq -r .owner)

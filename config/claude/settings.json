@@ -37,7 +37,6 @@
     }
   },
   "enabledPlugins": {
-    "pr-review-toolkit@claude-code-plugins": true,
     "frontend-design@claude-code-plugins": true,
     "pg@aiguide": true,
     "gopls-lsp@my-plugins": true
@@ -52,6 +51,7 @@
       "Bash(git log*)",
       "Bash(git show*)",
       "Bash(git status*)",
+      "Bash(git branch*)",
       "Bash(fd*)",
       "Bash(find*)",
       "Bash(ls*)",
@@ -63,6 +63,7 @@
       "Bash(gh issue view*)",
       "Bash(gh pr view*)",
       "Bash(gh pr diff*)",
+      "Bash(gh pr list*)",
       "Bash(gh run view*)",
       "Bash(gh api repos*)",
       "Bash(gh search*)",

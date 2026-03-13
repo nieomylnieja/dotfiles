@@ -3,6 +3,33 @@
 
 set -euo pipefail
 
+if [[ "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+get-pr-info.sh — Gather all information needed to create a GitHub Pull Request.
+
+Usage: get-pr-info.sh
+
+Outputs a JSON object to stdout with:
+  current_branch       Current git branch name
+  base_branch          Target branch (main/master)
+  on_main_or_master    Whether currently on main/master
+  has_upstream         Whether branch has a remote tracking branch
+  upstream_status      ahead | behind | up-to-date | diverged
+  commits              Array of {hash, message} objects
+  commits_count        Number of commits ahead of base
+  files_changed        Number of files changed
+  insertions           Lines added
+  deletions            Lines removed
+  uncommitted_changes  Whether there are uncommitted changes
+  uncommitted_files    Array of uncommitted file paths
+  pr_template          Contents of PR template file, if found
+  pr_template_path     Path to PR template file, if found
+  existing_pr_number   Number of existing PR for this branch, or null
+  existing_pr_url      URL of existing PR for this branch, or null
+EOF
+  exit 0
+fi
+
 echo "Gathering PR information..." >&2
 
 # Get current branch

@@ -68,7 +68,6 @@ in
     git
     glibcLocales
     glow
-    go
     gotestsum
     grim # Required by flameshot to work on wayland.
     simple-scan
@@ -159,6 +158,14 @@ in
 
   # Directories that need to be writable are symlinked instead of copied.
   home.activation = {
+    installGlobalNpmPackages = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run env PATH="${pkgs.nodejs}/bin:$PATH" ${pkgs.nodejs}/bin/npm install \
+        --global --prefix ${homeDir}/.npm-global \
+        --package-lock false \
+        $(${pkgs.jq}/bin/jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' \
+          ${dotfilesDir}/config/npm/global-packages.json)
+    '';
+
     createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
       run [ -d ${config.xdg.configHome}/hypr ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/hypr ${config.xdg.configHome}/hypr
@@ -167,6 +174,10 @@ in
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/cspell/cspell.json ${config.xdg.configHome}/cspell/cspell.json
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents ${homeDir}/.agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/skills ${homeDir}/.claude/skills
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${homeDir}/.claude/commands
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${homeDir}/.claude/agents
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${config.xdg.configHome}/opencode/agents
     '';
   };
 
@@ -320,6 +331,11 @@ in
     settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
     mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
     memory.source = ../claude/CLAUDE.md;
+  };
+
+  programs.go = {
+    enable = true;
+    env.GOPROXY = "https://proxy.golang.org,direct";
   };
 
   programs.gemini-cli = {

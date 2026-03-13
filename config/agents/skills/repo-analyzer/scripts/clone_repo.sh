@@ -7,6 +7,29 @@ set -euo pipefail
 # Usage: clone_repo.sh <repo_url> [branch]
 # Example: clone_repo.sh https://github.com/user/repo main
 
+if [[ "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+clone_repo.sh — Clone or update a git repository to an XDG-compliant location.
+
+Usage: clone_repo.sh <repo_url> [branch]
+
+Arguments:
+  repo_url  Full URL (https:// or git@) or short owner/repo form (assumes GitHub)
+  branch    Optional branch to check out after cloning
+
+Output (stdout): absolute path to the cloned repository directory
+
+Examples:
+  clone_repo.sh https://github.com/user/repo main
+  clone_repo.sh git@github.com:user/repo.git
+  clone_repo.sh user/repo
+
+Repositories are stored under $XDG_DATA_HOME/claude/repositories/<platform>/<org>/<repo>.
+If the repository already exists it is updated in place.
+EOF
+  exit 0
+fi
+
 if [ $# -lt 1 ]; then
   echo "Error: Repository URL required" >&2
   echo "Usage: $0 <repo_url> [branch]" >&2
