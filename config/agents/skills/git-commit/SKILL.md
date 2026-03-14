@@ -3,7 +3,7 @@ name: git-commit
 description: |
   Execute git commit with interactive confirmation.
   Use when user asks to commit changes, create a git commit, or mentions "/commit".
-allowed-tools: Bash(git commit *) Bash(git add *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(git show *) AskUserQuestion
+allowed-tools: Bash(*scripts/get-commit-info.sh) Bash(git commit *) Bash(git add *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(git show *) AskUserQuestion
 ---
 
 # Git commit
@@ -100,37 +100,47 @@ Also updates the export to include the new function.
 
 ### Step 1: Analyze current state
 
+Gather all commit information using the [helper script](scripts/get-commit-info.sh).
+
 ```bash
-# Check repository state
-git status --short
+# Get all commit info in one call
+commit_info=$(scripts/get-commit-info.sh)
 
-# Check for staged changes
-staged_files=$(git diff --cached --name-only)
-
-# Check for unstaged changes
-unstaged_files=$(git diff --name-only)
+# Parse JSON fields for easy access
+current_branch=$(echo "$commit_info" | jq -r .current_branch)
+has_staged=$(echo "$commit_info" | jq -r .has_staged)
+has_unstaged=$(echo "$commit_info" | jq -r .has_unstaged)
+nothing_to_commit=$(echo "$commit_info" | jq -r .nothing_to_commit)
+staged_files=$(echo "$commit_info" | jq -r .staged_files)
+unstaged_files=$(echo "$commit_info" | jq -r .unstaged_files)
+staged_stat=$(echo "$commit_info" | jq -r .staged_stat)
+staged_diff=$(echo "$commit_info" | jq -r .staged_diff)
+recent_commits=$(echo "$commit_info" | jq -r .recent_commits)
+issue_number=$(echo "$commit_info" | jq -r .issue_number)
 ```
 
 **Decision logic:**
 
-- If **staged files exist**: Use them (user explicitly staged what they want)
-- If **no staged files but unstaged exist**: Offer to stage them or cancel
-- If **nothing to commit**: Inform user and exit
+- If **staged files exist** (`has_staged == true`): Use them (user explicitly staged what they want)
+- If **no staged files but unstaged exist** (`has_unstaged == true`): Offer to stage them or cancel
+- If **nothing to commit** (`nothing_to_commit == true`): Inform user and exit
 
 ### Step 2: Show what files will be committed
 
+The `commit_info` from Step 1 already contains all the data needed.
+
 ```bash
-# For staged changes
-git diff --cached --stat
-echo ""
-echo "Files to be committed:"
-git diff --cached --name-status
+# Parse staged files list from commit_info
+echo "$staged_files" | jq -r '.[] | "\(.status)\t\(.path)"'
+
+# Show the stat summary
+echo "$staged_stat"
 ```
 
 **Display to user:**
 
-- Clear list of files
-- Change statistics (insertions/deletions)
+- Clear list of files (from `staged_files`)
+- Change statistics (from `staged_stat`)
 - File status (modified, added, deleted)
 - Brief summary of what changed
 
@@ -220,21 +230,18 @@ The skill automatically handles different repository states:
 
 ### Context-Aware Message Generation
 
-When generating commit messages, automatically analyze:
+When generating commit messages, use the pre-fetched data from Step 1:
 
-- **Recent commits**: Check `git log --oneline -5` for style patterns
-- **Branch name**: Extract issue numbers (e.g., `feature-123-foo` → suggest `#123`)
-- **Diff content**: Understand if it's a feature, fix, refactor, etc.
+- **Recent commits**: Use `recent_commits` field for style patterns (no extra `git log` needed)
+- **Branch name**: Use `issue_number` field — already extracted from `current_branch`
+- **Diff content**: Use `staged_diff` field to understand if it's a feature, fix, refactor, etc.
 
 ### Issue Reference Detection
 
-Automatically detect and suggest issue references from:
+The `issue_number` field from Step 1 already contains the extracted issue/ticket number (or `null`).
+Supports numeric (`#123`) and JIRA-style (`PROJ-789`) references from branch names.
 
-- Branch names: `feature-123-description` → `#123`
-- Branch names: `fix-456-bug` → `#456`
-- JIRA-style: `PROJ-789-feature` → `PROJ-789`
-
-If detected, suggest including in commit footer (user can accept/decline in edit step)
+If `issue_number != null`, suggest including it in the commit footer (user can accept/decline in edit step).
 
 ## Git Safety Protocol
 

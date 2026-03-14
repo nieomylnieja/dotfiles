@@ -52,6 +52,7 @@
       "Bash(git show*)",
       "Bash(git status*)",
       "Bash(git branch*)",
+      "Bash(echo*)",
       "Bash(fd*)",
       "Bash(find*)",
       "Bash(ls*)",
@@ -70,12 +71,14 @@
       "Bash(kubectl get*)",
       "Bash(kubectl describe*)",
       "Bash(kubectl explain*)",
+      "Bash(agent-browser*)",
       "Bash(* --version)",
       "Bash(* --help *)",
       "mcp__Context7__*",
       "mcp__grafana__get_*",
       "mcp__atlassian__get*",
-      "mcp__deepwiki__*"
+      "mcp__deepwiki__*",
+      "mcp__slack__slack_read*"
     ],
     "deny": [
       "Read(*.env)"

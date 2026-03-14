@@ -120,6 +120,7 @@ in
     pdm
     python3
     pinentry-qt
+    r2modman # for Valheim mods
     kubectl
     kubecolor
     kubefwd
@@ -129,7 +130,15 @@ in
     rustc
     kubernetes-helm
     signal-desktop
-    slack
+    (pkgs.symlinkJoin {
+      name = "slack";
+      paths = [ pkgs.slack ];
+      buildInputs = [ pkgs.makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/bin/slack \
+          --add-flags "--remote-debugging-port=9222"
+      '';
+    })
     sops
     spotify
     starship
@@ -189,6 +198,20 @@ in
     enable = true;
     enableCompletion = true;
     initExtra = builtins.readFile ../bash/bashrc;
+  };
+
+  xdg.desktopEntries.slack = {
+    name = "Slack";
+    exec = "slack --remote-debugging-port=9222 -s %U";
+    icon = "slack";
+    comment = "Slack Desktop";
+    genericName = "Slack Client for Linux";
+    categories = [ "Network" "InstantMessaging" ];
+    mimeType = [ "x-scheme-handler/slack" ];
+    startupNotify = true;
+    settings = {
+      StartupWMClass = "Slack";
+    };
   };
 
   xdg.configFile = {
