@@ -4,7 +4,7 @@ description: |
   Post PR review findings as a GitHub pending review via the API.
   Use after completing a PR review when the user wants to publish findings to GitHub.
   Reads the most recent review from $XDG_DATA_HOME/agents/pr-review/.
-allowed-tools: Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Bash(ls *) Bash(bash *) AskUserQuestion Write
+allowed-tools: Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Bash(ls *) Bash(*scripts/pr-meta.sh) AskUserQuestion Write
 ---
 
 # GitHub Post PR Review
@@ -40,15 +40,35 @@ position will be included in the review body instead.
 ## Step 2 — Fetch current PR metadata
 
 ```bash
-eval "$(bash scripts/pr-meta.sh)"
+$DOTFILES/config/agents/skills/github-post-pr-review/scripts/pr-meta.sh
 ```
 
 If the script exits with an error, inform the user that no PR exists and stop.
 
+Read the JSON output directly from the tool result: `pr_number`, `commit_id`, `repo`, `review_id` (`null` when no pending review).
+
+## Step 2b — Deduplicate against existing comments
+
+Fetch all existing review comments (resolved and unresolved):
+
+```bash
+gh api repos/$REPO/pulls/$PR_NUMBER/comments --jq '.[] | {path, line, body}'
+```
+
+Compare each inline finding (those with `file` and `line`) against the existing
+comments. A finding is a **duplicate** if an existing comment is on the same
+`path` (== `file`) and the bodies describe substantially the same issue — line
+numbers do not need to match exactly, as one comment may span a range while the
+other targets a single line within that range.
+
+- Remove duplicate findings from the inline comment list before posting.
+- If any duplicates were found, inform the user **before posting**, listing each
+  one (file, line, description). Do **not** include them in the pending review.
+
 ## Step 3 — Post the findings
 
-- Non-empty `REVIEW_ID` → existing pending review → **3a**
-- Empty `REVIEW_ID` → no pending review → **3b**
+- `REVIEW_ID` is not `null` → existing pending review → **3a**
+- `REVIEW_ID` is `null` → no pending review → **3b**
 
 Format each inline finding body as:
 `**[{severity}]** {description}` (e.g. `**[critical]** Missing nil check`)

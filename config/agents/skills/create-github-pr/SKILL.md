@@ -23,27 +23,13 @@ and creates the PR using `gh` CLI.
 
 ### Step 1: Analyze Branch State
 
-Gather all PR information using the [helper script](V/scripts/get-pr-info.sh).
+Gather all PR information using the [helper script](scripts/get-pr-info.sh).
 
 ```bash
-# Get all PR info in one call
-pr_info=$(scripts/get-pr-info.sh)
-
-# Parse JSON fields for easy access
-current_branch=$(echo "$pr_info" | jq -r .current_branch)
-base_branch=$(echo "$pr_info" | jq -r .base_branch)
-on_main=$(echo "$pr_info" | jq -r .on_main_or_master)
-has_upstream=$(echo "$pr_info" | jq -r .has_upstream)
-upstream_status=$(echo "$pr_info" | jq -r .upstream_status)
-commits_count=$(echo "$pr_info" | jq -r .commits_count)
-files_changed=$(echo "$pr_info" | jq -r .files_changed)
-insertions=$(echo "$pr_info" | jq -r .insertions)
-deletions=$(echo "$pr_info" | jq -r .deletions)
-uncommitted=$(echo "$pr_info" | jq -r .uncommitted_changes)
-existing_pr_number=$(echo "$pr_info" | jq -r .existing_pr_number)
-existing_pr_url=$(echo "$pr_info" | jq -r .existing_pr_url)
-pr_template=$(echo "$pr_info" | jq -r .pr_template)
+scripts/get-pr-info.sh
 ```
+
+Read the JSON output directly from the tool result.
 
 **Decision logic:**
 
@@ -72,25 +58,13 @@ git checkout -b "$branch_name"
 ### Step 2: Review All Changes
 
 Understand the FULL scope of changes that will be in the PR.
-The `pr_info` from Step 1 already contains commits and stats.
+The output from Step 1 already contains commits and stats.
 
 ```bash
-# Extract commits array and display
-commits=$(echo "$pr_info" | jq -r '.commits')
-
-# For detailed analysis, get the full diff
-git diff origin/$base_branch...HEAD
+git diff origin/<base_branch>...HEAD
 ```
 
-**Display to user:**
-
-- Current branch: `$current_branch`
-- Base branch: `$base_branch`
-- Number of commits: `$commits_count`
-- List of commits: Parse from `commits` JSON array
-- Files changed: `$files_changed`
-- Insertions: `+$insertions`
-- Deletions: `-$deletions`
+**Display to user:** current branch, base branch, commit count, list of commits, files changed, insertions/deletions — all from the Step 1 output.
 
 **Critical:** Analyze ALL commits in the branch to understand the full context.
 The script provides commit hashes and messages - use `git show` for detailed inspection if needed.
@@ -130,16 +104,8 @@ Follow this format: `<type>: <description>`
 **Critical:** Do not add any annotations informing the PR was created by an LLM
 (like "Generated with...").
 
-**Critical:** If repository has a PR template (check `pr_template` field from Step 1),
-use it as the structure! Do not add other sections beyond what the template has.
-
-```bash
-# Check if PR template exists
-if [ -n "$pr_template" ]; then
-  echo "Found PR template, using as reference..."
-  # Use the template structure from $pr_template
-fi
-```
+**Critical:** If the `pr_template` field from Step 1 is non-null,
+use it as the structure. Do not add other sections beyond what the template has.
 
 Otherwise, provide just a simple summary section:
 
@@ -197,37 +163,19 @@ Then ask using `AskUserQuestion`:
 Push the branch if needed, then create the PR using `gh` CLI.
 Use the upstream info from Step 1.
 
-```bash
-# Push based on upstream status
-if [ "$has_upstream" = "false" ]; then
-  echo "Pushing new branch to remote..."
-  git push -u origin "$current_branch"
-elif [ "$upstream_status" = "ahead" ] || [ "$upstream_status" = "diverged" ]; then
-  echo "Pushing updates to remote..."
-  git push
-fi
-
-# Create PR using heredoc for proper formatting
-gh pr create --title "PR Title Here" --body "$(cat <<'EOF'
-## Summary
-- Summary point 1
-- Summary point 2
-EOF
-)"
-```
-
-**Post-creation feedback:**
+Push if needed (use `has_upstream` / `upstream_status` from Step 1 to decide), then create the PR:
 
 ```bash
-# Get the PR URL
-pr_url=$(gh pr view --json url --jq .url)
-
-echo "✓ Pull request created successfully!"
-echo "URL: $pr_url"
-
-# Show PR summary
-gh pr view
+git push -u origin <branch>   # new branch
+# or
+git push                       # existing upstream
 ```
+
+```bash
+gh pr create --title "<title>" --body "<body>"
+```
+
+Show the PR URL with `gh pr view --json url --jq .url`.
 
 ### Alternative: Create Draft PR
 
@@ -256,17 +204,7 @@ gh pr create --draft --title "..." --body "..."
 
 ### Branch Already Has PR
 
-The script already checks for existing PRs. Use the output from Step 1:
-
-```bash
-# Check if PR exists (from pr_info)
-if [ "$existing_pr_number" != "null" ]; then
-  echo "PR already exists for this branch: #$existing_pr_number"
-  echo "URL: $existing_pr_url"
-  gh pr view "$existing_pr_number"
-  exit 1
-fi
-```
+The script already checks for existing PRs. If `existing_pr_number` is non-null in the Step 1 output, inform the user and stop.
 
 ### Uncommitted Changes
 

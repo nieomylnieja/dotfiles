@@ -1,7 +1,7 @@
 ---
 name: github
 description: Use this skill when addressing GitHub PR comments.
-allowed-tools: Bash(scripts/get-unresolved-comments.sh)
+allowed-tools: Bash(*scripts/get-unresolved-comments.sh)
 compatibility: Requires gh CLI to work
 ---
 

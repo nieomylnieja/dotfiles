@@ -109,7 +109,6 @@ in
     obsidian
     ocaml
     opam
-    opencode
     openssl
     pamixer
     pass
@@ -187,6 +186,8 @@ in
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${homeDir}/.claude/agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${config.xdg.configHome}/opencode/agents
+      run mkdir -p ${config.xdg.stateHome}/skills
+      ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
     '';
   };
 
@@ -348,12 +349,20 @@ in
     };
   };
 
+  programs.mcp.servers = (builtins.fromJSON (builtins.readFile ../agents/mcp.json)).mcpServers;
+
   # Claude Code - settings and CLAUDE.md via HM module (stable config)
   programs.claude-code = {
     enable = true;
+    enableMcpIntegration = true;
     settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
-    mcpServers = (builtins.fromJSON (builtins.readFile ../claude/mcp.json)).mcpServers;
-    memory.source = ../claude/CLAUDE.md;
+    memory.source = ../agents/AGENTS.md;
+  };
+
+  programs.opencode = {
+    enable = true;
+    enableMcpIntegration = true;
+    rules = ../agents/AGENTS.md;
   };
 
   programs.go = {

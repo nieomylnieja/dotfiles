@@ -4,7 +4,7 @@ description: |
   Comprehensive PR review using specialized agents.
   Use when asked to review a pull request, check code quality before merging,
   or run any subset of review aspects (code, tests, errors, types, comments, simplify).
-allowed-tools: Bash(git diff *) Bash(bash scripts/review-meta.sh) Glob Grep Read Task Skill Write
+allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Task Skill Write
 ---
 
 # PR Review
@@ -25,10 +25,13 @@ allowed-tools: Bash(git diff *) Bash(bash scripts/review-meta.sh) Glob Grep Read
    - Run `git diff --name-only` to identify changed files
    - Check if specific aspects were requested; default to **all**
    - Prepare the output file and capture metadata:
+
      ```bash
-     eval "$(bash scripts/review-meta.sh)"
+     $DOTFILES/config/agents/skills/review-pr/scripts/review-meta.sh
      ```
-     This sets `OUTFILE`, `REPO`, `BRANCH`, `COMMIT_ID`, and `PR_NUMBER`.
+
+     Read the JSON output directly from the tool result:
+     `outfile`, `repo`, `branch`, `commit_id`, `pr_number`.
 
 2. **Determine Applicable Reviews**
 
@@ -71,7 +74,7 @@ allowed-tools: Bash(git diff *) Bash(bash scripts/review-meta.sh) Glob Grep Read
 
 5. **Persist Results**
 
-   Write findings to `$OUTFILE` (set in step 1) using this schema:
+   Write findings to the `outfile` path from step 1 using this schema:
 
    ```json
    {

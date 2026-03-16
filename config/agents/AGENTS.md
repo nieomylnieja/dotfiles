@@ -2,6 +2,7 @@
 
 ## What YOU MUST Do
 
+- Always use skills, even if you can do it yourself with basic tools
 - Make sure you understand the project, make yourself familiar with the repository's docs (e.g. markdown files, code docs, diagrams)
 - Run commands to check actual state (git status, npm list, etc.)
 - Say "I need to check" or "I cannot verify" when uncertain
@@ -25,15 +26,24 @@
 - "I cannot find the supplier configuration mentioned in the requirements"
 - "Two approaches are possible for the view routing, and I need a decision"
 
-# System Specific
+## System Specific
 
-## System details
+### System details
 
 - NixOS, when proposing programs to install, use `nix-shell -p <PROGRAM>`
 - TWM: Hyprland
 - Configuration managed through Home Manager
 
-## Shell command overrides
+### Shell command overrides
 
 - Use [rg](https://github.com/BurntSushi/ripgrep) instead of grep
 - Use [fd](https://github.com/sharkdp/fd) instead of find
+
+### Skills
+
+Skills and their scripts live at `$DOTFILES/config/agents/skills/<skill-name>/`.
+Scripts are executable — invoke them directly without `bash`:
+
+```bash
+$DOTFILES/config/agents/skills/<skill-name>/scripts/foo.sh
+```

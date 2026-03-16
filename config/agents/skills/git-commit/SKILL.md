@@ -3,7 +3,7 @@ name: git-commit
 description: |
   Execute git commit with interactive confirmation.
   Use when user asks to commit changes, create a git commit, or mentions "/commit".
-allowed-tools: Bash(*scripts/get-commit-info.sh) Bash(git commit *) Bash(git add *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(git show *) AskUserQuestion
+allowed-tools: Bash(*scripts/get-commit-info.sh) Bash(git commit *) Bash(git add *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(git show *) AskUserQuestion Write
 ---
 
 # Git commit
@@ -103,21 +103,10 @@ Also updates the export to include the new function.
 Gather all commit information using the [helper script](scripts/get-commit-info.sh).
 
 ```bash
-# Get all commit info in one call
-commit_info=$(scripts/get-commit-info.sh)
-
-# Parse JSON fields for easy access
-current_branch=$(echo "$commit_info" | jq -r .current_branch)
-has_staged=$(echo "$commit_info" | jq -r .has_staged)
-has_unstaged=$(echo "$commit_info" | jq -r .has_unstaged)
-nothing_to_commit=$(echo "$commit_info" | jq -r .nothing_to_commit)
-staged_files=$(echo "$commit_info" | jq -r .staged_files)
-unstaged_files=$(echo "$commit_info" | jq -r .unstaged_files)
-staged_stat=$(echo "$commit_info" | jq -r .staged_stat)
-staged_diff=$(echo "$commit_info" | jq -r .staged_diff)
-recent_commits=$(echo "$commit_info" | jq -r .recent_commits)
-issue_number=$(echo "$commit_info" | jq -r .issue_number)
+scripts/get-commit-info.sh
 ```
+
+Read the JSON output directly from the tool result.
 
 **Decision logic:**
 
@@ -129,13 +118,7 @@ issue_number=$(echo "$commit_info" | jq -r .issue_number)
 
 The `commit_info` from Step 1 already contains all the data needed.
 
-```bash
-# Parse staged files list from commit_info
-echo "$staged_files" | jq -r '.[] | "\(.status)\t\(.path)"'
-
-# Show the stat summary
-echo "$staged_stat"
-```
+Use `staged_files` and `staged_stat` from the Step 1 tool output.
 
 **Display to user:**
 
@@ -187,15 +170,17 @@ Then ask using `AskUserQuestion`:
 
 ### Step 5: Execute Commit
 
-```bash
-# Commit using heredoc for proper multi-line formatting
-git commit -m "$(cat <<'EOF'
-<type>: <description>
+**CRITICAL**: Never use `$()` or heredoc for commit messages.
 
-[optional body]
-EOF
-)"
-```
+- **Single-line message**: use `-m` directly
+  ```bash
+  git commit -m "<type>: <description>"
+  ```
+- **Multi-line message**: write to `/tmp/git-commit-msg-<timestamp>` with the `Write` tool
+  (use a unique name like `/tmp/git-commit-msg-20260316-143052` to avoid collisions), then:
+  ```bash
+  git commit -F /tmp/git-commit-msg-<timestamp>
+  ```
 
 **Post-commit feedback:**
 
@@ -217,6 +202,7 @@ git show --stat --oneline HEAD
 - Reference issues: `Closes #123`, `Refs #456`
 - Keep description under 72 characters
 - **NEVER add Co-Authored-By footers** - user explicitly does not want them
+- **NEVER use heredoc or `$()`** for commit messages — single-line: `-m`; multi-line: `Write` to `/tmp/git-commit-msg-<timestamp>` + `git commit -F`
 
 ## Intelligent Automation
 
