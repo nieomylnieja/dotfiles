@@ -142,7 +142,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)/scripts"
 SKILLS_DIR="${DOTFILES:-$HOME/.dotfiles}/config/agents/skills"
 for skill_dir in "$SKILLS_DIR"/*/; do
   skill_name=$(basename "$skill_dir")
-  if "$SCRIPTS_DIR/check-skill-allowlist.sh" "$TOOL_NAME" "$TOOL_INPUT" "$skill_name" 2>/dev/null; then
+  if "$SCRIPTS_DIR/check-skill-allowed-tools.sh" "$TOOL_NAME" "$TOOL_INPUT" "$skill_name" 2>/dev/null; then
     allow "allowed by skill allowlist ($skill_name)"
   fi
 done

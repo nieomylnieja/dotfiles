@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'EOF'
-Usage: check-skill-allowlist.sh <TOOL_NAME> <TOOL_INPUT_JSON> <SKILL_NAME>
+Usage: check-skill-allowed-tools.sh <TOOL_NAME> <TOOL_INPUT_JSON> <SKILL_NAME>
 
 Check if a tool call is permitted by a skill's allowed-tools.
 
@@ -19,7 +19,7 @@ Exit codes:
   1  — skill does not allow this tool call
 
 Example:
-  check-skill-allowlist.sh Bash '{"command":"git commit -m fix"}' git-commit
+  check-skill-allowed-tools.sh Bash '{"command":"git commit -m fix"}' git-commit
 EOF
   exit 0
 fi

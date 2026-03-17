@@ -2,26 +2,37 @@
 
 ## CRITICAL: TRUTHFULNESS REQUIREMENTS
 
-## What YOU MUST Do
+### The most important rule
 
-- Always use skills, even if you can do it yourself with basic tools
-- Make sure you understand the project, make yourself familiar with the repository's docs (e.g. markdown files, code docs, diagrams)
-- Run commands to check actual state (git status, npm list, etc.)
-- Say "I need to check" or "I cannot verify" when uncertain
-- Document exact error messages, not summaries
-- Always test your changes, either by building the program or running tests, If there is a Makefile (or equivalent, like justfile) available, see If there are lints to be run
-- Use `gh` CLI to interact with GitHub
+If you think there is even a 1% chance a skill might apply to what you are doing,
+you ABSOLUTELY MUST invoke the skill.
 
-## What YOU MUST NOT Do
+**IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.**
 
-- Create example code that "would work" without testing
-- Hide failures or errors
-- Continue when core requirements are unclear
-- Do not overwrite changes I made while you were working on a file, instead, incorporate them
-- Do not edit generated files (usually there are comments in the file which indicate that)
-- Avoid adding code comments, unless told otherwise, only function/type docs are ok
+### What YOU MUST Do
 
-## Escalation Examples
+- Always use skills, even if you can do it yourself with basic tools.
+- Whenever finishing any work, always invoke `verification-before-completion` Skill.
+- Always load language specific skills (if any) when you interact with a given language
+  (e.g. load `golang` skill every time you read/modify/create `*.go` files).
+- Make sure you understand the project, make yourself familiar with the repository's docs
+  (e.g. markdown files, code docs, diagrams).
+- Run commands to check actual state (git status, npm list, etc.).
+- Say "I need to check" or "I cannot verify" when uncertain.
+- Document exact error messages, not summaries.
+- Always test your changes, either by building the program or running tests,
+  If there is a Makefile (or equivalent, like justfile) available, see If there are lints to be run.
+
+### What YOU MUST NOT Do
+
+- Create example code that "would work" without testing.
+- Hide failures or errors.
+- Continue when core requirements are unclear.
+- Do not overwrite changes I made while you were working on a file, instead, incorporate them.
+- Do not edit generated files (usually there are comments in the file which indicate that).
+- Avoid adding code comments, unless told otherwise, only function/type docs are ok.
+
+### Escalation Examples
 
 - "I found 3 different payment implementations and need guidance on which to modify"
 - "The Cypress tests are failing with this specific error: [exact error]"
@@ -41,6 +52,26 @@
 
 ## Skills
 
+### Invocation
+
+**Invoke relevant or requested skills BEFORE any response or action.**
+Even a 1% chance a skill might apply means that you should invoke the skill to check.
+If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+### Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (e.g. `verification-before-completion`)
+   These determine HOW to approach the task.
+2. **Implementation skills second** (e.g. `golang`)
+   These guide execution.
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+### Usage
+
 Skills and their scripts live at `$DOTFILES/config/agents/skills/<skill-name>/`.
 Scripts are executable — invoke them directly without `bash`:
 
@@ -48,8 +79,8 @@ Scripts are executable — invoke them directly without `bash`:
 $DOTFILES/config/agents/skills/<skill-name>/scripts/foo.sh
 ```
 
-Do not capture script output into a variable just to echo it. Let scripts print
-their own output directly:
+Do not capture script output into a variable just to echo it.
+Let scripts print their own output directly:
 
 ```bash
 # wrong
@@ -61,14 +92,14 @@ some-script.sh
 
 Only assign to a variable when the value is actually used later in the same session.
 
-## Temporary files
+## Writing files
+
+Always prefer native tools, like `Write` for Claude Code rather than heredoc with `cat`.
+
+### Temporary files
 
 When writing temporary files, always add timestamp in their name, use this command:
 
 ```bash
 date -u +%Y%m%dT%H%M%SZ
 ```
-
-## Writing files
-
-Always prefer native tools, like `Write` for Claude Code rather than heredoc with `cat`.
