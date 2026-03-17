@@ -8,3 +8,4 @@ node_modules
 postgrestools.jsonc
 .aider*
 .claude/settings.local.json
+.worktrees

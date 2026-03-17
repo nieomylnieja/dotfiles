@@ -1,4 +1,6 @@
-# CRITICAL: TRUTHFULNESS REQUIREMENTS
+# General Agent instructions
+
+## CRITICAL: TRUTHFULNESS REQUIREMENTS
 
 ## What YOU MUST Do
 
@@ -26,20 +28,18 @@
 - "I cannot find the supplier configuration mentioned in the requirements"
 - "Two approaches are possible for the view routing, and I need a decision"
 
-## System Specific
-
-### System details
+## System details
 
 - NixOS, when proposing programs to install, use `nix-shell -p <PROGRAM>`
 - TWM: Hyprland
 - Configuration managed through Home Manager
 
-### Shell command overrides
+## Shell command overrides
 
 - Use [rg](https://github.com/BurntSushi/ripgrep) instead of grep
 - Use [fd](https://github.com/sharkdp/fd) instead of find
 
-### Skills
+## Skills
 
 Skills and their scripts live at `$DOTFILES/config/agents/skills/<skill-name>/`.
 Scripts are executable — invoke them directly without `bash`:
@@ -47,3 +47,28 @@ Scripts are executable — invoke them directly without `bash`:
 ```bash
 $DOTFILES/config/agents/skills/<skill-name>/scripts/foo.sh
 ```
+
+Do not capture script output into a variable just to echo it. Let scripts print
+their own output directly:
+
+```bash
+# wrong
+RESULT=$(some-script.sh) && echo "$RESULT"
+
+# correct
+some-script.sh
+```
+
+Only assign to a variable when the value is actually used later in the same session.
+
+## Temporary files
+
+When writing temporary files, always add timestamp in their name, use this command:
+
+```bash
+date -u +%Y%m%dT%H%M%SZ
+```
+
+## Writing files
+
+Always prefer native tools, like `Write` for Claude Code rather than heredoc with `cat`.

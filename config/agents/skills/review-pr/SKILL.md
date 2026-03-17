@@ -4,7 +4,7 @@ description: |
   Comprehensive PR review using specialized agents.
   Use when asked to review a pull request, check code quality before merging,
   or run any subset of review aspects (code, tests, errors, types, comments, simplify).
-allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Task Skill Write
+allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(mkdir -p */agents/pr-review/*) AskUserQuestion Glob Grep Read Task Skill Write(**/agents/pr-review/*/*.json)
 ---
 
 # PR Review
@@ -21,8 +21,16 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Ta
 
 ## Workflow
 
-1. **Determine Review Scope**
-   - Run `git diff --name-only` to identify changed files
+1. **Checkout the PR Branch**
+
+   Use the `git-worktrees` skill to create an isolated checkout of the PR branch:
+
+   Pass the branch name to check out. The worktree will be created at
+   `.worktrees/<branch-name>`. All subsequent steps operate from within
+   that worktree path.
+
+2. **Determine Review Scope**
+   - From within the worktree, run `git diff --name-only origin/HEAD...HEAD` to identify changed files
    - Check if specific aspects were requested; default to **all**
    - Prepare the output file and capture metadata:
 
@@ -33,7 +41,7 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Ta
      Read the JSON output directly from the tool result:
      `outfile`, `repo`, `branch`, `commit_id`, `pr_number`.
 
-2. **Determine Applicable Reviews**
+3. **Determine Applicable Reviews**
 
    Based on changes:
    - **Always**: code-reviewer
@@ -43,12 +51,12 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Ta
    - **If types added/modified**: type-design-analyzer
    - **After passing review**: code-simplifier
 
-3. **Launch Review Agents**
+4. **Launch Review Agents**
 
    Default: sequential (one at a time, easier to act on).
    If user requests parallel, launch all simultaneously.
 
-4. **Aggregate Results**
+5. **Aggregate Results**
 
    ```markdown
    # PR Review Summary
@@ -72,9 +80,9 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Ta
    4. Re-run review after fixes
    ```
 
-5. **Persist Results**
+6. **Persist Results**
 
-   Write findings to the `outfile` path from step 1 using this schema:
+   Write findings to the `outfile` path from step 2 using this schema:
 
    ```json
    {
@@ -99,6 +107,14 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Glob Grep Read Ta
    ```
 
    Report the output path to the user.
+
+7. **Offer to Post Review to GitHub**
+
+   Use `AskUserQuestion` to ask:
+
+   > Would you like to post these findings as a GitHub PR review?
+
+   If **yes**, invoke the `github-post-pr-review` skill.
 
 ## Notes
 

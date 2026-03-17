@@ -186,6 +186,10 @@ in
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${homeDir}/.claude/agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${config.xdg.configHome}/opencode/agents
+      run mkdir -p ${homeDir}/.claude/hooks
+      for f in ${dotfilesDir}/config/claude/hooks/*; do
+        ln -s -f $VERBOSE_ARG "$f" ${homeDir}/.claude/hooks/
+      done
       run mkdir -p ${config.xdg.stateHome}/skills
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
     '';

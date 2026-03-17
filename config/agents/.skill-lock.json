@@ -36,6 +36,15 @@
       "skillFolderHash": "ceb2f1f67f4cadb29b32a06e54d3d0be832071f5",
       "installedAt": "2026-03-15T18:39:34.779Z",
       "updatedAt": "2026-03-15T18:52:04.023Z"
+    },
+    "create-agentsmd": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/github/awesome-copilot.git",
+      "skillPath": "skills/create-agentsmd/SKILL.md",
+      "skillFolderHash": "290ab8ae85ba8695e9bceb674e74177e76f8633d",
+      "installedAt": "2026-03-17T10:37:23.032Z",
+      "updatedAt": "2026-03-17T10:37:23.032Z"
     }
   },
   "dismissed": {}

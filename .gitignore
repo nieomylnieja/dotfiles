@@ -9,3 +9,4 @@ __pycache__
 build
 .VimballRecord
 config/wallpapers/*.jpg
+log.json

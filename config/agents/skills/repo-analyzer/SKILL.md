@@ -46,23 +46,23 @@ Use the provided `clone_repo.sh` script to handle all git operations. This scrip
 
 ```bash
 # Basic usage (clone/update without branch)
-skills/repo-analyzer/scripts/clone_repo.sh "$REPO_URL"
+skills/repo-analyzer/scripts/clone_repo.sh --url "$REPO_URL"
 
 # With specific branch
-scripts/clone_repo.sh "$REPO_URL" "$BRANCH"
+scripts/clone_repo.sh --url "$REPO_URL" --branch "$BRANCH"
 ```
 
 **Examples:**
 
 ```bash
 # HTTPS URL
-scripts/clone_repo.sh "https://github.com/torvalds/linux"
+scripts/clone_repo.sh --url "https://github.com/torvalds/linux"
 
 # Short form (assumes GitHub)
-scripts/clone_repo.sh "BurntSushi/ripgrep"
+scripts/clone_repo.sh --url "BurntSushi/ripgrep"
 
 # With branch
-scripts/clone_repo.sh "tiangolo/fastapi" "dev"
+scripts/clone_repo.sh --url "tiangolo/fastapi" --branch "dev"
 ```
 
 **What the script does:**

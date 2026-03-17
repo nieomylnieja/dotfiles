@@ -41,19 +41,45 @@
     "pg@aiguide": true,
     "gopls-lsp@my-plugins": true
   },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-env-files.sh"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-review-permission/hook.sh"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Skill",
       "Search",
       "AskUserQuestion",
       "WebSearch",
-      "Write(/tmp/*)",
+      "Write(/tmp/**)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:githubusercontent.com)",
+      "Bash($DOTFILES/config/agents/skills/*/scripts/*)",
       "Bash(git log*)",
       "Bash(git show*)",
       "Bash(git status*)",
       "Bash(git branch*)",
+      "Bash(git fetch*)",
       "Bash(echo*)",
       "Bash(fd*)",
       "Bash(sed*)",
@@ -72,6 +98,7 @@
       "Bash(gh pr list*)",
       "Bash(gh run view*)",
       "Bash(gh api repos*)",
+      "Bash(gh repo list*)",
       "Bash(gh search*)",
       "Bash(kubectl get*)",
       "Bash(kubectl describe*)",

@@ -1,0 +1,6 @@
+# Patterns matched against the basename of files being read.
+# Supports bash glob syntax (e.g. *.env, .env.*)
+.env
+.env.*
+*.env
+*/nobl9/config.toml

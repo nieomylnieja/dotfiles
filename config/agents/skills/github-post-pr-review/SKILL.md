@@ -4,7 +4,7 @@ description: |
   Post PR review findings as a GitHub pending review via the API.
   Use after completing a PR review when the user wants to publish findings to GitHub.
   Reads the most recent review from $XDG_DATA_HOME/agents/pr-review/.
-allowed-tools: Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Bash(ls *) Bash(*scripts/pr-meta.sh) AskUserQuestion Write
+allowed-tools: Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Bash(*scripts/pr-meta.sh) Bash(*scripts/find-review-file.sh) AskUserQuestion Write
 ---
 
 # GitHub Post PR Review
@@ -24,13 +24,12 @@ If **yes**:
 Find the most recent review for the current branch:
 
 ```bash
-REPO_SLUG=$(gh repo view --json nameWithOwner -q '.nameWithOwner' | tr '/' '-')
-REVIEW_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agents/pr-review/$REPO_SLUG"
-BRANCH_SLUG=$(git rev-parse --abbrev-ref HEAD | tr '/' '-' | tr -cd '[:alnum:]-_')
-REVIEW_FILE=$(ls -t "$REVIEW_DIR"/*_${BRANCH_SLUG}.json 2>/dev/null | head -1)
+$DOTFILES/config/agents/skills/github-post-pr-review/scripts/find-review-file.sh
 ```
 
-If no file is found, inform the user that no local review exists for this
+Read the path from the tool result as `REVIEW_FILE`.
+
+If the script exits with an error, inform the user that no local review exists for this
 branch and suggest running `review-pr` first, then stop.
 
 Read and parse the file. Only findings with a non-null `file` and `line` can
