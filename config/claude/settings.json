@@ -5,6 +5,7 @@
     "command": "npx -y @owloops/claude-powerline@latest --theme=nord --style=powerline",
     "padding": 0
   },
+  "model": "claude-opus-4-6",
   "cleanupPeriodDays": 99999,
   "attribution": {
     "commit": "",
@@ -74,6 +75,7 @@
       "Write(/tmp/**)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:githubusercontent.com)",
+      "WebFetch(domain:schemastore.org)",
       "Bash($DOTFILES/config/agents/skills/*/scripts/*)",
       "Bash(git log*)",
       "Bash(git show*)",

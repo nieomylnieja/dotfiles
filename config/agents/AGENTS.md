@@ -103,3 +103,8 @@ When writing temporary files, always add timestamp in their name, use this comma
 ```bash
 date -u +%Y%m%dT%H%M%SZ
 ```
+
+## Bash
+
+Never chain commands with `&&`, instead run in parallel,
+each command with its own `Bash()` tool invocation.
