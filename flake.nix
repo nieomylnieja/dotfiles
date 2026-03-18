@@ -8,6 +8,7 @@
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
     nur.url = "github:nix-community/NUR";
     hyprdynamicmonitors.url = "github:fiffeek/hyprdynamicmonitors";
+    googleworkspace-cli.url = "github:googleworkspace/cli";
   };
 
   outputs =
@@ -16,6 +17,7 @@
     , home-manager
     , nur
     , hyprdynamicmonitors
+    , googleworkspace-cli
     , ...
     }:
     let
@@ -47,6 +49,7 @@
               ];
               home-manager.extraSpecialArgs = {
                 hyprdynamicmonitorsPkg = hyprdynamicmonitors.packages.${system}.default;
+                googleworkspaceCliPkg = googleworkspace-cli.packages.${system}.default;
               };
               home-manager.users.mh = import ./config/home-manager/home.nix;
               nixpkgs.overlays = [ nur.overlays.default ];
@@ -71,6 +74,7 @@
               ];
               home-manager.extraSpecialArgs = {
                 hyprdynamicmonitorsPkg = hyprdynamicmonitors.packages.${system}.default;
+                googleworkspaceCliPkg = googleworkspace-cli.packages.${system}.default;
               };
               home-manager.users.mh = import ./config/home-manager/home.nix;
               nixpkgs.overlays = [ nur.overlays.default ];

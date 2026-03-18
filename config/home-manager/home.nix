@@ -2,6 +2,7 @@
 , pkgs
 , lib
 , hyprdynamicmonitorsPkg
+, googleworkspaceCliPkg
 , ...
 }:
 let
@@ -22,6 +23,7 @@ in
 
   home.packages = with pkgs; [
     hyprdynamicmonitorsPkg
+    googleworkspaceCliPkg
     anki
     awscli2
     apg

@@ -36,6 +36,51 @@
       "skillFolderHash": "290ab8ae85ba8695e9bceb674e74177e76f8633d",
       "installedAt": "2026-03-17T10:37:23.032Z",
       "updatedAt": "2026-03-17T10:37:23.032Z"
+    },
+    "gws-calendar": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/googleworkspace/cli.git",
+      "skillPath": "skills/gws-calendar/SKILL.md",
+      "skillFolderHash": "80c98ff8dcf0c96f5d22e9e34101968d42c47135",
+      "installedAt": "2026-03-18T12:47:34.535Z",
+      "updatedAt": "2026-03-18T12:47:34.535Z"
+    },
+    "gws-drive": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/googleworkspace/cli.git",
+      "skillPath": "skills/gws-drive/SKILL.md",
+      "skillFolderHash": "93ffc07d88a028ed2fb1b17741214ad572559c20",
+      "installedAt": "2026-03-18T12:47:44.084Z",
+      "updatedAt": "2026-03-18T12:47:44.084Z"
+    },
+    "gws-sheets": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/googleworkspace/cli.git",
+      "skillPath": "skills/gws-sheets/SKILL.md",
+      "skillFolderHash": "15288c36ef2a904ff016b49cc0449b6c91d57e0b",
+      "installedAt": "2026-03-18T12:47:49.739Z",
+      "updatedAt": "2026-03-18T12:47:49.739Z"
+    },
+    "gws-docs": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/googleworkspace/cli.git",
+      "skillPath": "skills/gws-docs/SKILL.md",
+      "skillFolderHash": "a7da40857bfbaf865a75d981257a7b9624827e79",
+      "installedAt": "2026-03-18T12:47:54.830Z",
+      "updatedAt": "2026-03-18T12:47:54.830Z"
+    },
+    "gws-docs-write": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/googleworkspace/cli.git",
+      "skillPath": "skills/gws-docs-write/SKILL.md",
+      "skillFolderHash": "39890a5584a66860b173ec3d1380eb8d7f347ef7",
+      "installedAt": "2026-03-18T12:47:59.721Z",
+      "updatedAt": "2026-03-18T12:47:59.721Z"
     }
   },
   "dismissed": {}

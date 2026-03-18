@@ -107,10 +107,18 @@
       "Bash(* --version)",
       "Bash(* --help *)",
       "mcp__Context7__*",
-      "mcp__grafana__get_*",
       "mcp__atlassian__get*",
       "mcp__deepwiki__*",
-      "mcp__slack__slack_read*"
+      "mcp__slack__slack_read*",
+      "mcp__slack__slack_search*",
+      "mcp__groundcover__query*",
+      "mcp__groundcover__get*",
+      "mcp__groundcover__gcql_query",
+      "mcp__grafana__list*",
+      "mcp__grafana__query*",
+      "mcp__grafana__search*",
+      "mcp__grafana__get*",
+      "mcp__sequential-thinking__*"
     ],
     "deny": [
       "Read(*.env)"
