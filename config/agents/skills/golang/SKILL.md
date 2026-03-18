@@ -13,6 +13,8 @@ Related skills:
 - [golang-testing](../golang-testing/SKILL.md) for writing tests
 - [golang-comments](../golang-comments/SKILL.md) for writing doc comments
 
+**IMPORTANT:** ALWAYS use `LSP` tool rather then reading go mod cache for documentation.
+
 ## Go Version Detection
 
 <!-- markdownlint-disable-next-line MD013 -->
@@ -74,7 +76,7 @@ it is more accurate, especially for complex generic or interface types.
 For package API questions, use `gopls` hover on a symbol before reaching
 for any external documentation source.
 
-**Package documentation — Context7 (last resort):**
+**Package documentation fallback — Context7 (last resort):**
 If `gopls` cannot answer the question
 (e.g. the package is not yet imported or the symbol is unknown),
 use `mcp__Context7__resolve-library-id` and `mcp__Context7__query-docs`
