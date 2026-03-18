@@ -353,7 +353,10 @@ in
     };
   };
 
-  programs.mcp.servers = (builtins.fromJSON (builtins.readFile ../agents/mcp.json)).mcpServers;
+  programs.mcp = {
+    enable = true;
+    servers = (builtins.fromJSON (builtins.readFile ../agents/mcp.json)).mcpServers;
+  };
 
   # Claude Code - settings and CLAUDE.md via HM module (stable config)
   programs.claude-code = {
