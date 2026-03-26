@@ -6,15 +6,14 @@ description: |
 allowed-tools: Bash(markdownlint *) Bash(markdownfmt *) Bash(markdown-link-check *)
 ---
 
-
-# Markdown Formatting
+# Markdown
 
 Guidelines for writing well-formatted markdown documents
 with emphasis on semantic line breaks.
 
 ## Linting
 
-If `makrdownlint` is already configured in the project, use the project's
+If `markdownlint` is already configured in the project, use the project's
 Makefile/justfile targets or run the linter with project's config.
 
 Otherwise, use `markdownlint --config=~/.dotfiles/.markdownlint.yaml '<filepath>'`
@@ -39,6 +38,128 @@ Use a bare code fence only for:
 - Standard library packages with no meaningful canonical URL
   (e.g., `` `log/slog` ``, `` `encoding/json` ``)
 - Inline code that is not a reference to an external resource
+
+## Document Structure
+
+### Heading Hierarchy
+
+Use a single `#` heading per document for the title.
+Structure sections with `##` through `####`;
+avoid going deeper than four levels —
+a fifth level usually signals the content should be split or restructured.
+
+Headings must follow a strict hierarchy:
+never skip levels (e.g., `##` followed by `####`).
+
+### Paragraphs and Spacing
+
+Keep paragraphs focused on a single idea.
+Separate paragraphs with a blank line.
+Separate sections (headings) with a single blank line before and after.
+
+## Writing Style
+
+- Use concise, direct language and active voice.
+- Maintain a consistent tone throughout the document.
+- Provide specific guidance with concrete examples,
+  clear steps, and expected results.
+- Avoid vague statements, excessive passive voice,
+  and assuming specific reader knowledge without context.
+
+## Code Blocks
+
+### Language Tags
+
+Always specify the language identifier on fenced code blocks
+for correct syntax highlighting:
+
+````md
+```go
+fmt.Println("hello")
+```
+````
+
+### Context and Expected Output
+
+Introduce code blocks with a sentence explaining their purpose.
+When helpful, show the expected output in a separate block:
+
+````md
+Run the health check:
+
+```sh
+curl -s http://localhost:8080/health
+```
+
+Expected output:
+
+```json
+{"status": "ok"}
+```
+````
+
+### Command-Line Examples
+
+For multi-step shell procedures,
+group related commands in a single block with comments,
+and split unrelated steps into separate blocks.
+
+## Tables
+
+- Include a header row and alignment indicators.
+- Keep cell content concise;
+  move lengthy details into footnotes or a follow-up paragraph.
+- Align columns for source readability when practical.
+
+```md
+| Method | Endpoint         | Description     | Auth |
+| :----- | :--------------- | :-------------- | :--: |
+| GET    | `/api/users`     | List users      |  Yes |
+| POST   | `/api/users`     | Create user     |  Yes |
+| DELETE | `/api/users/{id}` | Delete user     |  Yes |
+```
+
+## Images
+
+Always provide meaningful alt text that describes the content of the image,
+not just its filename:
+
+```md
+<!-- WRONG -->
+![](diagram.png)
+![image](diagram.png)
+
+<!-- RIGHT -->
+![Data flow between API gateway and backend services](diagram.png)
+```
+
+## Link and Reference Management
+
+### Descriptive Link Text
+
+Use descriptive link text that makes sense out of context.
+Avoid generic labels like "click here" or "see this":
+
+```md
+<!-- WRONG -->
+Click [here](./install.md) for installation.
+
+<!-- RIGHT -->
+See the [installation guide](./install.md) for setup instructions.
+```
+
+### Reference-Style Links
+
+For documents with many links,
+use reference-style links to keep the source readable:
+
+```md
+We support [API keys][api-keys], [OAuth 2.0][oauth], and [JWT][jwt].
+
+[api-keys]: ./auth.md#api-keys
+[oauth]: ./auth.md#oauth-20
+[jwt]: ./auth.md#jwt
+```
 
 ## Semantic Line Breaks
 
@@ -112,7 +233,7 @@ writers, editors, and other collaborators
 can make source text easier to work with,
 without affecting how it's seen by readers.
 
-## Semantic Line Breaks Specification (SemBr)
+### Semantic Line Breaks Specification (SemBr)
 
 The key words "==MUST==", "==MUST NOT==", "==REQUIRED==",
 "==SHALL==", "==SHALL NOT==", "==SHOULD==", "==SHOULD NOT==",
@@ -140,7 +261,7 @@ in this document are to be interpreted as described in [RFC 2119](https://www.ie
 13. A line ==MAY== exceed the maximum line length if necessary,
  such as to accommodate hyperlinks, code elements, or other markup.
 
-## Why Use Semantic Line Breaks?
+### Why Use Semantic Line Breaks?
 
 For a **writer**,
 semantic line breaks allow the physical structure of text
@@ -154,9 +275,9 @@ For a **reader**,
 semantic line breaks are entirely invisible —
 no changes to the source text appear in the final rendered output.
 
-## FAQ
+### FAQ
 
-### Which light markup languages support semantic line breaks?
+#### Which light markup languages support semantic line breaks?
 
 The following light markup languages
 are verified to support semantic line breaks:
@@ -171,7 +292,7 @@ are verified to support semantic line breaks:
 - [OrgMode](http://orgmode.org)
 - [reStructuredText](http://docutils.sourceforge.net/rst.html)
 
-### How do I know when to add semantic line breaks?
+#### How do I know when to add semantic line breaks?
 
 Try reading the text out loud,
 as if you were speaking to an audience.
@@ -179,7 +300,7 @@ Anywhere that you pause for emphasis
 or to take a breath
 is usually a good candidate for a semantic line break.
 
-### How do I migrate existing prose to use semantic line breaks?
+#### How do I migrate existing prose to use semantic line breaks?
 
 There is no need to rewrite or reformat an entire document all at once.
 The recommended migration path for an existing document
@@ -188,7 +309,7 @@ This is often a great opportunity to make an editorial pass over content
 since the distinctive appearance of text with semantic line breaks
 allows you to quickly identify content that has not been updated.
 
-### How do I use semantic line breaks with Git?
+#### How do I use semantic line breaks with Git?
 
 The default Git diff options emphasize line changes
 in a way that may obscure certain revisions to text with semantic line breaks.
@@ -198,7 +319,7 @@ For better results use:
 git diff --word-diff
 ```
 
-### How do I force a line break?
+#### How do I force a line break?
 
 You can add a hard line break with the `<br/>` element.
 Although CommonMark and other lightweight markup languages
