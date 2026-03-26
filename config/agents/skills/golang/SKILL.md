@@ -13,7 +13,7 @@ Related skills:
 - [golang-testing](../golang-testing/SKILL.md) for writing tests
 - [golang-comments](../golang-comments/SKILL.md) for writing doc comments
 
-**IMPORTANT:** ALWAYS use `LSP` tool rather then reading go mod cache for documentation.
+**IMPORTANT:** ALWAYS use `LSP` tool rather then grepping/reading module's cache for documentation.
 
 ## Go Version Detection
 
@@ -88,7 +88,7 @@ This avoids hallucinated APIs and catches deprecated signatures.
 ## Preferred Libraries
 
 When adding a dependency,
-check [references/libraries.md](references/libraries.md)
+check [references/libraries.md](./references/libraries.md)
 for the project's preferred library picks before reaching for an arbitrary package.
 Use the standard library if it already covers the need.
 
@@ -123,12 +123,31 @@ adjusted it by hand.
 
 ---
 
+## File Layout
+
+Order declarations top-to-bottom by importance — readers should see the
+public API and key logic first, not scroll past helpers to find it.
+
+1. **Package doc comment** (if any)
+2. **Constants** (`const` blocks)
+3. **Variables** (`var` blocks)
+4. **Types** (structs, interfaces, type aliases)
+5. **Exported functions and methods** — the public API
+6. **Unexported functions and methods** — internal logic
+7. **Helper / utility functions** — small, reusable pieces
+
+Within each group, order by logical importance or call order,
+not alphabetically.
+
+---
+
 ## Code Style Preferences
 
-- Prefer switch statements over if/else chains
-- Use guard clauses (early returns) over nested if/else
+- Prefer switch statements over if/else chains.
+- Use guard clauses (early returns) over nested if/else.
+- If and if/else block has a lot of logic in it, separate each branch into a function.
 - Use `net.JoinHostPort(host, port)` instead of
-  `fmt.Sprintf("%s:%d", host, port)` (IPv6-safe)
+  `fmt.Sprintf("%s:%d", host, port)` (IPv6-safe).
 
 ### Comments
 
@@ -155,11 +174,12 @@ Function parameters should be interfaces (e.g., `io.Reader`),
 return types should be concrete structs.
 
 **Wrap errors with context.**
-Use `fmt.Errorf("doing X: %w", err)` to add context
+Use `fmt.Errorf("failed X: %w", err)` to add context
 while preserving the error chain.
 Never discard errors silently.
 Do NOT use `github.com/pkg/errors` or `golang.org/x/xerrors` —
 both predate Go 1.13's built-in wrapping and are obsolete.
+Avoid wrapping with a message like "doing X", explicitly say what failed.
 
 ```go
 // WRONG — pkg/errors:
@@ -198,11 +218,20 @@ Use them when the return types need disambiguation
 
 **Naming conventions:**
 
+When naming functions, types, methods, or variables,
+always consult [references/naming-patterns.md](./references/naming-patterns.md)
+and follow the matching pattern.
+
+Quick summary:
+
 - Local variables: short (`r`, `w`, `ctx`, `buf`)
 - Exported functions/types: descriptive (`ReadConfig`, `HTTPClient`)
 - Interfaces: method name + `-er` suffix (`Reader`, `Stringer`, `Closer`)
 - No `Get` prefix on getters (`Name()` not `GetName()`)
 - Acronyms: all caps (`HTTP`, `ID`, `URL`) — not `Http`, `Id`, `Url`
+- Constructors: `New` prefix (`NewReader`), never `Create`
+- String-to-type: `Parse` (`ParseInt`), never `From`
+- Panic wrappers: `Must` prefix (`MustCompile`)
 
 **Channel direction.**
 Specify direction in function signatures:
@@ -233,6 +262,30 @@ if err := g.Wait(); err != nil {
 
 Use plain `sync.WaitGroup` (or `wg.Go` in Go 1.25+) only when errors
 are not expected or are handled inside each goroutine.
+
+**Pre-initialise slices with `append`, not index assignment.**
+When the final length is known, use `make([]T, 0, n)` + `append`,
+not `make([]T, n)` + index-based filling.
+
+```go
+// WRONG — allocate n zero-valued elements, then overwrite by index:
+result := make([]string, len(items))
+for i, item := range items {
+    result[i] = transform(item)
+}
+
+// RIGHT — allocate capacity only, fill with append:
+result := make([]string, 0, len(items))
+for _, item := range items {
+    result = append(result, transform(item))
+}
+```
+
+Why: `make([]T, n)` creates a slice already full of zero values.
+If the loop body conditionally skips elements or returns early,
+you end up with trailing zero values that silently corrupt results.
+`append` with zero length and defined capacity avoids this class of bug
+while still performing a single allocation.
 
 **Struct field ordering.**
 Group related fields.

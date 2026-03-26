@@ -4,7 +4,7 @@ description: |
   Comprehensive PR review using specialized agents.
   Use when asked to review a pull request, check code quality before merging,
   or run any subset of review aspects (code, tests, errors, types, comments, simplify).
-allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(mkdir -p */agents/pr-review/*) Bash(gh pr view*) Bash(gh issue view*) AskUserQuestion Glob Grep Read Task Skill Write(**/agents/pr-review/*/*.json)
+allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(*scripts/gather-requirements.sh*) Bash(mkdir -p */agents/pr-review/*) Bash(gh pr view*) Bash(gh issue view*) Bash(jira issue view*) AskUserQuestion Glob Grep Read Task Skill Write(**/agents/pr-review/*/*.json)
 ---
 
 # PR Review
@@ -44,43 +44,23 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(mkdir -p */a
 
 3. **Gather Requirements Context**
 
-   Collect requirements to power the spec review.
-   Try each source in order; stop as soon as requirements are found:
+   Run the requirements-gathering script:
 
-   a. **GitHub issue** — parse the PR body for closing keywords
-      (`Fixes #N`, `Closes #N`, `Resolves #N`, `Refs #N`).
-      If found, fetch the issue:
+   ```bash
+   $DOTFILES/config/agents/skills/review-pr/scripts/gather-requirements.sh
+   ```
 
-      ```bash
-      gh issue view N --json title,body,labels,milestone
-      ```
+   Read the JSON output: `source`, `issue_ref`, `requirements`.
 
-   b. **Jira ticket** — scan the branch name and PR title
-      for a pattern like `[A-Z]+-[0-9]+` (e.g. `FEAT-123`, `PROJ-456`).
-      If found, attempt:
+   - If `source` is `"none"`, use `AskUserQuestion`:
 
-      ```bash
-      jira issue view FEAT-123 2>/dev/null
-      ```
+     > I couldn't find linked requirements for this PR.
+     > Please paste the requirements, acceptance criteria,
+     > or issue description — or type `skip` to omit the spec review.
 
-      If the `jira` CLI is unavailable,
-      ask the user to paste the ticket description (see step d).
-
-   c. **PR description** — use the PR body and title from:
-
-      ```bash
-      gh pr view --json title,body
-      ```
-
-      Use the description as requirements if it contains
-      acceptance criteria, task lists, or behavioral specifications.
-
-   d. **User fallback** — if no requirements were found via a, b, or c,
-      use `AskUserQuestion` to ask:
-
-      > I couldn't find linked requirements for this PR.
-      > Please paste the requirements, acceptance criteria,
-      > or issue description — or type `skip` to omit the spec review.
+   - If `jira_attempted` is true and `source` is `"none"`,
+     mention the Jira key that was tried
+     and ask the user to paste the ticket description.
 
    Store the collected requirements text as `REQUIREMENTS`.
    If the user types `skip`, omit the spec review from the run.
@@ -102,52 +82,12 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(mkdir -p */a
    Default: sequential (one at a time, easier to act on).
    If user requests parallel, launch all simultaneously.
 
-   **Requirements-verifier** — use `general-purpose` subagent type.
-   Pass this prompt (substituting `<REQUIREMENTS>` and the diff):
+   **Requirements-verifier** — use `spec-reviewer` subagent type.
+   Pass the following context in the prompt:
 
-   ```text
-   You are a specification compliance reviewer.
-   Your only job is to verify the code implements what was requested —
-   nothing more, nothing less.
-   Do NOT trust the PR description as proof; read the actual code diff.
-
-   ## Requirements
-   <REQUIREMENTS>
-
-   ## Changed files
-   <output of: git diff --name-only origin/HEAD...HEAD>
-
-   ## Code diff
-   <output of: git diff origin/HEAD...HEAD>
-
-   ## Your task
-
-   1. Extract every distinct requirement, acceptance criterion,
-      and behavioral expectation from the requirements above.
-   2. For each requirement, inspect the diff and determine:
-      - ✅ Implemented — present in the code as specified.
-      - ⚠️ Partially implemented — present but incomplete or differs
-        from the specification (cite file:line).
-      - ❌ Missing — not addressed anywhere in the diff.
-   3. Also flag:
-      - Unrequested additions — code that adds behaviour not mentioned
-        in the requirements and not obviously necessary for the change.
-      - Interpretation mismatches — code that solves a different problem
-        than what was described, even if technically correct.
-   4. For every non-✅ finding, cite the relevant file path and line number.
-
-   ## Output format
-
-   ### Compliance Summary
-   - ✅ / ⚠️ / ❌  <requirement text> [file:line if applicable]
-
-   ### Issues
-   - [missing | partial | unrequested | mismatch]: <description> [file:line]
-
-   ### Verdict
-   Compliant | Partially Compliant | Non-Compliant
-   (one line, with a one-sentence justification)
-   ```
+   - `REQUIREMENTS` text collected in step 3
+   - Changed files list from `git diff --name-only origin/HEAD...HEAD`
+   - Full code diff from `git diff origin/HEAD...HEAD`
 
 6. **Aggregate Results**
 

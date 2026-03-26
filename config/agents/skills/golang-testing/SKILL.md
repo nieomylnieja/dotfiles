@@ -14,6 +14,21 @@ Use ONLY the version shown above to determine which testing APIs are available.
 
 ---
 
+## Test File Layout
+
+**HARD RULE: Test functions MUST appear before any utility/helper functions.**
+
+Order test files top-to-bottom:
+
+1. **Test functions** (`Test*`, `Benchmark*`, `Fuzz*`, `Example*`)
+2. **Test helpers** (functions calling `t.Helper()`)
+3. **Utility functions** (builders, fakes, assertion helpers, fixtures)
+
+Never place utility or helper code above the tests that use it.
+The tests are what readers care about — helpers are implementation details.
+
+---
+
 ## Test Style
 
 - Use table-driven tests with subtests (`t.Run`)

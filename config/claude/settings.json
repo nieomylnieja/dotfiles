@@ -11,6 +11,9 @@
     "commit": "",
     "pr": ""
   },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "extraKnownMarketplaces": {
     "anthropic-agent-skills": {
       "source": {
@@ -60,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/auto-review-permission/hook.sh"
+            "command": "auto-review"
           }
         ]
       }
@@ -73,9 +76,11 @@
       "AskUserQuestion",
       "WebSearch",
       "Write(/tmp/**)",
+      "Write(~/.local/share/agents/**)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:githubusercontent.com)",
       "WebFetch(domain:schemastore.org)",
+      "Read(~/go/**)",
       "Bash($DOTFILES/config/agents/skills/*/scripts/*)",
       "Bash(git log*)",
       "Bash(git show*)",

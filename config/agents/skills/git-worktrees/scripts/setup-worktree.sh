@@ -45,7 +45,7 @@ git fetch origin "$BRANCH"
 if [[ ! -d "$WORKTREE_PATH" ]]; then
   echo "Creating worktree at $WORKTREE_PATH..." >&2
   git worktree add "$WORKTREE_PATH" "$BRANCH" 2>/dev/null \
-    || git worktree add "$WORKTREE_PATH" "origin/$BRANCH"
+    || git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH"
 fi
 
 echo "Resetting to origin/$BRANCH..." >&2

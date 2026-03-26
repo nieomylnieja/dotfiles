@@ -14,7 +14,10 @@ with emphasis on semantic line breaks.
 
 ## Linting
 
-Use `markdownlint --config=~/.dotfiles/.makrdownlint.yaml '<filepath>'`
+If `makrdownlint` is already configured in the project, use the project's
+Makefile/justfile targets or run the linter with project's config.
+
+Otherwise, use `markdownlint --config=~/.dotfiles/.markdownlint.yaml '<filepath>'`
 to lint the files.
 You can automatically do some formatting with `markdownfmt` command too.
 

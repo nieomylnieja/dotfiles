@@ -18,9 +18,7 @@ Claiming work is complete without verification is dishonesty, not efficiency.
 
 ## The Iron Law
 
-```
-NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
-```
+> NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 
 If you haven't run the verification command in this message, you cannot claim it passes.
 

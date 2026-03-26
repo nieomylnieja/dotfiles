@@ -125,6 +125,7 @@ in
     kubectl
     kubecolor
     kubefwd
+    kubelogin-oidc
     ripgrep
     repomix
     # rpi-imager
