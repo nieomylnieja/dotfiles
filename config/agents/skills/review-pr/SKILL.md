@@ -103,9 +103,6 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(*scripts/gat
    ## Suggestions (X found)
    - [agent]: suggestion [file:line]
 
-   ## Strengths
-   - What's well-done in this PR
-
    ## Recommended Action
    1. Fix critical issues first
    2. Address important issues
@@ -135,7 +132,6 @@ allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(*scripts/gat
          "description": "<finding text>"
        }
      ],
-     "strengths": ["<strength text>"]
    }
    ```
 

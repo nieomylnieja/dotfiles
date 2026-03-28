@@ -80,9 +80,6 @@ Provide your analysis in this structure:
 - **Invariant Enforcement**: X/10
   [Brief justification]
 
-### Strengths
-[What the type does well]
-
 ### Concerns
 [Specific issues that need attention]
 

@@ -136,8 +136,8 @@ fi
 eval "$(dircolors)"
 
 # any other custom files to be sourced
-if [ -f "$HOME"/nobl9/nobl9rc.bash ]; then
-  source "$HOME"/nobl9/nobl9rc.bash
+if [ -f "$HOME"/nobl9/nobl9-dotfiles/nobl9rc.bash ]; then
+  source "$HOME"/nobl9/nobl9-dotfiles/nobl9rc.bash
 fi
 
 # Hook for direnv.
