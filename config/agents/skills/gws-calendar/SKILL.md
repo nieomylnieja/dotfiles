@@ -1,12 +1,13 @@
 ---
 name: gws-calendar
-version: 1.0.0
 description: "Google Calendar: Manage calendars and events."
 metadata:
+  version: 0.22.3
   openclaw:
     category: "productivity"
     requires:
-      bins: ["gws"]
+      bins:
+        - gws
     cliHelp: "gws calendar --help"
 ---
 
