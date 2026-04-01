@@ -100,7 +100,7 @@ func (c *ClaudeClient) buildUserPrompt(diff string, relatedFiles []string) strin
 // callClaudeCLI invokes the claude CLI command
 func (c *ClaudeClient) callClaudeCLI(systemPrompt, userPrompt string) (string, error) {
 	// Call claude with system prompt and user input (using haiku model for speed/cost)
-	cmd := exec.Command("claude", "--model", "haiku", "--system-prompt", systemPrompt)
+	cmd := exec.Command("claude", "-p", "--bare", "--model", "haiku", "--system-prompt", systemPrompt)
 	cmd.Stdin = strings.NewReader(userPrompt)
 
 	output, err := cmd.CombinedOutput()

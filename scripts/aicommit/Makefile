@@ -6,7 +6,6 @@ LDFLAGS := -s -w
 .PHONY: build
 build:
 	go build -ldflags="$(LDFLAGS)" -o $(APP_NAME) ./cmd/$(APP_NAME)/
-	go build -o $(APP_NAME) 
 
 .PHONY: install
 install:
