@@ -304,6 +304,39 @@ you end up with trailing zero values that silently corrupt results.
 `append` with zero length and defined capacity avoids this class of bug
 while still performing a single allocation.
 
+**Use type aliases to give maps semantic meaning.**
+When a map type like `map[string]map[string]string` is passed between functions,
+the keys and values lose their meaning at every call site.
+Define a named type for the map and type aliases for its keys and values:
+
+```go
+type projectName = string
+type alertUUID = string
+type alertStatus = string
+
+type ProjectAlertStatuses = map[projectName]map[alertUUID]alertStatus
+```
+
+This makes function signatures self-documenting
+and eliminates the need for comments explaining what each `string` represents.
+
+```go
+// WRONG — caller must guess what each string means:
+func Check(statuses map[string]map[string]string) error { ... }
+
+// RIGHT — intent is clear from the types:
+func Check(statuses ProjectAlertStatuses) error { ... }
+```
+
+Apply this when:
+
+- A map type appears in more than one function signature.
+- The map has two or more levels of nesting.
+- The key/value types are all primitive (e.g. `string`, `int`) and their
+  meaning is unclear.
+
+Do not over-apply — a simple `map[string]bool` used in one place does not need a type alias.
+
 **Struct field ordering.**
 Group related fields.
 Place `sync.Mutex` or `sync.RWMutex` directly above the fields it protects.

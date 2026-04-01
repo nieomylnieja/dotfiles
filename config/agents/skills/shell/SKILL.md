@@ -464,8 +464,6 @@ set -euo pipefail
 readonly PROG="${0##*/}"
 readonly VERSION="0.1.0"
 
-# --- Help ------------------------------------------------------------------
-
 usage() {
   cat <<EOF
 Usage: ${PROG} [OPTION]... [FILE]...
@@ -484,21 +482,15 @@ Exit status:
 EOF
 }
 
-# --- Logging ---------------------------------------------------------------
-
 log()  { echo "${PROG}: $*" >&2; }
 warn() { echo "${PROG}: WARNING: $*" >&2; }
 fatal()  { echo "${PROG}: ERROR: $*" >&2; exit "${2:-1}"; }
-
-# --- Core Logic ------------------------------------------------------------
 
 process() {
   local file="$1"
   log "Processing ${file}"
   # ...
 }
-
-# --- Main ------------------------------------------------------------------
 
 main() {
   local verbose=0
