@@ -4,6 +4,7 @@ description: >
   Use this skill when you're working with shell scripts (bash, sh).
   Covers script structure, formatting (shfmt), linting (shellcheck),
   argument parsing, help messages, error handling, and security.
+allowed-tools: Bash(shellcheck *) Bash(shfmt *)
 ---
 
 # Shell Scripting

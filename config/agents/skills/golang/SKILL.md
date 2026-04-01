@@ -166,6 +166,28 @@ not alphabetically.
   ) error {
   ```
 
+### Fluent Interface (Method Chaining)
+
+Fluent APIs (builder pattern, zerolog, etc.) — place each chained method
+on its own line with the **dot at the end of the preceding line**.
+
+```go
+// WRONG — entire chain on one line:
+log.Info().Int("matched", matched).Int("expected", totalExpected).Msg("Verifying alerts")
+
+// RIGHT — one method per line, dot at end:
+log.Info().
+    Int("matched", matched).
+    Int("expected", totalExpected).
+    Msg("Verifying alerts")
+```
+
+Short chains (2 calls or fewer) may stay on one line when they fit comfortably:
+
+```go
+log.Debug().Msg("starting")
+```
+
 ### Comments
 
 Do not add inline comments to code.
