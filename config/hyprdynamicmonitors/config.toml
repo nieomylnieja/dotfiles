@@ -1,6 +1,7 @@
 [general]
 destination = "$HOME/.config/hypr/monitors.conf"
 debounce_time_ms = 1000
+post_apply_exec = "pkill waybar; waybar & pkill hyprpaper; hyprpaper &"
 
 [tui.colors]
 source = "themes/nord.toml"

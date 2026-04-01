@@ -1,0 +1,2 @@
+shell=bash
+enable=add-default-case,deprecate-which,quote-safe-variables,require-double-brackets,require-variable-braces

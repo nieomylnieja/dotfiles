@@ -71,6 +71,7 @@ in
     glibcLocales
     glow
     gotestsum
+    gopls
     grim # Required by flameshot to work on wayland.
     simple-scan
     simplescreenrecorder
@@ -131,6 +132,8 @@ in
     # rpi-imager
     rustc
     kubernetes-helm
+    shfmt
+    shellcheck
     signal-desktop
     (pkgs.symlinkJoin {
       name = "slack";

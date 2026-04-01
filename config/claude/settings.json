@@ -63,7 +63,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "auto-review"
+            "command": "rapr"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/check-gopls.sh",
+            "timeout": 30
           }
         ]
       }

@@ -29,6 +29,98 @@ The tests are what readers care about — helpers are implementation details.
 
 ---
 
+## Test Naming
+
+### Test Functions
+
+`TestXxx` where Xxx does not start with a lowercase letter.
+Underscores are allowed in test names (exception to general Go naming).
+
+| Pattern | Use Case | Example |
+| --- | --- | --- |
+| `TestFunction` | Exported function | `TestParse`, `TestMarshalJSON` |
+| `TestType_Method` | Method on a type | `TestReader_Read`, `TestConfig_Validate` |
+| `Test_unexported` | Unexported function | `Test_parseHeader`, `Test_resolve` |
+
+There is no enforced 1:1 mapping between test and production functions.
+Name tests for what they verify, not which function they call.
+
+### Subtests (`t.Run`)
+
+Subtest names are slash-joined to the parent: `TestParse/empty_input`.
+Spaces become underscores in output. Slashes create hierarchy levels.
+
+```go
+// GOOD — describes the condition being tested:
+t.Run("nil input", func(t *testing.T) { ... })
+t.Run("duplicate keys", func(t *testing.T) { ... })
+t.Run("trailing slash", func(t *testing.T) { ... })
+
+// BAD:
+t.Run("test 1", func(t *testing.T) { ... })      // meaningless number
+t.Run("", func(t *testing.T) { ... })             // empty name
+t.Run(fmt.Sprintf("%v", input), func(...) { ... }) // unreadable after escaping
+```
+
+The `-run` flag matches each `/`-separated level with an unanchored regex:
+
+```bash
+go test -run=TestParse/empty        # parent + subtest
+go test -run=TestParse/             # all subtests of TestParse
+```
+
+### Table-Driven Test Cases
+
+Always provide a descriptive name. Never use index-based identification.
+Prefer map-keyed tables when test order does not matter.
+
+```go
+// GOOD — map key is the test name:
+tests := map[string]struct {
+    in       string
+    expected int
+}{
+    "positive": {in: "42", expected: 42},
+    "zero":     {in: "0", expected: 0},
+    "negative": {in: "-1", expected: -1},
+}
+
+// BAD — forces reader to count entries:
+for i, tt := range tests {
+    t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) { ... })
+}
+```
+
+Case name guidelines:
+
+- **Describe the condition**, not the outcome: `"nil map"` not `"returns error"`
+- **Keep short but specific**: `"empty slice"`, `"UTF-8 multibyte"`
+- **Do not repeat the function name** — the parent `TestXxx` already identifies it
+- **Avoid numbering**: `"case 1"` forces counting to find failures
+
+### Examples
+
+Example names are strictly enforced — they control where `go doc` renders them:
+
+| Pattern | Documents |
+| --- | --- |
+| `Example()` | Package |
+| `ExampleFoo()` | Function `Foo` |
+| `ExampleBar_Baz()` | Method `Baz` on type `Bar` |
+| `ExampleFoo_suffix()` | Additional example (suffix starts lowercase) |
+
+### Naming Anti-Patterns
+
+| Anti-Pattern | Problem | Fix |
+| --- | --- | --- |
+| `TestFoo1`, `TestFoo2` | Numbered — conveys nothing | `TestFoo_NilInput`, `TestFoo_EmptySlice` |
+| `TestHappy` | Too vague — happy path of what? | `TestParse_ValidJSON` |
+| `TestParseParsesProperly` | Repeats function name | `TestParse` or `TestParse_ValidInput` |
+| Very long names | Unreadable in output | Shorten; use subtests for breakdown |
+| `Testparse` | Lowercase after `Test` | Won't be discovered by `go test` |
+
+---
+
 ## Test Style
 
 - Use table-driven tests with subtests (`t.Run`)
@@ -38,6 +130,161 @@ The tests are what readers care about — helpers are implementation details.
 - Store test fixtures in a `testdata/` directory
 - Be aware of build tags like `//go:build unit_test` —
   if present, include them in build and test commands
+
+---
+
+## Table-Driven Tests
+
+Table-driven tests are the default pattern for testing multiple inputs/outputs.
+Every table test needs: a struct defining the test case,
+a collection of named cases,
+and a loop calling `t.Run`.
+
+### Basic Structure (Map-Keyed)
+
+Prefer map-keyed tables when test execution order does not matter.
+The map key is the test name — no `name` struct field needed.
+Randomized iteration can expose order-dependent bugs.
+
+```go
+func TestReverse(t *testing.T) {
+    tests := map[string]struct {
+        in       string
+        expected string
+    }{
+        "empty":      {in: "", expected: ""},
+        "single char": {in: "a", expected: "a"},
+        "palindrome": {in: "aba", expected: "aba"},
+        "ascii":      {in: "hello", expected: "olleh"},
+    }
+    for name, tt := range tests {
+        t.Run(name, func(t *testing.T) {
+            got := Reverse(tt.in)
+            assert.Equal(t, tt.expected, got)
+        })
+    }
+}
+```
+
+### Basic Structure (Slice)
+
+Use a slice when execution order matters (e.g. sequential dependencies).
+Requires an explicit `name` field.
+
+```go
+func TestMigrations(t *testing.T) {
+    tests := []struct {
+        name     string
+        in       string
+        expected string
+    }{
+        {name: "v1 to v2", in: "v1", expected: "v2"},
+        {name: "v2 to v3", in: "v2", expected: "v3"},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := Migrate(tt.in)
+            assert.Equal(t, tt.expected, got)
+        })
+    }
+}
+```
+
+### With Error Cases
+
+When testing both success and error paths, add an `expectedErr` field.
+Use `require` for error checks before accessing the result.
+
+```go
+func TestParsePort(t *testing.T) {
+    tests := map[string]struct {
+        in          string
+        expected    int
+        expectedErr string
+    }{
+        "valid":        {in: "8080", expected: 8080},
+        "zero":         {in: "0", expected: 0},
+        "negative":     {in: "-1", expectedErr: "out of range"},
+        "not a number": {in: "abc", expectedErr: "invalid syntax"},
+    }
+    for name, tt := range tests {
+        t.Run(name, func(t *testing.T) {
+            got, err := ParsePort(tt.in)
+            if tt.expectedErr != "" {
+                require.ErrorContains(t, err, tt.expectedErr)
+                return
+            }
+            require.NoError(t, err)
+            assert.Equal(t, tt.expected, got)
+        })
+    }
+}
+```
+
+### With Setup/Teardown per Case
+
+When cases need individual setup, use a function field:
+
+```go
+tests := []struct {
+    name  string
+    setup    func(t *testing.T) *Config
+    expected string
+}{
+    {
+        name: "default config",
+        setup: func(t *testing.T) *Config {
+            return NewConfig()
+        },
+        expected: "localhost",
+    },
+    {
+        name: "custom host",
+        setup: func(t *testing.T) *Config {
+            c := NewConfig()
+            c.Host = "example.com"
+            return c
+        },
+        expected: "example.com",
+    },
+}
+```
+
+### Parallel Table Tests
+
+Call `t.Parallel()` in both the parent and each subtest.
+Capture the loop variable (required before Go 1.22):
+
+```go
+func TestFetch(t *testing.T) {
+    t.Parallel()
+    tests := map[string]struct {
+        url      string
+        expected int
+    }{
+        "ok":        {url: "/ok", expected: 200},
+        "not found": {url: "/missing", expected: 404},
+    }
+    for name, tt := range tests {
+        t.Run(name, func(t *testing.T) {
+            t.Parallel()
+            got := fetch(tt.url)
+            assert.Equal(t, tt.expected, got)
+        })
+    }
+}
+```
+
+### When NOT to Use Table Tests
+
+Not everything belongs in a table. Avoid tables when:
+
+- Each case requires substantially different setup or assertions
+- The test has only 1-2 cases — a plain test is simpler
+- The struct would need many optional fields, most `nil` per case
+
+In these situations, write separate `TestXxx` functions or
+inline subtests instead of forcing a table structure.
 
 ---
 
@@ -85,18 +332,18 @@ assert.Equal(t, "alice", user.Name) // nil dereference
 
 ```go
 func TestParse(t *testing.T) {
-    tests := []struct {
-        input string
-        want  int
+    tests := map[string]struct {
+        input    string
+        expected int
     }{
-        {"42", 42},
-        {"0", 0},
+        "positive": {input: "42", expected: 42},
+        "zero":     {input: "0", expected: 0},
     }
-    for _, tt := range tests {
-        t.Run(tt.input, func(t *testing.T) {
+    for name, tt := range tests {
+        t.Run(name, func(t *testing.T) {
             got, err := parse(tt.input)
             require.NoError(t, err) // skip remaining assertions on failure
-            assert.Equal(t, tt.want, got)
+            assert.Equal(t, tt.expected, got)
         })
     }
 }
@@ -109,7 +356,7 @@ func TestParse(t *testing.T) {
 | `require.NoError(t, err)` | must succeed before using result |
 | `require.NotNil(t, v)` | must be non-nil before dereferencing |
 | `require.Len(t, s, n)` | must have length before indexing |
-| `assert.Equal(t, want, got)` | value comparison |
+| `assert.Equal(t, expected, got)` | value comparison |
 | `assert.ErrorIs(t, err, target)` | error chain check |
 | `assert.Contains(t, s, sub)` | substring / element presence |
 | `assert.Eventually(t, cond, timeout, tick)` | async condition |
@@ -238,4 +485,31 @@ ctx := t.Context()
 for i := 0; i < b.N; i++ { doWork() }
 // RIGHT:
 for b.Loop() { doWork() }
+```
+
+**Vague or numbered test names:**
+
+```go
+// WRONG:
+func TestParse1(t *testing.T) { ... }
+func TestParse2(t *testing.T) { ... }
+t.Run("test 1", func(t *testing.T) { ... })
+
+// RIGHT:
+func TestParse_ValidJSON(t *testing.T) { ... }
+func TestParse_MalformedInput(t *testing.T) { ... }
+t.Run("trailing comma", func(t *testing.T) { ... })
+```
+
+**Index-based table test identification:**
+
+```go
+// WRONG:
+for i, tt := range tests {
+    t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) { ... })
+}
+// RIGHT — always use a name field:
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) { ... })
+}
 ```

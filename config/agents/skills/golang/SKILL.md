@@ -148,6 +148,23 @@ not alphabetically.
 - If and if/else block has a lot of logic in it, separate each branch into a function.
 - Use `net.JoinHostPort(host, port)` instead of
   `fmt.Sprintf("%s:%d", host, port)` (IPv6-safe).
+- When a function signature exceeds the line length limit,
+  put each argument on its own line — do not split arguments
+  into two groups to fit the limit.
+
+  ```go
+  // WRONG — split in half to fit line length:
+  func ProcessItems(ctx context.Context, items []Item,
+      opts Options, logger *slog.Logger) error {
+
+  // RIGHT — one argument per line:
+  func ProcessItems(
+      ctx context.Context,
+      items []Item,
+      opts Options,
+      logger *slog.Logger,
+  ) error {
+  ```
 
 ### Comments
 

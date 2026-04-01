@@ -51,6 +51,13 @@ a fifth level usually signals the content should be split or restructured.
 Headings must follow a strict hierarchy:
 never skip levels (e.g., `##` followed by `####`).
 
+### Section Separators
+
+Avoid horizontal rules (`---`, `***`, `___`) to separate sections.
+Use headings instead —
+they provide semantic structure, navigation, and hierarchy
+that a visual line cannot.
+
 ### Paragraphs and Spacing
 
 Keep paragraphs focused on a single idea.
