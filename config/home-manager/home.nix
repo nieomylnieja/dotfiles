@@ -67,6 +67,7 @@ in
     fzf
     gcc_multi
     gh
+    gh-dash
     git
     glibcLocales
     glow

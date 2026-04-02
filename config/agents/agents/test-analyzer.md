@@ -4,7 +4,7 @@ description: |
   Use this agent when you need to review a pull request for test coverage quality and completeness.
   This agent should be invoked after a PR is created or updated to ensure tests adequately cover new functionality and edge cases.
 model: inherit
-color: cyan
+color: "#06b6d4"
 ---
 
 # Agent

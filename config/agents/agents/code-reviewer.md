@@ -8,7 +8,7 @@ description: |
   In most cases this will recently completed work which is unstaged in git (can be retrieved by doing a git diff).
   However there can be cases where this is different, make sure to specify this as the agent input when calling the agent. 
 model: opus
-color: green
+color: "#22c55e"
 ---
 
 # Agent

@@ -8,7 +8,7 @@ description: |
     (3) When reviewing existing comments for potential technical debt or comment rot
     (4) When you need to verify that comments accurately reflect the code they describe.
 model: inherit
-color: green
+color: "#22c55e"
 ---
 
 # Agent

@@ -8,7 +8,7 @@ description: |
     (3) when refactoring existing types to improve their design quality.
   The agent will provide both qualitative feedback and quantitative ratings on encapsulation, invariant expression, usefulness, and enforcement.
 model: inherit
-color: pink
+color: "#ec4899"
 ---
 
 # Agent
