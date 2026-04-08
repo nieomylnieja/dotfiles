@@ -42,45 +42,45 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/googleworkspace/cli.git",
       "skillPath": "skills/gws-calendar/SKILL.md",
-      "skillFolderHash": "b6391bdc95ec0c7f8cdf2bd1fdb38ebe30e41656",
+      "skillFolderHash": "62a27859dbdf798c1f7288d04750e743283a6b4f",
       "installedAt": "2026-03-18T12:47:34.535Z",
-      "updatedAt": "2026-03-28T12:30:09.013Z"
+      "updatedAt": "2026-04-08T08:46:34.415Z"
     },
     "gws-drive": {
       "source": "googleworkspace/cli",
       "sourceType": "github",
       "sourceUrl": "https://github.com/googleworkspace/cli.git",
       "skillPath": "skills/gws-drive/SKILL.md",
-      "skillFolderHash": "4c98a2d69cc2f780ebc1fedaf7231c033ad7bf7d",
+      "skillFolderHash": "46b7e75840ff26db80b6b74238e423dfa4b75c11",
       "installedAt": "2026-03-18T12:47:44.084Z",
-      "updatedAt": "2026-03-28T12:30:12.234Z"
+      "updatedAt": "2026-04-08T08:46:37.927Z"
     },
     "gws-sheets": {
       "source": "googleworkspace/cli",
       "sourceType": "github",
       "sourceUrl": "https://github.com/googleworkspace/cli.git",
       "skillPath": "skills/gws-sheets/SKILL.md",
-      "skillFolderHash": "f11307e3d4f0f7ea0b621d378792b3da20e5ee85",
+      "skillFolderHash": "50758ea65d12833e48361aa541c0acaff0d96f67",
       "installedAt": "2026-03-18T12:47:49.739Z",
-      "updatedAt": "2026-03-28T12:30:15.478Z"
+      "updatedAt": "2026-04-08T08:46:41.193Z"
     },
     "gws-docs": {
       "source": "googleworkspace/cli",
       "sourceType": "github",
       "sourceUrl": "https://github.com/googleworkspace/cli.git",
       "skillPath": "skills/gws-docs/SKILL.md",
-      "skillFolderHash": "ccfc91bddbd39ddd21f33debf861c8cf162e217b",
+      "skillFolderHash": "455f7468d4a2e3b0b352fbd7ad0937354427af82",
       "installedAt": "2026-03-18T12:47:54.830Z",
-      "updatedAt": "2026-03-28T12:30:18.537Z"
+      "updatedAt": "2026-04-08T08:46:44.512Z"
     },
     "gws-docs-write": {
       "source": "googleworkspace/cli",
       "sourceType": "github",
       "sourceUrl": "https://github.com/googleworkspace/cli.git",
       "skillPath": "skills/gws-docs-write/SKILL.md",
-      "skillFolderHash": "ddff957838e40d170db419fe68dc23cb2ee6d474",
+      "skillFolderHash": "6a9ce7b7d982afc5cead13d64a85fe1875d411e9",
       "installedAt": "2026-03-18T12:47:59.721Z",
-      "updatedAt": "2026-03-28T12:30:21.594Z"
+      "updatedAt": "2026-04-08T08:46:47.741Z"
     }
   },
   "dismissed": {}
