@@ -23,7 +23,7 @@ export VISUAL=nvim
 bind "set completion-ignore-case on"
 
 # make less more friendly for non-text input files, see lesspipe(1)
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+[[ -x /usr/bin/lesspipe ]] && eval "$(SHELL=/bin/sh lesspipe)"
 
 # those fancy rust speeders
 alias ls='eza --group-directories-first'
@@ -45,7 +45,7 @@ alias rm_oid="sed -E 's/(.*)(ObjectId\()(.*)(\)(.*))/\1\3\5/'"
 
 # K8s aliases
 alias kubectl="kubecolor"
-alias kpod='kubectl get pod | fzf | head -n1 | awk "{print \$1;}" | tr -d "\n" | c'
+alias kpod='kubectl get pod | fzf | head -n1 | awk "{print $1;}" | tr -d "\n" | c'
 alias kexec='kubectl exec -it'
 alias kn='kubectl get namespace | fzf | awk '"'"'{print $1}'"'"' | xargs kubectl config set-context --current --namespace'
 alias kctx='cat ~/.kube/config | yq '"'"'.contexts | .[].name'"'"' | tr -d "\"" | fzf | xargs kubectl config use-context'
@@ -64,10 +64,10 @@ alias mv='mv -i'
 alias rm='rm -I'
 
 # Functions
-source "$DOTFILES/config/bash/functions"
+source "${DOTFILES}/config/bash/functions"
 
 # FZF configuration
-source "$DOTFILES/config/fzf/config.sh"
+source "${DOTFILES}/config/fzf/config.sh"
 
 # kubectl autocomplete
 if [[ -x "$(command -v kubectl)" || -x "$(command -v kubecolor)" ]]; then
@@ -79,30 +79,31 @@ if [[ -x "$(command -v kubectl)" || -x "$(command -v kubecolor)" ]]; then
 fi
 
 # krew path
-export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+export PATH="${KREW_ROOT:-${HOME}/.krew}/bin:${PATH}"
 
 # Avoid duplicates
 HISTCONTROL=ignoredups:erasedups
 # When the shell exits, append to the history file instead of overwriting it
 shopt -s histappend
 # After each command, append to the history file and reread it
-PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
+PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}$'\n'}history -a; history -c; history -r"
 
 # nord dircolors
-if [ ! -f ~/.dir_colors ]; then
-  ln "$DOTFILES/config/dircolors/dir_colors" "$HOME/.dir_colors"
+if [[ ! -f ~/.dir_colors ]]; then
+  ln "${DOTFILES}/config/dircolors/dir_colors" "${HOME}/.dir_colors"
 fi
 
 # Gemini API Key
-if [ -f ~/.password-store/gemini_api_key ]; then
-  export GEMINI_API_KEY="$(cat ~/.password-store/gemini_api_key)"
+if [[ -f ~/.password-store/gemini_api_key ]]; then
+  GEMINI_API_KEY="$(cat ~/.password-store/gemini_api_key)"
+  export GEMINI_API_KEY
 fi
 
 # bat colors
 export BAT_THEME="Nord"
 
 # node version manager
-if [ -x "$(command -v fnm)" ]; then
+if [[ -x "$(command -v fnm)" ]]; then
   eval "$(fnm env --use-on-cd)"
 fi
 
@@ -120,14 +121,14 @@ export HISTSIZE=10000
 export HISTFILESIZE=10000
 
 # Spicetify -- an awesome spotify customization cli
-if [ -x "$(command -v spicetify-cli)" ]; then
-  export SPICETIFY_INSTALL="$HOME/spicetify-cli"
-  export PATH="$SPICETIFY_INSTALL:$PATH"
+if [[ -x "$(command -v spicetify-cli)" ]]; then
+  export SPICETIFY_INSTALL="${HOME}/spicetify-cli"
+  export PATH="${SPICETIFY_INSTALL}:${PATH}"
 fi
 
 # pyenv path -- place it toward the end of bashrc
-if [ -x "$(command -v pyenv)" ]; then
-  export PATH="$HOME/.pyenv/bin:$PATH"
+if [[ -x "$(command -v pyenv)" ]]; then
+  export PATH="${HOME}/.pyenv/bin:${PATH}"
   eval "$(pyenv init --path)"
   eval "$(pyenv virtualenv-init -)"
 fi
@@ -136,8 +137,8 @@ fi
 eval "$(dircolors)"
 
 # any other custom files to be sourced
-if [ -f "$HOME"/nobl9/nobl9-dotfiles/nobl9rc.bash ]; then
-  source "$HOME"/nobl9/nobl9-dotfiles/nobl9rc.bash
+if [[ -f "${HOME}"/nobl9/nobl9-dotfiles/nobl9rc.bash ]]; then
+  source "${HOME}"/nobl9/nobl9-dotfiles/nobl9rc.bash
 fi
 
 # Hook for direnv.
@@ -145,32 +146,32 @@ eval "$(direnv hook bash)"
 
 # Completions for programs with "cmd completion bash" generators
 for cmd in kubefwd; do
-  command -v "$cmd" &>/dev/null && eval "$($cmd completion bash)"
+  command -v "${cmd}" &>/dev/null && eval "$(${cmd} completion bash)"
 done
 
 # Custom completions
-if [ -f "$DOTFILES/config/bash/completions/pdf" ]; then
-  source "$DOTFILES/config/bash/completions/pdf"
+if [[ -f "${DOTFILES}/config/bash/completions/pdf" ]]; then
+  source "${DOTFILES}/config/bash/completions/pdf"
 fi
 
 # ALWAYS LOAD THESE LAST! ORDER MATTERS!
 # ble.sh - load with --attach=none first
-if [ -x "$(command -v blesh-share)" ]; then
+if [[ -x "$(command -v blesh-share)" ]]; then
   source -- "$(blesh-share)"/ble.sh --attach=none
 fi
 
 # starship prompt init - must be BEFORE ble-attach
-if [ -x "$(command -v starship)" ]; then
+if [[ -x "$(command -v starship)" ]]; then
   eval "$(starship init bash)"
 fi
 
 # Zoxide (cd replacement) - before ble-attach
-if [ -x "$(command -v zoxide)" ]; then
+if [[ -x "$(command -v zoxide)" ]]; then
   eval "$(zoxide init bash)"
   alias cd='z'
 fi
 
 # ble.sh - attach AFTER starship and other prompt/shell enhancements
-if [ -x "$(command -v blesh-share)" ]; then
+if [[ -x "$(command -v blesh-share)" ]]; then
   [[ ! ${BLE_VERSION-} ]] || ble-attach
 fi

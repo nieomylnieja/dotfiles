@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://gh-dash.dev/schema.json
+keybindings:
+  prs:
+    - key: T
+      command: gh enhance -R {{.RepoName}} {{.PrNumber}}
+pager:
+  diff: delta
