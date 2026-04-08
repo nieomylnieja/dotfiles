@@ -25,6 +25,7 @@ fall back to the tools below directly.
 
 **Formatting — [shfmt](https://github.com/mvdan/sh):**
 
+<!-- Note: keep the flags consistent with LSP config in Neovim -->
 ```sh
 shfmt -i 2 -ci -bn -sr -w script.sh
 ```

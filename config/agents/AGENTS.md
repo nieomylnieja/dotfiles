@@ -33,6 +33,7 @@ I can make mistakes when interacting with you, that's why it's crucial.
 - Document exact error messages, not summaries.
 - Always test your changes, either by building the program or running tests,
   If there is a Makefile (or equivalent, like justfile) available, see If there are lints to be run.
+- Write to temporary files rather then using heredoc, whenever possible.
 
 ### What YOU MUST NOT Do
 

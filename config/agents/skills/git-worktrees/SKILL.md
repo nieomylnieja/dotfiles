@@ -19,28 +19,30 @@ allowing work on multiple branches simultaneously without switching.
 
 ## Directory
 
-Always use `.worktrees/` — no other location, no prompting.
+Always use `.worktrees/` — no other location.
 
 ## Creation Steps
 
 ### 1. Create Worktree
 
-**New branch** (feature work):
-
 ```bash
-git worktree add ".worktrees/$BRANCH_NAME" -b "$BRANCH_NAME"
+$DOTFILES/config/agents/skills/git-worktrees/scripts/setup-worktree.sh BRANCH_NAME
 ```
 
-**Existing branch** (e.g. reviewing a PR):
+The script auto-detects whether the branch exists (locally or on origin):
+
+- **Existing branch:** fetches latest from origin, creates worktree, resets to remote state.
+- **New branch:** fetches the default branch (main/master), creates a new branch from it.
+
+To branch off a specific base instead of the default branch:
 
 ```bash
-$DOTFILES/config/agents/skills/git-worktrees/scripts/setup-worktree.sh --branch "$BRANCH_NAME"
+$DOTFILES/config/agents/skills/git-worktrees/scripts/setup-worktree.sh --base develop BRANCH_NAME
 ```
 
-The script fetches the latest from origin, creates the worktree if it doesn't
-exist yet, and resets it to `origin/$BRANCH_NAME`. It outputs the worktree path.
+The script outputs the absolute worktree path on stdout.
 
-### 3. Run Project Setup
+### 2. Run Project Setup
 
 Auto-detect and run appropriate setup:
 
@@ -59,7 +61,7 @@ if [ -f pyproject.toml ]; then poetry install; fi
 if [ -f go.mod ]; then go mod download; fi
 ```
 
-### 4. Verify Clean Baseline
+### 3. Verify Clean Baseline
 
 Run tests to ensure worktree starts clean:
 
@@ -75,7 +77,7 @@ go test ./...
 
 **If tests pass:** Report ready.
 
-### 5. Report Location
+### 4. Report Location
 
 ```text
 Worktree ready at <full-path>
@@ -107,11 +109,11 @@ Ready to implement <feature-name>
 ```text
 You: I'm using the git-worktrees skill to set up an isolated workspace.
 
-[Create worktree: git worktree add .worktrees/auth -b feature/auth]
+[Create worktree: setup-worktree.sh feature/auth]
 [Run npm install]
 [Run npm test - 47 passing]
 
-Worktree ready at /Users/jesse/myproject/.worktrees/auth
+Worktree ready at /Users/jesse/myproject/.worktrees/feature/auth
 Tests passing (47 tests, 0 failures)
 Ready to implement auth feature
 ```

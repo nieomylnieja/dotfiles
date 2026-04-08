@@ -1,54 +1,132 @@
 #!/usr/bin/env bash
-# Sets up a git worktree for an existing branch, ensuring it is up to date.
-# Usage: setup-worktree.sh --branch <branch>
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
-  cat <<'EOF'
-setup-worktree.sh — Create or update a git worktree for an existing branch.
+readonly PROG="${0##*/}"
 
-Usage: setup-worktree.sh --branch <branch>
+usage() {
+  cat << EOF
+Usage: ${PROG} [OPTION]... BRANCH
+Create or update a git worktree at .worktrees/BRANCH.
 
-Flags:
-  --branch NAME  Branch to check out in the worktree (required)
+Auto-detects whether BRANCH exists (locally or on origin).
+  - Existing branch: fetches latest and checks it out.
+  - New branch: fetches the base branch, then creates BRANCH from it.
 
-Output (stdout): absolute path to the worktree directory
+Options:
+  -b, --base BRANCH  base branch to create from (default: auto-detect main/master)
+  -h, --help         display this help and exit
 
-The worktree is created at .worktrees/<branch> relative to the repository root.
-If it already exists, it is reset to the latest remote state.
-Exits with code 1 if --branch is not provided.
+Exit status:
+  0  success
+  1  general error
+  2  usage error
 EOF
-  exit 0
-fi
+}
 
-BRANCH=""
+log() { echo "${PROG}: $*" >&2; }
+fatal() {
+  echo "${PROG}: ERROR: $1" >&2
+  exit "${2:-1}"
+}
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --branch) BRANCH="$2"; shift 2 ;;
-    *) echo "error: unknown argument: $1" >&2; exit 1 ;;
-  esac
-done
+detect_default_branch() {
+  local remote_head
+  remote_head="$(git symbolic-ref refs/remotes/origin/HEAD 2> /dev/null || true)"
+  if [[ -n "${remote_head}" ]]; then
+    echo "${remote_head#refs/remotes/origin/}"
+    return
+  fi
+  for candidate in main master; do
+    if git rev-parse --verify "origin/${candidate}" &> /dev/null; then
+      echo "${candidate}"
+      return
+    fi
+  done
+  fatal "cannot detect default branch; use --base to specify"
+}
 
-if [[ -z "$BRANCH" ]]; then
-  echo "error: --branch is required" >&2
-  exit 1
-fi
+branch_exists_on_remote() {
+  git ls-remote --exit-code --heads origin "$1" &> /dev/null
+}
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
-WORKTREE_PATH="$REPO_ROOT/.worktrees/$BRANCH"
+branch_exists_locally() {
+  git rev-parse --verify "refs/heads/$1" &> /dev/null
+}
 
-echo "Fetching latest '$BRANCH' from origin..." >&2
-git fetch origin "$BRANCH"
+main() {
+  local base=""
+  local branch=""
 
-if [[ ! -d "$WORKTREE_PATH" ]]; then
-  echo "Creating worktree at $WORKTREE_PATH..." >&2
-  git worktree add "$WORKTREE_PATH" "$BRANCH" 2>/dev/null \
-    || git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH"
-fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -b | --base)
+        [[ $# -lt 2 ]] && fatal "--base requires an argument" 2
+        base="$2"
+        shift 2
+        ;;
+      --base=*)
+        base="${1#*=}"
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*) fatal "Unknown option: $1" 2 ;;
+      *) break ;;
+    esac
+  done
 
-echo "Resetting to origin/$BRANCH..." >&2
-git -C "$WORKTREE_PATH" reset --hard "origin/$BRANCH"
+  [[ $# -eq 0 ]] && fatal "BRANCH argument is required" 2
+  [[ $# -gt 1 ]] && fatal "expected exactly one BRANCH argument, got $#" 2
+  branch="$1"
 
-echo "$WORKTREE_PATH"
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel)"
+  local worktree_path="${repo_root}/.worktrees/${branch}"
+
+  if branch_exists_on_remote "${branch}" || branch_exists_locally "${branch}"; then
+    local on_remote
+    on_remote=$(branch_exists_on_remote "${branch}" && echo true || echo false)
+
+    if [[ "${on_remote}" == "true" ]]; then
+      log "Branch '${branch}' exists on remote, fetching latest..."
+      git fetch origin "${branch}"
+    else
+      log "Branch '${branch}' exists locally (not on remote)..."
+    fi
+
+    if [[ ! -d "${worktree_path}" ]]; then
+      log "Creating worktree at ${worktree_path}..."
+      if branch_exists_locally "${branch}"; then
+        git worktree add "${worktree_path}" "${branch}"
+      else
+        git worktree add --track -b "${branch}" "${worktree_path}" "origin/${branch}"
+      fi
+    fi
+
+    if [[ "${on_remote}" == "true" ]]; then
+      log "Resetting to origin/${branch}..."
+      git -C "${worktree_path}" reset --hard "origin/${branch}"
+    fi
+  else
+    if [[ -z "${base}" ]]; then
+      base="$(detect_default_branch)"
+    fi
+
+    log "Branch '${branch}' is new, branching off '${base}'..."
+    log "Fetching '${base}' from origin..."
+    git fetch origin "${base}"
+
+    log "Creating worktree at ${worktree_path}..."
+    git worktree add -b "${branch}" "${worktree_path}" "origin/${base}"
+  fi
+
+  echo "${worktree_path}"
+}
+
+main "$@"
