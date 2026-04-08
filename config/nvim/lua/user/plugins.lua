@@ -201,7 +201,6 @@ return {
         "postgres-language-server",
         "ansible-language-server",
         "clangd",
-        "asm-lsp",
         "marksman",
         -- Linters/formatters
         "actionlint",

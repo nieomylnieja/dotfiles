@@ -24,26 +24,26 @@ function M.install_and_start()
         return
       end
 
-      local parser_installed = pcall(vim.treesitter.get_parser, bufnr, parser_name)
+      -- Check for compiled .so directly; get_parser is lazy in Neovim 0.12+
+      -- and no longer fails when the .so is missing.
+      local ts_config = require("nvim-treesitter.config")
+      local parser_dir = ts_config.get_install_dir("parser")
+      local parser_so = vim.fs.joinpath(parser_dir, parser_name .. ".so")
 
-      -- If not installed, install parser synchronously
-      if not parser_installed then
-        require("nvim-treesitter").install({ parser_name }):wait(30000) -- main branch syntax
+      if not vim.uv.fs_stat(parser_so) then
+        require("nvim-treesitter").install({ parser_name }):wait(30000)
         vim.notify("Installed parser: " .. parser_name, vim.log.levels.INFO, { title = "core/treesitter" })
       end
 
-      -- Check so tree-sitter can see the newly installed parser
-      parser_installed = pcall(vim.treesitter.get_parser, bufnr, parser_name)
-      if not parser_installed then
+      if not vim.uv.fs_stat(parser_so) then
         vim.notify(
-          "Failed to get parser for " .. parser_name .. " after installation",
+          "Failed to install parser for " .. parser_name,
           vim.log.levels.WARN,
           { title = "core/treesitter" }
         )
         return
       end
 
-      -- Start treesitter for this buffer
       vim.treesitter.start(bufnr, parser_name)
 
       -- This way injections Tree-sitter injections actually work.

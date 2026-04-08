@@ -118,6 +118,12 @@ local servers = {
     settings = {
       bashIde = {
         globPattern = "*@(.sh|.inc|.bash|.command|.bats)",
+        shfmt = {
+          indent = 2,
+          caseIndent = true,
+          binaryNextLine = true,
+          spaceRedirects = true,
+        },
       },
     },
   },
@@ -130,7 +136,6 @@ local servers = {
   postgres_lsp = {},
   ansiblels = {},
   clangd = {},
-  asm_lsp = {},
   marksman = {},
 }
 

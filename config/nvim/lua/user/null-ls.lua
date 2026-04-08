@@ -36,9 +36,9 @@ M.setup = function(lsp_config)
     fmt.stylua,
     require("none-ls.formatting.golangci_lint"),
     fmt.ocamlformat,
-    fmt.shfmt,
     fmt.terraform_fmt,
     fmt.markdownlint,
+    -- fmt.shfmt, -- handled by bash-language-server
     -- ACTIONS:
     action.gomodifytags.with({
       args = { "-quiet", "-transform camelcase", "--skip-unexported" },
