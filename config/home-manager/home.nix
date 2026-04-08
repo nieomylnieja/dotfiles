@@ -43,6 +43,7 @@ in
     csvkit
     codex
     delta
+    diffnav
     direnv
     # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
     (pkgs.symlinkJoin {
@@ -68,6 +69,7 @@ in
     gcc_multi
     gh
     gh-dash
+    gh-enhance
     git
     glibcLocales
     glow
@@ -96,6 +98,7 @@ in
     libsForQt5.qt5ct
     libnotify # For notify-send.
     libreoffice
+    lua
     luajitPackages.luarocks
     lutris
     man
@@ -227,7 +230,7 @@ in
   };
 
   xdg.configFile = {
-    "git/config".source = ../git/config;
+    # "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
     "rofi".source = ../rofi;
     "alacritty".source = ../alacritty;
@@ -239,23 +242,31 @@ in
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
     "glow".source = ../glow;
     "blesh/init.sh".source = ../blesh/blerc;
+    # "gh-dash/config.yml".source = ../gh-dash/config.yml;
   };
 
   xdg.mimeApps =
     let
       imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
-      imageAssociations = builtins.listToAttrs (map (t: { name = "image/${t}"; value = [ "swayimg.desktop" ]; }) imageTypes);
+      imageAssociations = builtins.listToAttrs (map
+        (t: {
+          name = "image/${t}";
+          value = [ "swayimg.desktop" ];
+        })
+        imageTypes);
     in
     {
       enable = true;
-      defaultApplications = {
-        "application/pdf" = [ "org.pwmt.zathura.desktop" ];
-        "text/html" = "vivaldi-stable.desktop";
-        "x-scheme-handler/http" = "vivaldi-stable.desktop";
-        "x-scheme-handler/https" = "vivaldi-stable.desktop";
-        "x-scheme-handler/about" = "vivaldi-stable.desktop";
-        "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
-      } // imageAssociations;
+      defaultApplications =
+        {
+          "application/pdf" = [ "org.pwmt.zathura.desktop" ];
+          "text/html" = "vivaldi-stable.desktop";
+          "x-scheme-handler/http" = "vivaldi-stable.desktop";
+          "x-scheme-handler/https" = "vivaldi-stable.desktop";
+          "x-scheme-handler/about" = "vivaldi-stable.desktop";
+          "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
+        }
+        // imageAssociations;
     };
 
   # User session variables (inherited by Hyprland and all launched programs)
@@ -275,6 +286,7 @@ in
     GOPATH = "${homeDir}/go";
     STARSHIP_LOG = "error";
     SKILLS_AGENTS = "opencode"; # claude-code is already linked, so no need to install it
+    OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
   };
 
   programs.direnv = {
@@ -286,47 +298,48 @@ in
 
   programs.vscode = {
     enable = true;
-    package = pkgs.vscode.fhsWithPackages (ps: with ps; [
-      # Essentially everything Electron needs to run.
-      # This is necessary for Extension Test Runner to spawn a test VS Code instance.
-      alsa-lib
-      at-spi2-atk
-      cairo
-      cups
-      dbus
-      distrobox
-      expat
-      gdk-pixbuf
-      glib
-      gtk3
-      gtk4
-      nss
-      nspr
-      libx11
-      libxcb
-      libxcomposite
-      libxdamage
-      libxext
-      libxfixes
-      libxrandr
-      libxkbfile
-      libxshmfence
-      pango
-      pciutils
-      stdenv.cc.cc
-      systemd
-      libnotify
-      pipewire
-      libsecret
-      libpulseaudio
-      speechd-minimal
-      libdrm
-      mesa
-      libxkbcommon
-      libGL
-      vulkan-loader
-      openssl
-    ]);
+    package = pkgs.vscode.fhsWithPackages (ps:
+      with ps; [
+        # Essentially everything Electron needs to run.
+        # This is necessary for Extension Test Runner to spawn a test VS Code instance.
+        alsa-lib
+        at-spi2-atk
+        cairo
+        cups
+        dbus
+        distrobox
+        expat
+        gdk-pixbuf
+        glib
+        gtk3
+        gtk4
+        nss
+        nspr
+        libx11
+        libxcb
+        libxcomposite
+        libxdamage
+        libxext
+        libxfixes
+        libxrandr
+        libxkbfile
+        libxshmfence
+        pango
+        pciutils
+        stdenv.cc.cc
+        systemd
+        libnotify
+        pipewire
+        libsecret
+        libpulseaudio
+        speechd-minimal
+        libdrm
+        mesa
+        libxkbcommon
+        libGL
+        vulkan-loader
+        openssl
+      ]);
   };
 
   programs.poetry = {
@@ -369,13 +382,14 @@ in
   programs.claude-code = {
     enable = true;
     enableMcpIntegration = true;
-    settings = (builtins.fromJSON (builtins.readFile ../claude/settings.json));
+    settings = builtins.fromJSON (builtins.readFile ../claude/settings.json);
     memory.source = ../agents/AGENTS.md;
   };
 
   programs.opencode = {
     enable = true;
     enableMcpIntegration = true;
+    settings = builtins.fromJSON (builtins.readFile ../opencode/opencode.json);
     rules = ../agents/AGENTS.md;
   };
 
@@ -386,7 +400,7 @@ in
 
   programs.gemini-cli = {
     enable = true;
-    settings = (builtins.fromJSON (builtins.readFile ../gemini/settings.json));
+    settings = builtins.fromJSON (builtins.readFile ../gemini/settings.json);
   };
 
   # Notifications

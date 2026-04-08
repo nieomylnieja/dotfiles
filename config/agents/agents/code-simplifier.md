@@ -6,6 +6,7 @@ description: |
   It simplifies code by following project best practices while retaining all functionality.
   The agent focuses only on recently modified code unless instructed otherwise.
 model: opus
+mode: subagent
 ---
 
 # Agent

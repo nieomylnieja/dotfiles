@@ -8,6 +8,7 @@ description: |
   to the code diff with a compliance verdict.
   The agent needs requirements text and a code diff as input.
 model: opus
+mode: subagent
 color: "#eab308"
 ---
 
