@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly PROG="${0##*/}"
+
+usage() {
+  cat << EOF
+Usage: ${PROG} [OPTION]...
+Smart git pager: uses delta for single-file diffs, diffnav for multi-file.
+
+Reads diff input from stdin. Intended to be used as git's core.pager.
+
+Options:
+  -h, --help  display this help and exit
+
+Exit status:
+  0  success
+  1  general error
+EOF
+}
+
+fatal() {
+  echo "${PROG}: ERROR: $*" >&2
+  exit "${2:-1}"
+}
+
+cleanup() {
+  rm -f "${tmpfile:-}"
+}
+
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*) fatal "Unknown option: $1" 2 ;;
+      *) break ;;
+    esac
+  done
+
+  local tmpfile
+  tmpfile="$(mktemp)" || exit 1
+  trap cleanup EXIT
+
+  cat > "${tmpfile}"
+
+  local file_count
+  file_count="$(grep -c 'diff --git ' "${tmpfile}" || true)"
+
+  if [[ "${file_count}" -le 1 ]]; then
+    delta --file-style=omit < "${tmpfile}"
+  else
+    diffnav < "${tmpfile}"
+  fi
+}
+
+main "$@"

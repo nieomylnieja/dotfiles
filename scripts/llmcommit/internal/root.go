@@ -9,14 +9,14 @@ import (
 
 type RootHandler struct {
 	git         *GitClient
-	llm         LLMProvider
+	llm         LLMClient
 	interaction *Interaction
 }
 
 func NewRootHandler() *RootHandler {
 	return &RootHandler{
 		git:         NewGitClient(),
-		llm:         NewClaudeClient(),
+		llm:         NewGeminiClient(),
 		interaction: NewInteraction(),
 	}
 }
@@ -33,12 +33,20 @@ func (h *RootHandler) run(ctx context.Context) error {
 		return err
 	}
 
-	data, err := h.git.DetectStagedChanges()
+	stagedFiles, err := h.git.GetStagedFiles()
 	if err != nil {
 		return err
 	}
 
-	h.interaction.DisplayDetectedFiles(data.Files)
+	selectedFiles, err := h.interaction.SelectFiles(stagedFiles)
+	if err != nil {
+		return err
+	}
+
+	data, err := h.git.BuildCommitData(selectedFiles)
+	if err != nil {
+		return err
+	}
 
 	var message string
 	for {
@@ -64,7 +72,7 @@ func (h *RootHandler) run(ctx context.Context) error {
 		switch selectedAction {
 		case ActionConfirm:
 			// Commit with the message
-			if err := h.git.CommitChanges(finalMessage); err != nil {
+			if err := h.git.CommitChanges(finalMessage, data.Files); err != nil {
 				return err
 			}
 			color.New(color.FgGreen).Println("✔ Successfully committed!")

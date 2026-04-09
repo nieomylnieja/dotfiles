@@ -42,70 +42,54 @@ func (g *GitClient) VerifyGitRepository() error {
 	return nil
 }
 
-// DetectStagedChanges gets the staged changes from git
-func (g *GitClient) DetectStagedChanges() (*PreCommitData, error) {
-	filesChan := make(chan []string, 1)
-	diffChan := make(chan string, 1)
-
-	if err := spinner.New().
-		Title("Detecting changes").
-		Action(func() {
-			files, diff, err := g.getStagedDiff()
-			if err != nil {
-				filesChan <- []string{}
-				diffChan <- ""
-				return
-			}
-
-			filesChan <- files
-			diffChan <- diff
-		}).
-		Run(); err != nil {
+// GetStagedFiles returns the list of staged file paths.
+func (g *GitClient) GetStagedFiles() ([]string, error) {
+	filesOutput, err := exec.Command("git", "diff", "--cached", "--diff-algorithm=minimal", "--name-only").
+		Output()
+	if err != nil {
 		return nil, err
 	}
 
-	files := <-filesChan
-	diff := <-diffChan
-
-	if len(files) == 0 {
+	filesStr := strings.TrimSpace(string(filesOutput))
+	if filesStr == "" {
 		return nil, fmt.Errorf(
 			"no staged changes found. stage your changes with 'git add' first",
 		)
 	}
 
-	relatedFiles := g.getRelatedFiles(files)
+	return strings.Split(filesStr, "\n"), nil
+}
+
+// BuildCommitData gets the diff and related files for the given file paths.
+func (g *GitClient) BuildCommitData(files []string) (*PreCommitData, error) {
+	var (
+		diff string
+		err  error
+	)
+
+	if spinErr := spinner.New().
+		Title("Detecting changes").
+		Action(func() {
+			args := append([]string{"diff", "--cached", "--diff-algorithm=minimal", "--"}, files...)
+			out, cmdErr := exec.Command("git", args...).Output()
+			if cmdErr != nil {
+				err = cmdErr
+				return
+			}
+			diff = string(out)
+		}).
+		Run(); spinErr != nil {
+		return nil, spinErr
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	return &PreCommitData{
 		Files:        files,
 		Diff:         diff,
-		RelatedFiles: relatedFiles,
+		RelatedFiles: g.getRelatedFiles(files),
 	}, nil
-}
-
-// getStagedDiff gets the diff of staged changes
-func (g *GitClient) getStagedDiff() ([]string, string, error) {
-	// Get list of staged files
-	filesOutput, err := exec.Command("git", "diff", "--cached", "--diff-algorithm=minimal", "--name-only").
-		Output()
-	if err != nil {
-		return nil, "", err
-	}
-
-	filesStr := strings.TrimSpace(string(filesOutput))
-	if filesStr == "" {
-		return nil, "", fmt.Errorf("nothing to analyze")
-	}
-
-	files := strings.Split(filesStr, "\n")
-
-	// Get the actual diff
-	diff, err := exec.Command("git", "diff", "--cached", "--diff-algorithm=minimal").
-		Output()
-	if err != nil {
-		return nil, "", err
-	}
-
-	return files, string(diff), nil
 }
 
 // getRelatedFiles discovers related files in the same directories
@@ -129,9 +113,10 @@ func (g *GitClient) getRelatedFiles(files []string) []string {
 	return slices.Collect(maps.Keys(relatedFilesMap))
 }
 
-// CommitChanges commits the staged changes with the given message
-func (g *GitClient) CommitChanges(message string) error {
-	cmd := exec.Command("git", "commit", "-m", message)
+// CommitChanges commits the given files with the provided message.
+func (g *GitClient) CommitChanges(message string, files []string) error {
+	args := append([]string{"commit", "-m", message, "--"}, files...)
+	cmd := exec.Command("git", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

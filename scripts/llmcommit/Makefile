@@ -1,6 +1,6 @@
 .PHONY: build install clean test
 
-APP_NAME := aicommit
+APP_NAME := llmcommit
 LDFLAGS := -s -w
 
 .PHONY: build

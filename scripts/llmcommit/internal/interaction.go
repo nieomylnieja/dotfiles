@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/fatih/color"
 )
@@ -25,14 +26,44 @@ const (
 	ActionCancel     Action = "cancel"
 )
 
-// DisplayDetectedFiles shows the list of changed files
-func (i *Interaction) DisplayDetectedFiles(files []string) {
-	cyan := color.New(color.FgCyan)
-	cyan.Printf("\nDetected %d file(s):\n", len(files))
-	for idx, file := range files {
-		fmt.Printf("  %d. %s\n", idx+1, file)
+// SelectFiles presents a multi-select of staged files with all selected by default.
+// Returns the user's selection.
+func (i *Interaction) SelectFiles(files []string) ([]string, error) {
+	if len(files) == 1 {
+		color.New(color.FgCyan).Printf("\nStaged file: %s\n\n", files[0])
+		return files, nil
 	}
-	fmt.Println()
+
+	options := make([]huh.Option[string], len(files))
+	for idx, file := range files {
+		options[idx] = huh.NewOption(file, file).Selected(true)
+	}
+
+	var selected []string
+
+	keymap := huh.NewDefaultKeyMap()
+	keymap.MultiSelect.Toggle = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "toggle"))
+	keymap.MultiSelect.Next = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm"))
+
+	field := huh.NewMultiSelect[string]().
+		Title("Select files to commit").
+		Options(options...).
+		Value(&selected)
+
+	err := huh.NewForm(huh.NewGroup(field)).
+		WithTheme(themeNord()).
+		WithKeyMap(keymap).
+		WithShowHelp(false).
+		Run()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("no files selected")
+	}
+
+	return selected, nil
 }
 
 // HandleUserAction presents the commit message and gets user's choice
