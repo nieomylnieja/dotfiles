@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/huh/spinner"
+	"charm.land/huh/v2/spinner"
 )
 
 type GitClient struct{}

@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/huh"
+	"charm.land/bubbles/v2/key"
+	"charm.land/huh/v2"
 	"github.com/fatih/color"
 )
 
@@ -24,13 +24,14 @@ const (
 	ActionRegenerate Action = "regenerate"
 	ActionEdit       Action = "edit"
 	ActionCancel     Action = "cancel"
+	maxVisibleFiles         = 12
 )
 
 // SelectFiles presents a multi-select of staged files with all selected by default.
 // Returns the user's selection.
 func (i *Interaction) SelectFiles(files []string) ([]string, error) {
 	if len(files) == 1 {
-		color.New(color.FgCyan).Printf("\nStaged file: %s\n\n", files[0])
+		i.printSelectedFiles(files)
 		return files, nil
 	}
 
@@ -40,20 +41,26 @@ func (i *Interaction) SelectFiles(files []string) ([]string, error) {
 	}
 
 	var selected []string
+	listHeight := min(len(files), maxVisibleFiles)
+	title := fmt.Sprintf("Select files to commit (%d total)", len(files))
+	if len(files) > listHeight {
+		title = fmt.Sprintf("Select files to commit (%d total, more below: scroll with ↑/↓)", len(files))
+	}
 
 	keymap := huh.NewDefaultKeyMap()
 	keymap.MultiSelect.Toggle = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "toggle"))
 	keymap.MultiSelect.Next = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm"))
 
 	field := huh.NewMultiSelect[string]().
-		Title("Select files to commit").
+		Title(title).
+		Height(listHeight + 1).
 		Options(options...).
 		Value(&selected)
 
 	err := huh.NewForm(huh.NewGroup(field)).
 		WithTheme(themeNord()).
 		WithKeyMap(keymap).
-		WithShowHelp(false).
+		WithShowHelp(true).
 		Run()
 	if err != nil {
 		return nil, err
@@ -63,7 +70,21 @@ func (i *Interaction) SelectFiles(files []string) ([]string, error) {
 		return nil, fmt.Errorf("no files selected")
 	}
 
+	i.printSelectedFiles(selected)
+
 	return selected, nil
+}
+
+func (i *Interaction) printSelectedFiles(files []string) {
+	if len(files) == 1 {
+		color.New(color.FgCyan, color.Bold).Printf("\nSelected %s file.\n\n", files[0])
+		return
+	}
+	color.New(color.FgCyan, color.Bold).Printf("\nSelected %d files:\n", len(files))
+	for i := range files {
+		fmt.Printf("  %d. %s\n", i+1, files[i])
+	}
+	fmt.Println()
 }
 
 // HandleUserAction presents the commit message and gets user's choice
@@ -73,7 +94,8 @@ func (i *Interaction) HandleUserAction(message string) (Action, string, error) {
 	color.New(color.FgGreen, color.Bold).Println("Generated Commit Message:")
 	color.New(color.FgGreen, color.Bold).Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println(message)
-	color.New(color.FgGreen, color.Bold).Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	color.New(color.FgGreen, color.Bold).Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
 
 	var selectedAction Action
 
