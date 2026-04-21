@@ -406,8 +406,8 @@ in
   programs.codex = {
     enable = true;
     enableMcpIntegration = true;
-    settings = ../codex/config.toml;
-    context = ../agents/AGENTS.md;
+    settings = builtins.fromTOML (builtins.readFile ../codex/config.toml);
+    context = builtins.readFile ../agents/AGENTS.md;
   };
 
   programs.gemini-cli = {
