@@ -136,7 +136,6 @@ local servers = {
   ansiblels = {},
   clangd = {},
   marksman = {},
-  taplo = {},
 }
 
 local function lsp_format()

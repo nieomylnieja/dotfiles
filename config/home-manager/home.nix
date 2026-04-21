@@ -162,6 +162,7 @@ in
     unzip
     uv
     waybar
+    wezterm
     wl-clipboard
     wlr-randr
     zathura
@@ -213,6 +214,9 @@ in
 
   home.file = {
     ".bash_logout".source = ../bash/bash_logout;
+    # Keep Codex config writable so it can persist per-project trust decisions.
+    ".codex/config.toml".source =
+      config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/codex/config.toml";
   };
 
   programs.bash = {
@@ -404,8 +408,6 @@ in
 
   programs.codex = {
     enable = true;
-    enableMcpIntegration = true;
-    settings = builtins.fromTOML (builtins.readFile ../codex/config.toml);
     context = builtins.readFile ../agents/AGENTS.md;
   };
 

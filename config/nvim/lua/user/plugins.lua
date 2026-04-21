@@ -202,7 +202,6 @@ return {
         "ansible-language-server",
         "clangd",
         "marksman",
-        "taplo",
         -- Linters/formatters
         "actionlint",
         "stylua",

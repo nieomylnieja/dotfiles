@@ -11,5 +11,42 @@ guardian_approval = true
 [agents]
 max_depth = 1
 
+[mcp_servers]
+[mcp_servers.Context7]
+args = ["-y", "@upstash/context7-mcp"]
+command = "npx"
+enabled = true
+[mcp_servers.atlassian]
+enabled = true
+url = "https://mcp.atlassian.com/v1/mcp"
+[mcp_servers.deepwiki]
+enabled = true
+url = "https://mcp.deepwiki.com/mcp"
+[mcp_servers.exa]
+enabled = true
+url = "https://mcp.exa.ai/mcp"
+[mcp_servers.grep-mcp]
+args = ["grep-mcp"]
+command = "uvx"
+enabled = true
+[mcp_servers.nobl9]
+args = ["mcp"]
+command = "sloctl"
+enabled = true
+[mcp_servers.pg-aiguide]
+enabled = true
+url = "https://mcp.tigerdata.com/docs"
+[mcp_servers.sequential-thinking]
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+command = "npx"
+enabled = true
+[mcp_servers.serena]
+args = ["start-mcp-server", "--project-from-cwd", "--context=codex"]
+command = "serena"
+startup_timeout_sec = 15
+
 [tui]
 theme = "nord"
+
+[projects."/home/mh/.dotfiles"]
+trust_level = "trusted"

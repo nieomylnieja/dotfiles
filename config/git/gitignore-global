@@ -10,3 +10,4 @@ postgrestools.jsonc
 .claude/settings.local.json
 .worktrees
 .claude/worktrees
+.serena
