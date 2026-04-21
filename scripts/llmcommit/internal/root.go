@@ -16,7 +16,7 @@ type RootHandler struct {
 func NewRootHandler() *RootHandler {
 	return &RootHandler{
 		git:         NewGitClient(),
-		llm:         NewGeminiClient(),
+		llm:         NewOpenCodeClient(),
 		interaction: NewInteraction(),
 	}
 }
