@@ -115,16 +115,13 @@ yaml_read() {
   yq -r "${filter} // empty" "${yaml_file}"
 }
 
-# toml_multiline_string VALUE
-# Renders a TOML multiline literal string.
-toml_multiline_string() {
-  local value="$1"
+# yaml_has YAML_FILE FILTER
+# Returns success when the given YAML node exists and is non-null.
+yaml_has() {
+  local yaml_file="$1"
+  local filter="$2"
 
-  if [[ "${value}" == *"'''"* ]]; then
-    fatal "cannot encode TOML multiline literal containing '''"
-  fi
-
-  printf "'''\n%s\n'''" "${value}"
+  yq -e "${filter} != null" "${yaml_file}" > /dev/null
 }
 
 # write_generated_file OUTPUT_FILE TMP_FILE
@@ -259,55 +256,43 @@ generate_codex_agent() {
   developer_instructions="$(sed '1{/^$/d;}' "${body_file}")"
   [[ -n "${developer_instructions}" ]] || fatal "${source_file}: missing agent body"
 
+  yaml_has "${frontmatter_file}" '."harness-config".codex' \
+    || fatal "${source_file}: missing harness-config.codex block"
+
   local model
   model="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model')"
-  if [[ -z "${model}" ]]; then
-    model="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.model')"
-  fi
-  model="${model#openai/}"
+  [[ -n "${model}" ]] || fatal "${source_file}: missing harness-config.codex.model"
 
   local model_reasoning_effort
   model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_reasoning_effort')"
-  if [[ -z "${model_reasoning_effort}" ]]; then
-    model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".codex.reasoningEffort')"
-  fi
-  if [[ -z "${model_reasoning_effort}" ]]; then
-    model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.reasoningEffort')"
-  fi
+  [[ -n "${model_reasoning_effort}" ]] || fatal "${source_file}: missing harness-config.codex.model_reasoning_effort"
 
   local model_verbosity
   model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_verbosity')"
-  if [[ -z "${model_verbosity}" ]]; then
-    model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".codex.textVerbosity')"
-  fi
-  if [[ -z "${model_verbosity}" ]]; then
-    model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.textVerbosity')"
-  fi
+  [[ -n "${model_verbosity}" ]] || fatal "${source_file}: missing harness-config.codex.model_verbosity"
 
   local sandbox_mode
   sandbox_mode="$(yaml_read "${frontmatter_file}" '."harness-config".codex.sandbox_mode')"
 
-  {
-    printf 'name = %s\n' "$(toml_multiline_string "${name}")"
-    printf 'description = %s\n' "$(toml_multiline_string "${description}")"
-    printf 'developer_instructions = %s\n' "$(toml_multiline_string "${developer_instructions}")"
-
-    if [[ -n "${model}" ]] && [[ "${model}" != "inherit" ]]; then
-      printf 'model = %s\n' "$(toml_multiline_string "${model}")"
-    fi
-
-    if [[ -n "${model_reasoning_effort}" ]]; then
-      printf 'model_reasoning_effort = %s\n' "$(toml_multiline_string "${model_reasoning_effort}")"
-    fi
-
-    if [[ -n "${model_verbosity}" ]]; then
-      printf 'model_verbosity = %s\n' "$(toml_multiline_string "${model_verbosity}")"
-    fi
-
-    if [[ -n "${sandbox_mode}" ]]; then
-      printf 'sandbox_mode = %s\n' "$(toml_multiline_string "${sandbox_mode}")"
-    fi
-  } > "${tmp_file}"
+  # shellcheck disable=SC2016
+  tomlq -t -n \
+    --arg name "${name}" \
+    --arg description "${description}" \
+    --arg developer_instructions "${developer_instructions}" \
+    --arg model "${model}" \
+    --arg model_reasoning_effort "${model_reasoning_effort}" \
+    --arg model_verbosity "${model_verbosity}" \
+    --arg sandbox_mode "${sandbox_mode}" \
+    '{
+      name: $name,
+      description: $description,
+      developer_instructions: $developer_instructions,
+      model: $model,
+      model_reasoning_effort: $model_reasoning_effort,
+      model_verbosity: $model_verbosity
+    }
+    | if $sandbox_mode != "" then . + {sandbox_mode: $sandbox_mode} else . end' \
+    > "${tmp_file}"
 
   tomlq '.' "${tmp_file}" > /dev/null || fatal "${source_file}: generated invalid Codex TOML"
 

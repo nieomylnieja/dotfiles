@@ -20,6 +20,10 @@ harness-config:
     textVerbosity: medium
     permission:
       task: deny
+  codex:
+    model: gpt-5.4
+    model_reasoning_effort: high
+    model_verbosity: medium
 ---
 
 # Agent
