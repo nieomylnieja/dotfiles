@@ -130,13 +130,13 @@ local servers = {
   terraformls = {},
   templ = {},
   html = {},
-  htmx = {},
   cssls = {},
   tailwindcss = {},
   postgres_lsp = {},
   ansiblels = {},
   clangd = {},
   marksman = {},
+  taplo = {},
 }
 
 local function lsp_format()

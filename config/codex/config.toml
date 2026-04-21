@@ -1,6 +1,15 @@
+#:schema https://developers.openai.com/codex/config-schema.json
 model = "gpt-5.4"
 model_reasoning_effort = "high"
 personality = "pragmatic"
 
+approvals_reviewer = "guardian_subagent"
+
+[features]
+guardian_approval = true
+
 [agents]
 max_depth = 1
+
+[tui]
+theme = "nord"

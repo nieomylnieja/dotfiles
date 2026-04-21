@@ -36,6 +36,7 @@ in
     bottom
     # blesh TODO: try making it work better
     brightnessctl
+    bubblewrap # sandboxing for codex
     bun
     cachix
     cargo
@@ -193,9 +194,7 @@ in
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents ${homeDir}/.agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/skills ${homeDir}/.claude/skills
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${homeDir}/.claude/commands
-      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/claude/agents ${homeDir}/.claude/agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
-      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/opencode/agents ${config.xdg.configHome}/opencode/agents
       run mkdir -p ${config.xdg.configHome}/opencode
       for f in ${dotfilesDir}/config/opencode/*; do
         case "$(basename "$f")" in
@@ -292,7 +291,7 @@ in
     GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
     GOPATH = "${homeDir}/go";
     STARSHIP_LOG = "error";
-    SKILLS_AGENTS = "opencode"; # claude-code is already linked, so no need to install it
+    SKILLS_AGENTS = "opencode";
     OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
   };
 

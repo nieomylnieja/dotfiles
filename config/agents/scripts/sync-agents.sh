@@ -3,7 +3,7 @@
 set -euo pipefail
 
 readonly PROG="${0##*/}"
-readonly HARNESSES=("claude-code" "opencode")
+readonly HARNESSES=("claude-code" "opencode" "codex")
 
 usage() {
   cat << EOF
@@ -12,15 +12,18 @@ Usage: ${PROG} [OPTIONS]
 Generate harness-specific agent definitions from source agents.
 
 Reads source agent markdown files from config/agents/agents/ and generates
-harness-specific copies under config/claude/agents/ and config/opencode/agents/.
+harness-specific copies under:
+- ~/.claude/agents/
+- \$XDG_CONFIG_HOME/opencode/agents/ (defaults to ~/.config/opencode/agents/)
+- ~/.codex/agents/
 
 Each source agent contains a harness-config frontmatter block with per-harness
 overrides. Common fields are merged with harness-specific fields; harness fields
-take precedence.
+take precedence. Codex agents are emitted as standalone TOML files using the
+source agent body as developer instructions.
 
 Options:
   --source DIR  source agents directory (default: config/agents/agents)
-  --dry-run     print what would change, do not write files
   -h, --help    display this help and exit
 
 Exit status:
@@ -37,21 +40,111 @@ fatal() {
   exit "${2:-1}"
 }
 
+# make_tmp_file SUFFIX
+# Returns a timestamped temporary file path.
+make_tmp_file() {
+  local suffix="$1"
+  local timestamp
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  printf '%s\n' "${TMPDIR:-/tmp}/${PROG}-${timestamp}-${RANDOM}-${suffix}"
+}
+
 # harness_output_dir HARNESS
 # Returns the output directory for a given harness.
 harness_output_dir() {
   local harness="$1"
   case "${harness}" in
-    claude-code) echo "${root}/config/claude/agents" ;;
-    opencode) echo "${root}/config/opencode/agents" ;;
+    claude-code) echo "${HOME}/.claude/agents" ;;
+    opencode) echo "${XDG_CONFIG_HOME:-${HOME}/.config}/opencode/agents" ;;
+    codex) echo "${HOME}/.codex/agents" ;;
     *) fatal "unknown harness: ${harness}" ;;
   esac
 }
 
-# generate_agent SOURCE_FILE HARNESS
-# Generates a harness-specific agent file by preserving original YAML formatting.
-# Strips the harness-config block and injects the target harness's fields.
-generate_agent() {
+# extract_frontmatter SOURCE_FILE OUT_FILE
+# Writes the YAML frontmatter content without --- delimiters.
+extract_frontmatter() {
+  local source_file="$1"
+  local out_file="$2"
+
+  awk '
+    BEGIN {
+      fm_count = 0
+    }
+
+    /^---$/ {
+      fm_count++
+      next
+    }
+
+    fm_count == 1 { print }
+    fm_count >= 2 { exit }
+  ' "${source_file}" > "${out_file}"
+}
+
+# extract_body SOURCE_FILE OUT_FILE
+# Writes the Markdown body after the frontmatter.
+extract_body() {
+  local source_file="$1"
+  local out_file="$2"
+
+  awk '
+    BEGIN {
+      fm_count = 0
+    }
+
+    /^---$/ {
+      fm_count++
+      next
+    }
+
+    fm_count < 2 {
+      next
+    }
+
+    { print }
+  ' "${source_file}" > "${out_file}"
+}
+
+# yaml_read YAML_FILE FILTER
+# Reads a value from a YAML document using yq.
+yaml_read() {
+  local yaml_file="$1"
+  local filter="$2"
+
+  yq -r "${filter} // empty" "${yaml_file}"
+}
+
+# toml_multiline_string VALUE
+# Renders a TOML multiline literal string.
+toml_multiline_string() {
+  local value="$1"
+
+  if [[ "${value}" == *"'''"* ]]; then
+    fatal "cannot encode TOML multiline literal containing '''"
+  fi
+
+  printf "'''\n%s\n'''" "${value}"
+}
+
+# write_generated_file OUTPUT_FILE TMP_FILE
+# Writes generated content if it changed.
+write_generated_file() {
+  local output_file="$1"
+  local tmp_file="$2"
+
+  if [[ -f "${output_file}" ]] && cmp -s "${output_file}" "${tmp_file}"; then
+    rm -f "${tmp_file}"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "${output_file}")"
+  mv "${tmp_file}" "${output_file}"
+}
+
+# generate_markdown_agent SOURCE_FILE HARNESS
+# Generates a harness-specific Markdown agent file.
+generate_markdown_agent() {
   local source_file="$1"
   local harness="$2"
   local basename
@@ -65,8 +158,7 @@ generate_agent() {
   content="$(awk -v harness="${harness}" '
     BEGIN {
       in_fm = 0; fm_count = 0
-      in_hc = 0; in_target = 0; in_other = 0
-      found_target = 0
+      in_hc = 0; in_target = 0
     }
 
     /^---$/ {
@@ -74,7 +166,6 @@ generate_agent() {
       if (fm_count == 1) { in_fm = 1; print; next }
       if (fm_count == 2) {
         in_fm = 0
-        # Emit collected harness fields before closing ---
         for (i = 1; i <= hf_count; i++) {
           print harness_fields[i]
         }
@@ -85,34 +176,31 @@ generate_agent() {
 
     in_fm == 0 { print; next }
 
-    # Inside frontmatter: detect harness-config block
     /^harness-config:/ {
       in_hc = 1
       next
     }
 
     in_hc == 1 {
-      # Top-level key (not indented or less indented) ends harness-config
       if (/^[^ ]/) {
-        in_hc = 0; in_target = 0; in_other = 0
+        in_hc = 0
+        in_target = 0
         print
         next
       }
 
-      # Harness key line: "  <name>:"
       if (/^  [^ ]/) {
         harness_key = $0
         sub(/^  /, "", harness_key)
         sub(/:.*$/, "", harness_key)
         if (harness_key == harness) {
-          in_target = 1; in_other = 0; found_target = 1
+          in_target = 1
         } else {
-          in_target = 0; in_other = 1
+          in_target = 0
         }
         next
       }
 
-      # Field under a harness key: "    key: value"
       if (in_target == 1 && /^    /) {
         line = $0
         sub(/^    /, "", line)
@@ -124,24 +212,120 @@ generate_agent() {
       next
     }
 
-    # Regular frontmatter line (not part of harness-config)
     { print }
   ' "${source_file}")"
 
   if [[ -z "${content}" ]]; then
-    warn "${basename}: generation produced empty output; skipping"
+    warn "$(basename "${source_file}"): generation produced empty output; skipping"
     return 0
   fi
 
-  if [[ "${dry_run}" == "1" ]]; then
-    if [[ ! -f "${out_file}" ]] || ! cmp -s "${out_file}" <(printf '%s\n' "${content}"); then
-      log "would write ${out_file}"
+  local tmp_file
+  tmp_file="$(make_tmp_file "${harness}.md")"
+  printf '%s\n' "${content}" > "${tmp_file}"
+  write_generated_file "${out_file}" "${tmp_file}"
+}
+
+# generate_codex_agent SOURCE_FILE
+# Generates a Codex custom-agent TOML file.
+generate_codex_agent() {
+  local source_file="$1"
+  local basename
+  basename="$(basename "${source_file}" .md)"
+
+  local out_dir
+  out_dir="$(harness_output_dir "codex")"
+  local out_file="${out_dir}/${basename}.toml"
+
+  local frontmatter_file
+  frontmatter_file="$(make_tmp_file "frontmatter.yaml")"
+  local body_file
+  body_file="$(make_tmp_file "body.md")"
+  local tmp_file
+  tmp_file="$(make_tmp_file "${basename}.toml")"
+
+  extract_frontmatter "${source_file}" "${frontmatter_file}"
+  extract_body "${source_file}" "${body_file}"
+
+  local name
+  name="$(yaml_read "${frontmatter_file}" '.name')"
+  [[ -n "${name}" ]] || fatal "${source_file}: missing frontmatter field 'name'"
+
+  local description
+  description="$(yaml_read "${frontmatter_file}" '.description')"
+  [[ -n "${description}" ]] || fatal "${source_file}: missing frontmatter field 'description'"
+
+  local developer_instructions
+  developer_instructions="$(sed '1{/^$/d;}' "${body_file}")"
+  [[ -n "${developer_instructions}" ]] || fatal "${source_file}: missing agent body"
+
+  local model
+  model="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model')"
+  if [[ -z "${model}" ]]; then
+    model="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.model')"
+  fi
+  model="${model#openai/}"
+
+  local model_reasoning_effort
+  model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_reasoning_effort')"
+  if [[ -z "${model_reasoning_effort}" ]]; then
+    model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".codex.reasoningEffort')"
+  fi
+  if [[ -z "${model_reasoning_effort}" ]]; then
+    model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.reasoningEffort')"
+  fi
+
+  local model_verbosity
+  model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_verbosity')"
+  if [[ -z "${model_verbosity}" ]]; then
+    model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".codex.textVerbosity')"
+  fi
+  if [[ -z "${model_verbosity}" ]]; then
+    model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".opencode.textVerbosity')"
+  fi
+
+  local sandbox_mode
+  sandbox_mode="$(yaml_read "${frontmatter_file}" '."harness-config".codex.sandbox_mode')"
+
+  {
+    printf 'name = %s\n' "$(toml_multiline_string "${name}")"
+    printf 'description = %s\n' "$(toml_multiline_string "${description}")"
+    printf 'developer_instructions = %s\n' "$(toml_multiline_string "${developer_instructions}")"
+
+    if [[ -n "${model}" ]] && [[ "${model}" != "inherit" ]]; then
+      printf 'model = %s\n' "$(toml_multiline_string "${model}")"
     fi
-    return 0
-  fi
 
-  mkdir -p "${out_dir}"
-  printf '%s\n' "${content}" > "${out_file}"
+    if [[ -n "${model_reasoning_effort}" ]]; then
+      printf 'model_reasoning_effort = %s\n' "$(toml_multiline_string "${model_reasoning_effort}")"
+    fi
+
+    if [[ -n "${model_verbosity}" ]]; then
+      printf 'model_verbosity = %s\n' "$(toml_multiline_string "${model_verbosity}")"
+    fi
+
+    if [[ -n "${sandbox_mode}" ]]; then
+      printf 'sandbox_mode = %s\n' "$(toml_multiline_string "${sandbox_mode}")"
+    fi
+  } > "${tmp_file}"
+
+  tomlq '.' "${tmp_file}" > /dev/null || fatal "${source_file}: generated invalid Codex TOML"
+
+  write_generated_file "${out_file}" "${tmp_file}"
+
+  rm -f "${frontmatter_file}" "${body_file}"
+}
+
+# generate_agent SOURCE_FILE HARNESS
+# Dispatches to the appropriate harness generator.
+generate_agent() {
+  local source_file="$1"
+  local harness="$2"
+
+  case "${harness}" in
+    codex) generate_codex_agent "${source_file}" ;;
+    *) generate_markdown_agent "${source_file}" "${harness}" ;;
+  esac
 }
 
 main() {
@@ -149,7 +333,9 @@ main() {
   root="${DOTFILES:-${HOME}/.dotfiles}"
 
   local source_dir="${root}/config/agents/agents"
-  local dry_run="0"
+
+  command -v yq > /dev/null 2>&1 || fatal "yq is required"
+  command -v tomlq > /dev/null 2>&1 || fatal "tomlq is required"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -164,10 +350,6 @@ main() {
         ;;
       --source=*)
         source_dir="${1#*=}"
-        shift
-        ;;
-      --dry-run)
-        dry_run="1"
         shift
         ;;
       --)
@@ -198,11 +380,7 @@ main() {
     warn "no agent source files found in ${source_dir}"
   fi
 
-  if [[ "${dry_run}" == "1" ]]; then
-    log "dry-run complete (${count} source agents processed)"
-  else
-    log "sync complete (${count} source agents processed)"
-  fi
+  log "sync complete (${count} source agents processed)"
 }
 
 main "$@"
