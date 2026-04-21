@@ -42,16 +42,17 @@ const geminiModel = "gemini-2.5-flash"
 
 const geminiGenerateURL = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent"
 
-// GeminiClient implements LLMClient using Gemini API
+// GeminiClient implements LLMClient using Gemini API.
 type GeminiClient struct {
-	overview   string
-	httpClient *http.Client
+	overview string
+	http     *RetryClient
 }
 
+// NewGeminiClient creates a GeminiClient.
 func NewGeminiClient() *GeminiClient {
 	return &GeminiClient{
-		overview:   loadSkillOverview(),
-		httpClient: http.DefaultClient,
+		overview: loadSkillOverview(),
+		http:     NewRetryClient(nil),
 	}
 }
 
@@ -71,30 +72,25 @@ func (c *GeminiClient) GenerateCommitMessage(
 		return "", err
 	}
 
-	messageChan := make(chan string, 1)
-	errChan := make(chan error, 1)
+	var (
+		message   string
+		actionErr error
+	)
 
-	if err := spinner.New().
-		Title(fmt.Sprintf("%s is analyzing your changes", geminiModel)).
-		Action(func() {
-			message, err := c.callGeminiAPI(ctx, userPrompt)
-			if err != nil {
-				errChan <- err
-				messageChan <- ""
-			} else {
-				errChan <- nil
-				messageChan <- message
-			}
-		}).
-		Run(); err != nil {
+	s := spinner.New().
+		Title(fmt.Sprintf("%s is analyzing your changes", geminiModel))
+	c.http.onStatus = func(status string) {
+		s.Title(status)
+	}
+	s.Action(func() {
+		message, actionErr = c.callGeminiAPI(ctx, userPrompt)
+	})
+	if err := s.Run(); err != nil {
 		return "", err
 	}
-
-	if err := <-errChan; err != nil {
-		return "", err
+	if actionErr != nil {
+		return "", actionErr
 	}
-
-	message := <-messageChan
 	underline := color.New(color.Underline)
 	underline.Println("\nChanges analyzed!")
 	message = strings.TrimSpace(message)
@@ -141,7 +137,8 @@ type geminiCandidate struct {
 	Content geminiContent `json:"content"`
 }
 
-// callGeminiAPI invokes the Gemini HTTP API and parses the response
+// callGeminiAPI invokes the Gemini HTTP API and parses the response.
+// Retries on 5xx are handled by the underlying RetryClient.
 func (c *GeminiClient) callGeminiAPI(ctx context.Context, prompt string) (string, error) {
 	apiKey, err := readGeminiAPIKey()
 	if err != nil {
@@ -157,14 +154,19 @@ func (c *GeminiClient) callGeminiAPI(ctx context.Context, prompt string) (string
 		return "", fmt.Errorf("encoding gemini request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiGenerateURL, bytes.NewReader(body))
+	bodyReader := bytes.NewReader(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiGenerateURL, bodyReader)
 	if err != nil {
 		return "", fmt.Errorf("creating gemini request: %w", err)
+	}
+	req.GetBody = func() (io.ReadCloser, error) {
+		_, _ = bodyReader.Seek(0, io.SeekStart)
+		return io.NopCloser(bodyReader), nil
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", apiKey)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.http.Do(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("calling gemini API: %w", err)
 	}

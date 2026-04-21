@@ -50,6 +50,7 @@ func (i *Interaction) SelectFiles(files []string) ([]string, error) {
 	keymap := huh.NewDefaultKeyMap()
 	keymap.MultiSelect.Toggle = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "toggle"))
 	keymap.MultiSelect.Next = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm"))
+	keymap.MultiSelect.SelectNone = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "deselect all"))
 
 	field := huh.NewMultiSelect[string]().
 		Title(title).

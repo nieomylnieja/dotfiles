@@ -10,3 +10,16 @@ explanations, analysis, markdown formatting, code blocks, or commentary.
 Output the raw commit message text that can be used directly with `git commit -m`.
 
 **Expected Output:** A single commit message.
+
+## Overview
+
+{{ .Overview }}
+
+---
+
+Code diff:
+{{ .Diff }}
+{{ if .RelatedFiles }}
+Neighboring files:
+{{ .RelatedFiles }}
+{{ end }}
