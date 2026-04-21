@@ -3,9 +3,19 @@ name: test-analyzer
 description: |
   Use this agent when you need to review a pull request for test coverage quality and completeness.
   This agent should be invoked after a PR is created or updated to ensure tests adequately cover new functionality and edge cases.
-model: inherit
-mode: subagent
-color: "#06b6d4"
+color: "#81a1c1"
+harness-config:
+  claude-code:
+    model: inherit
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.3-codex
+    mode: subagent
+    temperature: 0.1
+    reasoningEffort: medium
+    textVerbosity: low
+    permission:
+      task: deny
 ---
 
 # Agent

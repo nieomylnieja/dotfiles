@@ -62,6 +62,7 @@ return {
   {
     "andymass/vim-matchup",
     config = function()
+      vim.g.matchup_matchparen_enabled = 0
       vim.g.matchup_matchparen_offscreen = {}
     end,
   },
@@ -349,6 +350,7 @@ return {
         tab_char = "▏",
       },
       scope = {
+        enabled = false,
         show_start = false,
         show_end = false,
       },

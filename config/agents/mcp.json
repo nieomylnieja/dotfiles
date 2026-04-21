@@ -28,16 +28,6 @@
         "mcp"
       ]
     },
-    "grafana": {
-      "command": "uvx",
-      "args": [
-        "mcp-grafana"
-      ],
-      "env": {
-        "GRAFANA_URL": "${GRAFANA_API_URL}",
-        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_API_TOKEN}"
-      }
-    },
     "deepwiki": {
       "type": "http",
       "url": "https://mcp.deepwiki.com/mcp"

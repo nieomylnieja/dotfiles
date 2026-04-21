@@ -7,9 +7,19 @@ description: |
     (2) Before finalizing a pull request that adds or modifies comments
     (3) When reviewing existing comments for potential technical debt or comment rot
     (4) When you need to verify that comments accurately reflect the code they describe.
-model: inherit
-mode: subagent
-color: "#22c55e"
+color: "#d8dee9"
+harness-config:
+  claude-code:
+    model: inherit
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.4-mini
+    mode: subagent
+    temperature: 0.3
+    reasoningEffort: low
+    textVerbosity: low
+    permission:
+      task: deny
 ---
 
 # Agent

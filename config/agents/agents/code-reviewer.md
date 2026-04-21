@@ -7,9 +7,19 @@ description: |
   Also the agent needs to know which files to focus on for the review.
   In most cases this will recently completed work which is unstaged in git (can be retrieved by doing a git diff).
   However there can be cases where this is different, make sure to specify this as the agent input when calling the agent. 
-model: opus
-mode: subagent
-color: "#22c55e"
+color: "#5e81ac"
+harness-config:
+  claude-code:
+    model: opus
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.4
+    mode: subagent
+    temperature: 0.1
+    reasoningEffort: high
+    textVerbosity: low
+    permission:
+      task: deny
 ---
 
 # Agent

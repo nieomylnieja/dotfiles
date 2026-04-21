@@ -7,9 +7,19 @@ description: |
   It extracts every distinct requirement and acceptance criterion, then maps each one
   to the code diff with a compliance verdict.
   The agent needs requirements text and a code diff as input.
-model: opus
-mode: subagent
-color: "#eab308"
+color: "#b48ead"
+harness-config:
+  claude-code:
+    model: opus
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.4
+    mode: subagent
+    temperature: 0.3
+    reasoningEffort: high
+    textVerbosity: medium
+    permission:
+      task: deny
 ---
 
 # Agent

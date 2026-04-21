@@ -1,35 +1,151 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "ask",
+  "autoupdate": false,
+  "model": "openai/gpt-5.3-codex",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5.3-codex": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low"
+          }
+        }
+      }
+    }
+  },
   "agent": {
     "build": {
       "mode": "primary",
-      "tools": {
-        "write": true,
-        "edit": true,
-        "bash": true
+      "permission": {
+        "edit": "allow",
+        "write": "allow"
       }
     },
     "ask": {
       "mode": "primary",
-      "tools": {
-        "write": true,
-        "edit": true,
-        "bash": true
-      },
       "permission": {
         "edit": "ask",
-        "write": "ask",
-        "bash": "ask"
+        "write": "ask"
       }
     },
     "plan": {
       "mode": "primary",
-      "tools": {
-        "write": false,
-        "edit": false,
-        "bash": false
+      "model": "openai/gpt-5.4",
+      "reasoningEffort": "high",
+      "textVerbosity": "medium",
+      "permission": {
+        "read": "allow",
+        "write": "deny",
+        "edit": "deny"
       }
     }
+  },
+  "permission": {
+    "websearch": "allow",
+    "webfetch": "allow",
+    "skill": {
+      "*": "allow",
+      "create-github-pr": "allow",
+      "find-skills": "allow",
+      "git-commit": "allow",
+      "git-worktrees": "allow",
+      "github-post-pr-review": "allow",
+      "github-pr-comments": "allow",
+      "html-to-markdown": "allow",
+      "markdown": "allow",
+      "pr-comment-audit": "allow",
+      "re-review-pr": "allow",
+      "repo-analyzer": "allow",
+      "review-pr": "allow",
+      "shell": "allow"
+    },
+    "todowrite": "allow",
+    "glob": "allow",
+    "list": "allow",
+    "lsp": "allow",
+    "grep": "allow",
+    "task": "allow",
+    "question": "allow",
+    "edit": {
+      "/tmp/**": "allow",
+      "~/.local/share/agents/**": "allow"
+    },
+    "write": {
+      "/tmp/**": "allow"
+    },
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "~/go/**": "allow"
+    },
+    "bash": {
+      "$DOTFILES/config/agents/skills/*/scripts/*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git shortlog*": "allow",
+      "git reflog*": "allow",
+      "git ls-files*": "allow",
+      "git show*": "allow",
+      "git status*": "allow",
+      "git branch*": "allow",
+      "git rev-parse*": "allow",
+      "git fetch*": "allow",
+      "git remote -v": "allow",
+      "git remote show upstream": "allow",
+      "git branch -a": "allow",
+      "git blame*": "allow",
+      "echo*": "allow",
+      "fd*": "allow",
+      "sed*": "allow",
+      "awk*": "allow",
+      "find*": "allow",
+      "ls*": "allow",
+      "grep*": "allow",
+      "rg*": "allow",
+      "make*": "allow",
+      "head*": "allow",
+      "just*": "allow",
+      "go*": "allow",
+      "gh issue view*": "allow",
+      "gh pr view*": "allow",
+      "gh pr diff*": "allow",
+      "gh pr list*": "allow",
+      "gh run view*": "allow",
+      "gh api repos*": "allow",
+      "gh repo list*": "allow",
+      "gh repo view*": "allow",
+      "gh search*": "allow",
+      "kubectl get*": "allow",
+      "kubectl describe*": "allow",
+      "kubectl explain*": "allow",
+      "agent-browser*": "allow",
+      "* --version": "allow",
+      "* --help *": "allow"
+    },
+    "external_directory": {
+      "/tmp/**": "allow",
+      "~/.local/share/agents/**": "allow",
+      "~/go/**": "allow",
+      "~/nobl9/repositories/**": "allow",
+      "~/projects": "allow"
+    },
+    "Context7_*": "allow",
+    "atlassian_get*": "allow",
+    "deepwiki_*": "allow",
+    "slack_slack_read*": "allow",
+    "slack_slack_search*": "allow",
+    "groundcover_query*": "allow",
+    "groundcover_get*": "allow",
+    "groundcover_gcql_query": "allow",
+    "grafana_list*": "allow",
+    "grafana_query*": "allow",
+    "grafana_search*": "allow",
+    "grafana_get*": "allow",
+    "sequential-thinking_*": "allow",
+    "pg-aiguide_*": "allow"
   }
 }

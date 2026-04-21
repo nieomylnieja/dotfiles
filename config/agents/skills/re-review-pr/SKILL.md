@@ -7,7 +7,7 @@ description: |
   addressed, runs a fresh unbiased review, and filters out noise from already-tracked
   or already-resolved GitHub threads. Trigger on: "re-review", "second pass",
   "review again", "check if issues were fixed", "follow-up review", "look again after fixes".
-allowed-tools: Bash(*scripts/get-all-review-threads.sh*) Bash(*scripts/find-review-file.sh*) Bash(gh api *) Bash(gh pr *) Bash(gh repo *) AskUserQuestion Glob Read Skill
+allowed-tools: Bash(*scripts/find-review-file.sh*) Bash(*scripts/get-all-review-threads.sh*) Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Edit(**/agents/pr-review/*/*.json) Write(**/agents/pr-review/*/*.json)
 ---
 
 # Re-Review PR

@@ -206,11 +206,27 @@ follow the doc comment conventions from the
 
 ---
 
+## Interface Design
+
+When defining or reviewing interfaces,
+consult [references/interface-design.md](./references/interface-design.md)
+for the full rules on consumer-side vs producer-side placement.
+
+Short version: define interfaces in the consumer package, not the producer.
+The producer returns concrete types.
+Producer-side interfaces are only justified in narrow cases
+(multiple unexported implementations, interface-only standard packages,
+or types that exist solely to implement the interface).
+
+---
+
 ## Go Idioms
 
 **Accept interfaces, return structs.**
 Function parameters should be interfaces (e.g., `io.Reader`),
 return types should be concrete structs.
+See [Interface Design](./references/interface-design.md)
+for where to define those interfaces.
 
 **Wrap errors with context.**
 Use `fmt.Errorf("failed X: %w", err)` to add context

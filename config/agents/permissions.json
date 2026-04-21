@@ -1,0 +1,218 @@
+{
+  "global": {
+    "websearch": "allow",
+    "webfetch": "allow",
+    "skill": "allow",
+    "todowrite": "allow",
+    "glob": "allow",
+    "list": "allow",
+    "lsp": "allow",
+    "grep": "allow",
+    "task": "allow",
+    "question": "allow",
+    "edit": {
+      "/tmp/**": "allow",
+      "~/.local/share/agents/**": "allow"
+    },
+    "write": {
+      "/tmp/**": "allow"
+    },
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "~/go/**": "allow"
+    },
+    "bash": {
+      "$DOTFILES/config/agents/skills/*/scripts/*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git shortlog*": "allow",
+      "git reflog*": "allow",
+      "git ls-files*": "allow",
+      "git show*": "allow",
+      "git status*": "allow",
+      "git branch*": "allow",
+      "git rev-parse*": "allow",
+      "git fetch*": "allow",
+      "git remote -v": "allow",
+      "git remote show upstream": "allow",
+      "git branch -a": "allow",
+      "git blame*": "allow",
+      "echo*": "allow",
+      "fd*": "allow",
+      "sed*": "allow",
+      "awk*": "allow",
+      "find*": "allow",
+      "ls*": "allow",
+      "grep*": "allow",
+      "rg*": "allow",
+      "make*": "allow",
+      "head*": "allow",
+      "just*": "allow",
+      "go*": "allow",
+      "gh issue view*": "allow",
+      "gh pr view*": "allow",
+      "gh pr diff*": "allow",
+      "gh pr list*": "allow",
+      "gh run view*": "allow",
+      "gh api repos*": "allow",
+      "gh repo list*": "allow",
+      "gh repo view*": "allow",
+      "gh search*": "allow",
+      "kubectl get*": "allow",
+      "kubectl describe*": "allow",
+      "kubectl explain*": "allow",
+      "agent-browser*": "allow",
+      "* --version": "allow",
+      "* --help *": "allow"
+    },
+    "external_directory": {
+      "/tmp/**": "allow",
+      "~/.local/share/agents/**": "allow",
+      "~/go/**": "allow",
+      "~/nobl9/repositories/**": "allow",
+      "~/projects": "allow"
+    }
+  },
+  "mcp": {
+    "Context7": {
+      "*": "allow"
+    },
+    "atlassian": {
+      "get*": "allow"
+    },
+    "deepwiki": {
+      "*": "allow"
+    },
+    "slack": {
+      "slack_read*": "allow",
+      "slack_search*": "allow"
+    },
+    "groundcover": {
+      "query*": "allow",
+      "get*": "allow",
+      "gcql_query": "allow"
+    },
+    "grafana": {
+      "list*": "allow",
+      "query*": "allow",
+      "search*": "allow",
+      "get*": "allow"
+    },
+    "sequential-thinking": {
+      "*": "allow"
+    },
+    "pg-aiguide": {
+      "*": "allow"
+    }
+  },
+  "skills": {
+    "shell": {
+      "bash": {
+        "shellcheck *": "allow",
+        "shfmt *": "allow"
+      }
+    },
+    "git-worktrees": {
+      "bash": {
+        "*scripts/setup-worktree.sh*": "allow",
+        "git worktree *": "allow"
+      }
+    },
+    "pr-comment-audit": {
+      "bash": {
+        "*scripts/fetch-threads.sh": "allow",
+        "*scripts/resolve-thread.sh": "allow",
+        "*scripts/reply-to-thread.sh": "allow",
+        "gh *": "allow"
+      }
+    },
+    "markdown": {
+      "bash": {
+        "markdownlint *": "allow",
+        "markdownfmt *": "allow",
+        "markdown-link-check *": "allow"
+      }
+    },
+    "review-pr": {
+      "bash": {
+        "*scripts/review-meta.sh*": "allow",
+        "*scripts/gather-requirements.sh*": "allow",
+        "mkdir -p */agents/pr-review/*": "allow",
+        "jira issue view*": "allow"
+      },
+      "edit": {
+        "**/agents/pr-review/*/*.json": "allow"
+      }
+    },
+    "re-review-pr": {
+      "bash": {
+        "*scripts/get-all-review-threads.sh*": "allow",
+        "*scripts/find-review-file.sh*": "allow",
+        "gh api *": "allow",
+        "gh pr *": "allow",
+        "gh repo *": "allow"
+      },
+      "edit": {
+        "**/agents/pr-review/*/*.json": "allow"
+      }
+    },
+    "repo-analyzer": {
+      "bash": {
+        "*scripts/clone_repo.sh *": "allow",
+        "~/.local/share/claude/repositories/**": "allow"
+      }
+    },
+    "github-post-pr-review": {
+      "bash": {
+        "gh api *": "allow",
+        "gh pr *": "allow",
+        "gh repo *": "allow",
+        "*scripts/pr-meta.sh": "allow",
+        "*scripts/find-review-file.sh": "allow",
+        "*scripts/post-findings.sh*": "allow"
+      },
+      "edit": {
+        "/tmp/**": "allow"
+      },
+      "write": {
+        "/tmp/**": "allow"
+      }
+    },
+    "git-commit": {
+      "bash": {
+        "*scripts/get-commit-info.sh": "allow",
+        "git commit *": "allow",
+        "git add *": "allow"
+      }
+    },
+    "create-github-pr": {
+      "bash": {
+        "*scripts/get-pr-info.sh": "allow",
+        "git checkout*": "allow",
+        "git switch*": "allow",
+        "git push*": "allow",
+        "gh pr create*": "allow"
+      }
+    },
+    "github-pr-comments": {
+      "bash": {
+        "*scripts/get-unresolved-comments.sh": "allow"
+      }
+    },
+    "find-skills": {
+      "bash": {
+        "npx skills find*": "allow",
+        "npx skills list*": "allow",
+        "npx skills check*": "allow"
+      }
+    },
+    "html-to-markdown": {
+      "bash": {
+        "*bun run scripts/index.ts*": "allow"
+      }
+    }
+  }
+}

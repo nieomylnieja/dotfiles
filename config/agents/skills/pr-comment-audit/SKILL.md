@@ -7,7 +7,7 @@ description: |
   changes, or ensure nothing was missed before merging. Also trigger when the user says
   things like "check the PR comments", "are all comments addressed", "audit the review",
   "resolve handled comments", or "close out review threads".
-allowed-tools: Bash(*scripts/fetch-threads.sh) Bash(*scripts/resolve-thread.sh) Bash(*scripts/reply-to-thread.sh) Bash(gh *) Read Grep Glob
+allowed-tools: Bash(*scripts/fetch-threads.sh) Bash(*scripts/reply-to-thread.sh) Bash(*scripts/resolve-thread.sh) Bash(gh *)
 compatibility: Requires gh CLI authenticated with repo scope
 ---
 

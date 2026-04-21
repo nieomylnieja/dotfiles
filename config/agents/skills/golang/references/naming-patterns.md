@@ -4,8 +4,6 @@ Standard library naming patterns for functions, types, and variables.
 When naming something,
 find the matching pattern here and follow it.
 
-See [Sources](#sources) at the bottom.
-
 ## General Rules
 
 - **MixedCaps** — Always `MixedCaps` or `mixedCaps`, never underscores.

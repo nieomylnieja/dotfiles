@@ -7,9 +7,19 @@ description: |
     (2) during pull request creation to review all types being added
     (3) when refactoring existing types to improve their design quality.
   The agent will provide both qualitative feedback and quantitative ratings on encapsulation, invariant expression, usefulness, and enforcement.
-model: inherit
-mode: subagent
-color: "#ec4899"
+color: "#88c0d0"
+harness-config:
+  claude-code:
+    model: inherit
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.3-codex
+    mode: subagent
+    temperature: 0.2
+    reasoningEffort: medium
+    textVerbosity: low
+    permission:
+      task: deny
 ---
 
 # Agent

@@ -1,7 +1,7 @@
 ---
 name: repo-analyzer
 description: Clone and analyze Git repositories to find specific information. Use this skill whenever the user wants to investigate a GitHub/GitLab/Git repository, analyze code from a remote repo, find specific information in a codebase by URL, clone and examine a project, or understand how something works in an external repository. Handles both public and private repos (using user's git credentials), manages a standardized clone location, and delegates analysis to a subagent.
-allowed-tools: Bash(*scripts/clone_repo.sh *) Read(~/.local/share/claude/repositories/**)
+allowed-tools: Bash(*scripts/clone_repo.sh *) Bash(~/.local/share/claude/repositories/**)
 ---
 
 # Repository Analyzer

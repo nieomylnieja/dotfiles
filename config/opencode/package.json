@@ -1,0 +1,17 @@
+{
+  "name": "opencode-local-plugins",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opencode-ai/plugin": "*",
+    "@opentui/core": "^0.1.99",
+    "@opentui/solid": "^0.1.99",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  }
+}

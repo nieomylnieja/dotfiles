@@ -1,7 +1,7 @@
 ---
 name: create-github-pr
 description: Use whenever asked to create GitHub Pull Request.
-allowed-tools: Bash(*scripts/get-pr-info.sh) Bash(git checkout*) Bash(git diff*) Bash(git push*) Bash(gh pr create*) Bash(gh pr view*) AskUserQuestion
+allowed-tools: Bash(*scripts/get-pr-info.sh) Bash(gh pr create*) Bash(git checkout*) Bash(git push*) Bash(git switch*)
 compatibility: Requires gh CLI and git
 ---
 

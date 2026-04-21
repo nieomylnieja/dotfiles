@@ -193,9 +193,16 @@ in
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents ${homeDir}/.agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/skills ${homeDir}/.claude/skills
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${homeDir}/.claude/commands
-      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${homeDir}/.claude/agents
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/claude/agents ${homeDir}/.claude/agents
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
-      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/agents ${config.xdg.configHome}/opencode/agents
+      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/opencode/agents ${config.xdg.configHome}/opencode/agents
+      run mkdir -p ${config.xdg.configHome}/opencode
+      for f in ${dotfilesDir}/config/opencode/*; do
+        case "$(basename "$f")" in
+          opencode.json|node_modules|.devbox|.envrc|devbox.json|devbox.lock|bun.lock|package.json|tsconfig.json) continue ;;
+        esac
+        ln -s -f -n $VERBOSE_ARG "$f" ${config.xdg.configHome}/opencode/
+      done
       run mkdir -p ${homeDir}/.claude/hooks
       for f in ${dotfilesDir}/config/claude/hooks/*; do
         ln -s -f $VERBOSE_ARG "$f" ${homeDir}/.claude/hooks/
@@ -388,19 +395,29 @@ in
 
   programs.opencode = {
     enable = true;
+    package = pkgs.writeShellScriptBin "opencode" ''
+      exec /home/mh/projects/opencode/packages/opencode/dist/opencode-linux-x64/bin/opencode "$@"
+    '';
     enableMcpIntegration = true;
     settings = builtins.fromJSON (builtins.readFile ../opencode/opencode.json);
     rules = ../agents/AGENTS.md;
   };
 
-  programs.go = {
+  programs.codex = {
     enable = true;
-    env.GOPROXY = "https://proxy.golang.org,direct";
+    enableMcpIntegration = true;
+    settings = ../codex/config.toml;
+    context = ../agents/AGENTS.md;
   };
 
   programs.gemini-cli = {
     enable = true;
     settings = builtins.fromJSON (builtins.readFile ../gemini/settings.json);
+  };
+
+  programs.go = {
+    enable = true;
+    env.GOPROXY = "https://proxy.golang.org,direct";
   };
 
   # Notifications

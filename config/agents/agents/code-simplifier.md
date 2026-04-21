@@ -5,8 +5,19 @@ description: |
   This agent should be triggered automatically after completing a coding task or writing a logical chunk of code.
   It simplifies code by following project best practices while retaining all functionality.
   The agent focuses only on recently modified code unless instructed otherwise.
-model: opus
-mode: subagent
+color: "#a3be8c"
+harness-config:
+  claude-code:
+    model: opus
+    mode: subagent
+  opencode:
+    model: openai/gpt-5.3-codex
+    mode: subagent
+    temperature: 0.2
+    reasoningEffort: medium
+    textVerbosity: low
+    permission:
+      task: deny
 ---
 
 # Agent

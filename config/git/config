@@ -66,7 +66,6 @@
   textconv = "sops -d"
 
 [delta]
-  features = side-by-side line-numbers decorations
 	syntax-theme = Nord
   whitespace-error-style = 22 reverse
 	plus-style = "#8FBCBB bold black"
@@ -74,15 +73,19 @@
 	plus-non-emph-style = "#8FBCBB"
   minus-style = "#D08770 bold black"
 	minus-emph-style = "#D08770 #800517"
-	minus-non-emph-styl = "#D08770"
+	minus-non-emph-style = "#D08770"
 
-[delta "decorations"]
 	commit-decoration-style = bold yellow box ul
   file-style = omit
   file-decoration-style = none
   hunk-header-decoration-style = cyan box ul
 
-[delta "line-numbers"]
+  line-numbers = true
 	line-numbers-zero-style = "#4c566a"
   line-numbers-minus-style = red
-  line-numbers-plus-style = green
+	line-numbers-plus-style = green
+  line-numbers-left-format = "{nm:>3} "
+	line-numbers-right-format = " ┃{np:>3} "
+	line-numbers-right-style = cyan bold dim
+
+  features = side-by-side

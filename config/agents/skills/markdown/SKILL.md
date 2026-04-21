@@ -3,7 +3,7 @@ name: markdown
 description: |
   Use this skill when writing or formatting Markdown files.
   For instance, when writing or modyfing a SKILL.md file, or documenting README.md.
-allowed-tools: Bash(markdownlint *) Bash(markdownfmt *) Bash(markdown-link-check *)
+allowed-tools: Bash(markdown-link-check *) Bash(markdownfmt *) Bash(markdownlint *)
 ---
 
 # Markdown

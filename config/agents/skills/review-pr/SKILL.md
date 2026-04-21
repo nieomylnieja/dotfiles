@@ -4,7 +4,7 @@ description: |
   Comprehensive PR review using specialized agents.
   Use when asked to review a pull request, check code quality before merging,
   or run any subset of review aspects (code, tests, errors, types, comments, simplify).
-allowed-tools: Bash(git diff *) Bash(*scripts/review-meta.sh*) Bash(*scripts/gather-requirements.sh*) Bash(mkdir -p */agents/pr-review/*) Bash(gh pr view*) Bash(gh issue view*) Bash(jira issue view*) AskUserQuestion Glob Grep Read Task Skill Write(**/agents/pr-review/*/*.json)
+allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.sh*) Bash(jira issue view*) Bash(mkdir -p */agents/pr-review/*) Edit(**/agents/pr-review/*/*.json) Write(**/agents/pr-review/*/*.json)
 ---
 
 # PR Review

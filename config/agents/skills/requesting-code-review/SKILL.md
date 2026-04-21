@@ -14,6 +14,12 @@ and preserves your own context for continued work.
 
 ## When to Request Review
 
+**Scope guard:**
+
+- Use this skill from primary agents/orchestrators only.
+- Do not invoke this skill from a subagent.
+- If you are already the `code-reviewer` agent, perform the review directly.
+
 **Mandatory:**
 
 - After each task in subagent-driven development

@@ -3,7 +3,7 @@ name: git-commit
 description: |
   Execute git commit with interactive confirmation.
   Use when user asks to commit changes, create a git commit, or mentions "/commit".
-allowed-tools: Bash(*scripts/get-commit-info.sh) Bash(git commit *) Bash(git add *) Bash(git status *) Bash(git diff *) Bash(git log *) Bash(git show *) AskUserQuestion
+allowed-tools: Bash(*scripts/get-commit-info.sh) Bash(git add *) Bash(git commit *)
 ---
 
 # Git commit

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+  "packages": [
+    "bun@latest"
+  ],
+  "shell": {
+    "scripts": {
+      "check": [
+        "bun install",
+        "bun run check"
+      ]
+    }
+  }
+}

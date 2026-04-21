@@ -23,6 +23,9 @@ Always use `.worktrees/` — no other location.
 
 ## Creation Steps
 
+Choose a branch name, make sure it does not contain '/' characters.
+It should be comprehensive and concise description of the implementation scope.
+
 ### 1. Create Worktree
 
 ```bash
