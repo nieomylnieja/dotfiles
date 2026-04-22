@@ -212,7 +212,6 @@ in
     '';
     syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p ${homeDir}/.codex
-      run ${dotfilesDir}/config/codex/scripts/merge-config.sh
     '';
   };
 
