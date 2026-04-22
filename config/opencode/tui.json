@@ -12,9 +12,5 @@
     "session_parent": "k",
     "permission_diff_up": "k",
     "permission_diff_down": "j"
-  },
-  "plugin": ["/home/mh/.dotfiles/config/opencode/loaded-skills-tui.ts"],
-  "plugin_enabled": {
-    "local:sidebar-loaded-skills-v8": true
   }
 }
