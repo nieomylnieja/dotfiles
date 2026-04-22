@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly SELF_NAME="${BASH_SOURCE[0]##*/}"
+
+usage() {
+  cat << EOF
+Usage: ${SELF_NAME} [OPTION]...
+Select a Git worktree and print its path.
+
+Options:
+      --filter QUERY   pre-filter entries in fzf
+  -h, --help           display this help and exit
+
+Exit status:
+  0  success
+  1  general error
+  2  usage error (invalid arguments)
+EOF
+}
+
+log_error() {
+  printf 'Error: %s\n' "$1" >&2
+}
+
+require_command() {
+  local cmd="$1"
+
+  if ! command -v "${cmd}" > /dev/null 2>&1; then
+    log_error "Missing required command: ${cmd}"
+    return 1
+  fi
+}
+
+current_worktree_root() {
+  git rev-parse --show-toplevel
+}
+
+list_other_worktrees() {
+  local current_root="$1"
+
+  git worktree list --porcelain | awk -v current="${current_root}" '
+    function flush_entry() {
+      if (path == "" || path == current) {
+        path = ""
+        branch = ""
+        detached = 0
+        return
+      }
+
+      if (detached) {
+        branch = "(detached)"
+      } else if (branch == "") {
+        branch = "(no branch)"
+      } else {
+        sub(/^refs\/heads\//, "", branch)
+      }
+
+      printf "%s\t%s\n", path, branch
+
+      path = ""
+      branch = ""
+      detached = 0
+    }
+
+    /^worktree / {
+      flush_entry()
+      path = substr($0, 10)
+      next
+    }
+
+    /^branch / {
+      branch = substr($0, 8)
+      next
+    }
+
+    /^detached$/ {
+      detached = 1
+      next
+    }
+
+    /^$/ {
+      flush_entry()
+    }
+
+    END {
+      flush_entry()
+    }
+  '
+}
+
+select_worktree() {
+  local filter="${1:-}"
+  local current_root
+  local entries
+  local selected
+  local -a fzf_args
+
+  current_root="$(current_worktree_root)"
+  entries="$(list_other_worktrees "${current_root}")"
+
+  if [[ -z "${entries}" ]]; then
+    log_error "No other worktrees found for repository: ${current_root}"
+    return 1
+  fi
+
+  fzf_args=(
+    --ansi
+    --delimiter=$'\t'
+    "--with-nth=2,1"
+    --prompt='Worktree > '
+    --preview='git -C {1} status --short --branch; printf "\n"; git -C {1} log --oneline --decorate --color=always -n 20'
+    --preview-window='right:70%'
+    --select-1
+    --exit-0
+  )
+
+  if [[ -n "${filter}" ]]; then
+    fzf_args+=(--filter "${filter}")
+  fi
+
+  selected="$(printf '%s\n' "${entries}" | fzf "${fzf_args[@]}")"
+
+  if [[ -z "${selected}" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${selected%%$'\t'*}"
+}
+
+main() {
+  local filter=""
+  local selected_worktree
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --filter)
+        if [[ $# -lt 2 ]]; then
+          log_error "--filter requires an argument"
+          return 2
+        fi
+        filter="$2"
+        shift 2
+        ;;
+      --filter=*)
+        filter="${1#*=}"
+        shift
+        ;;
+      -h | --help)
+        usage
+        return 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        log_error "Unknown option: $1"
+        return 2
+        ;;
+      *)
+        log_error "Unexpected argument: $1"
+        return 2
+        ;;
+    esac
+  done
+
+  require_command git || return 1
+  require_command fzf || return 1
+  require_command awk || return 1
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    log_error "Not inside a Git worktree"
+    return 1
+  fi
+
+  if ! selected_worktree="$(select_worktree "${filter}")"; then
+    return 1
+  fi
+
+  printf '%s\n' "${selected_worktree}"
+  return 0
+}
+
+if main "$@"; then
+  status=0
+else
+  status=$?
+fi
+
+exit "${status}"
