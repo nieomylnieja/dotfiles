@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,8 +24,7 @@ var baseSystemPrompt = template.Must(
 )
 
 const (
-	defaultOpenCodeModel = "openai/gpt-5.3-codex"
-	opencodeConfigName   = "opencode.json"
+	defaultOpenCodeModel = "openai/gpt-5.4-mini-fast"
 	opencodePromptName   = "commit-prompt.md"
 	opencodeRunMessage   = "Read the attached file and respond with only the commit message text."
 )
@@ -49,17 +47,6 @@ type LLMClient interface {
 type OpenCodeClient struct {
 	model    string
 	overview string
-}
-
-type openCodeRuntime struct {
-	rootDir    string
-	workDir    string
-	configHome string
-	configDir  string
-	dataHome   string
-	stateHome  string
-	configPath string
-	promptPath string
 }
 
 // NewOpenCodeClient creates an OpenCodeClient.
@@ -133,17 +120,16 @@ func (c *OpenCodeClient) renderPrompt(diff string, relatedFiles []string) (strin
 }
 
 func (c *OpenCodeClient) callOpenCode(ctx context.Context, prompt string) (string, error) {
-	runtime, err := newOpenCodeRuntime(c.model, prompt)
+	promptPath, err := writePromptFile(prompt)
 	if err != nil {
 		return "", err
 	}
 	defer func() {
-		_ = os.RemoveAll(runtime.rootDir)
+		_ = os.Remove(promptPath)
 	}()
 
-	cmd := exec.CommandContext(ctx, "opencode", runtime.commandArgs(c.model)...)
-	cmd.Dir = runtime.workDir
-	cmd.Env = runtime.commandEnv()
+	cmd := exec.CommandContext(ctx, "opencode", opencodeArgs(c.model, promptPath)...)
+	cmd.Env = append(os.Environ(), "OPENCODE_DISABLE_DEFAULT_PLUGINS=1")
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -192,188 +178,37 @@ func resolveOpenCodeModel() string {
 	return defaultOpenCodeModel
 }
 
-func newOpenCodeRuntime(model string, prompt string) (*openCodeRuntime, error) {
+func writePromptFile(prompt string) (string, error) {
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
-	rootDir, err := os.MkdirTemp("", "llmcommit-opencode-"+timestamp+"-")
+	pattern := fmt.Sprintf("llmcommit-%s-*-%s", timestamp, opencodePromptName)
+	file, err := os.CreateTemp("", pattern)
 	if err != nil {
-		return nil, fmt.Errorf("creating temporary opencode runtime: %w", err)
+		return "", fmt.Errorf("creating temporary prompt file: %w", err)
+	}
+	path := file.Name()
+	if _, err := file.WriteString(prompt); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", fmt.Errorf("writing temporary prompt file: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("closing temporary prompt file: %w", err)
 	}
 
-	runtime := &openCodeRuntime{
-		rootDir:    rootDir,
-		workDir:    filepath.Join(rootDir, "workdir"),
-		configHome: filepath.Join(rootDir, "config"),
-		configDir:  filepath.Join(rootDir, "config-dir"),
-		dataHome:   filepath.Join(rootDir, "data"),
-		stateHome:  filepath.Join(rootDir, "state"),
-		configPath: filepath.Join(rootDir, opencodeConfigName),
-		promptPath: filepath.Join(rootDir, opencodePromptName),
-	}
-
-	if err := runtime.prepare(model, prompt); err != nil {
-		_ = os.RemoveAll(rootDir)
-		return nil, err
-	}
-
-	return runtime, nil
+	return path, nil
 }
 
-func (r *openCodeRuntime) prepare(model string, prompt string) error {
-	for _, dir := range []string{
-		r.workDir,
-		r.configHome,
-		r.configDir,
-		r.dataHome,
-		r.stateHome,
-	} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("creating opencode directory %s: %w", dir, err)
-		}
-	}
-
-	configBody, err := bareOpenCodeConfig(model)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(r.configPath, configBody, 0o600); err != nil {
-		return fmt.Errorf("writing opencode config: %w", err)
-	}
-	if err := os.WriteFile(r.promptPath, []byte(prompt), 0o600); err != nil {
-		return fmt.Errorf("writing opencode prompt: %w", err)
-	}
-	if err := copyOpenCodeAuth(r.dataHome); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *openCodeRuntime) commandArgs(model string) []string {
+func opencodeArgs(model string, promptPath string) []string {
 	return []string{
 		"run",
 		"--pure",
-		"--agent",
-		"build",
 		"--model",
 		model,
 		opencodeRunMessage,
 		"--file",
-		r.promptPath,
+		promptPath,
 	}
-}
-
-func (r *openCodeRuntime) commandEnv() []string {
-	return append(
-		os.Environ(),
-		"HOME="+r.rootDir,
-		"XDG_CONFIG_HOME="+r.configHome,
-		"XDG_DATA_HOME="+r.dataHome,
-		"XDG_STATE_HOME="+r.stateHome,
-		"OPENCODE_CONFIG="+r.configPath,
-		"OPENCODE_CONFIG_DIR="+r.configDir,
-		"OPENCODE_DISABLE_CLAUDE_CODE=1",
-		"OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1",
-		"OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1",
-		"OPENCODE_DISABLE_DEFAULT_PLUGINS=1",
-	)
-}
-
-func bareOpenCodeConfig(model string) ([]byte, error) {
-	config := map[string]any{
-		"$schema":       "https://opencode.ai/config.json",
-		"autoupdate":    false,
-		"default_agent": "build",
-		"instructions":  []string{},
-		"mcp":           map[string]any{},
-		"model":         model,
-		"plugin":        []string{},
-		"share":         "disabled",
-		"snapshot":      false,
-		"tools": map[string]bool{
-			"skill": false,
-		},
-	}
-	if providerConfig := bareProviderConfig(model); providerConfig != nil {
-		config["provider"] = providerConfig
-	}
-
-	body, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("encoding opencode config: %w", err)
-	}
-
-	return append(body, '\n'), nil
-}
-
-func bareProviderConfig(model string) map[string]any {
-	providerID, modelID, ok := strings.Cut(model, "/")
-	if !ok {
-		return nil
-	}
-
-	switch providerID {
-	case "openai":
-		return map[string]any{
-			"openai": map[string]any{
-				"models": map[string]any{
-					modelID: map[string]any{
-						"options": map[string]string{
-							"reasoningEffort": "high",
-							"textVerbosity":   "low",
-						},
-					},
-				},
-			},
-		}
-	default:
-		return nil
-	}
-}
-
-func copyOpenCodeAuth(targetDataHome string) error {
-	sourcePath, err := sourceOpenCodeAuthPath()
-	if err != nil {
-		return err
-	}
-	if sourcePath == "" {
-		return nil
-	}
-
-	content, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return fmt.Errorf("reading opencode auth from %s: %w", sourcePath, err)
-	}
-
-	targetPath := filepath.Join(targetDataHome, "opencode", "auth.json")
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
-		return fmt.Errorf("creating opencode auth directory: %w", err)
-	}
-	if err := os.WriteFile(targetPath, content, 0o600); err != nil {
-		return fmt.Errorf("writing opencode auth file: %w", err)
-	}
-
-	return nil
-}
-
-func sourceOpenCodeAuthPath() (string, error) {
-	dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME"))
-	if dataHome == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolving home dir for opencode auth: %w", err)
-		}
-		dataHome = filepath.Join(home, ".local", "share")
-	}
-
-	sourcePath := filepath.Join(dataHome, "opencode", "auth.json")
-	if _, err := os.Stat(sourcePath); err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("checking opencode auth file %s: %w", sourcePath, err)
-	}
-
-	return sourcePath, nil
 }
 
 func formatOpenCodeError(err error, stdout string, stderr string) error {

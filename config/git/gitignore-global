@@ -11,3 +11,4 @@ postgrestools.jsonc
 .worktrees
 .claude/worktrees
 .serena
+.codex

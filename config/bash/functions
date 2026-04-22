@@ -55,3 +55,9 @@ extract () {
     echo "'$1' is not a valid file"
   fi
 }
+
+worktree-switch() {
+  local selected_worktree
+  selected_worktree="$("${DOTFILES}/scripts/worktree-switch" "$@")" || return
+  cd "${selected_worktree}" || return
+}

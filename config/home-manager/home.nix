@@ -210,13 +210,14 @@ in
       run mkdir -p ${config.xdg.stateHome}/skills
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
     '';
+    syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run mkdir -p ${homeDir}/.codex
+      run ${dotfilesDir}/config/codex/scripts/merge-config.sh
+    '';
   };
 
   home.file = {
     ".bash_logout".source = ../bash/bash_logout;
-    # Keep Codex config writable so it can persist per-project trust decisions.
-    ".codex/config.toml".source =
-      config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/codex/config.toml";
   };
 
   programs.bash = {

@@ -57,7 +57,7 @@
 	stashlost = !recover-lost-stash.bash
 	c = !llmcommit
 	test = "!echo \"^$(pwd)$\""
-	worktree-switch = "!f() { worktree=$(git worktree list | grep -v \"^$(pwd)\\s\" | awk '{gsub(/[\\[\\]]/,\"\",$3); print}' | fzf --with-nth=3 --preview 'git -C $(echo {1} | cut -d: -f1) log' | awk '{print $1}'); [ -n \"$worktree\" ] && cd \"$worktree\" && exec $SHELL; }; f"
+	worktree-switch = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-switch\" \"$@\"; }; f \"$@\""
 
 [interactive]
   diffFilter = delta --color-only

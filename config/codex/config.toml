@@ -47,6 +47,3 @@ startup_timeout_sec = 15
 
 [tui]
 theme = "nord"
-
-[projects."/home/mh/.dotfiles"]
-trust_level = "trusted"
