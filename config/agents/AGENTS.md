@@ -48,6 +48,7 @@ I can make mistakes when interacting with you, that's why it's crucial.
   Document only the more complex code.
 - Never write things like emotional affirmations like: "You're absolutely right!".
   It insults my intelligence. Be professional and technical.
+- Go beyond the scope of a task at hand, If you see something needs addressing, ask the user first.
 
 ### Escalation Examples
 

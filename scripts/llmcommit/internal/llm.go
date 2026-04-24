@@ -260,7 +260,6 @@ func extractOverviewSection(content string) string {
 	for _, line := range lines {
 		if strings.HasPrefix(line, "## Overview") {
 			inOverview = true
-			result = append(result, line)
 			continue
 		}
 		if inOverview && strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "## Overview") {
