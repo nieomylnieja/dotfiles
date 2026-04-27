@@ -3,7 +3,7 @@ name: review-pr
 description: |
   Comprehensive PR review using specialized agents.
   Use when asked to review a pull request, check code quality before merging,
-  or run any subset of review aspects (code, tests, errors, types, comments, simplify).
+  or run any subset of review aspects (code, tests, errors, types, docs, simplify).
 allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.sh*) Bash(jira issue view*) Bash(mkdir -p */agents/pr-review/*) Edit(**/agents/pr-review/*/*.json) Write(**/agents/pr-review/*/*.json)
 ---
 
@@ -11,7 +11,9 @@ allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.
 
 ## Available Review Aspects
 
-- **comments** - Analyze code comment accuracy and maintainability
+- **docs** - Analyze developer documentation, docstrings, and comments
+  for accuracy, clarity, and maintainability
+- **comments** - Alias for **docs**
 - **tests** - Review test coverage quality and completeness
 - **errors** - Check error handling for silent failures
 - **types** - Analyze type design and invariants (if new types added)
@@ -70,7 +72,7 @@ allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.
    Based on changes:
    - **Always**: requirements-verifier, code-reviewer
    - **If `_test.go` or test files changed**: test-analyzer
-   - **If comments/docs added or modified**: comment-analyzer
+   - **If comments/docs added or modified**: docs-analyzer
    - **If error handling changed**: silent-failure-hunter
    - **If types added/modified**: type-design-analyzer
    - **After passing review**: code-simplifier

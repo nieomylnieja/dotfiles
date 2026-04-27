@@ -155,7 +155,6 @@ in
     swayimg
     statix
     terraform
-    tidal-hifi
     tree
     # Required for new verison of nvim-treesitter to work.
     tree-sitter

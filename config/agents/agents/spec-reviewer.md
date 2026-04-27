@@ -13,7 +13,7 @@ harness-config:
     model: opus
     mode: subagent
   opencode:
-    model: openai/gpt-5.4
+    model: openai/gpt-5.5
     mode: subagent
     temperature: 0.3
     reasoningEffort: high
@@ -21,8 +21,6 @@ harness-config:
     permission:
       task: deny
   codex:
-    model: gpt-5.4
-    model_reasoning_effort: high
     model_verbosity: medium
 ---
 

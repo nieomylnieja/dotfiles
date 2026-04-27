@@ -256,20 +256,14 @@ generate_codex_agent() {
   developer_instructions="$(sed '1{/^$/d;}' "${body_file}")"
   [[ -n "${developer_instructions}" ]] || fatal "${source_file}: missing agent body"
 
-  yaml_has "${frontmatter_file}" '."harness-config".codex' \
-    || fatal "${source_file}: missing harness-config.codex block"
-
   local model
   model="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model')"
-  [[ -n "${model}" ]] || fatal "${source_file}: missing harness-config.codex.model"
 
   local model_reasoning_effort
   model_reasoning_effort="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_reasoning_effort')"
-  [[ -n "${model_reasoning_effort}" ]] || fatal "${source_file}: missing harness-config.codex.model_reasoning_effort"
 
   local model_verbosity
   model_verbosity="$(yaml_read "${frontmatter_file}" '."harness-config".codex.model_verbosity')"
-  [[ -n "${model_verbosity}" ]] || fatal "${source_file}: missing harness-config.codex.model_verbosity"
 
   local sandbox_mode
   sandbox_mode="$(yaml_read "${frontmatter_file}" '."harness-config".codex.sandbox_mode')"
@@ -286,11 +280,11 @@ generate_codex_agent() {
     '{
       name: $name,
       description: $description,
-      developer_instructions: $developer_instructions,
-      model: $model,
-      model_reasoning_effort: $model_reasoning_effort,
-      model_verbosity: $model_verbosity
+      developer_instructions: $developer_instructions
     }
+    | if $model != "" then . + {model: $model} else . end
+    | if $model_reasoning_effort != "" then . + {model_reasoning_effort: $model_reasoning_effort} else . end
+    | if $model_verbosity != "" then . + {model_verbosity: $model_verbosity} else . end
     | if $sandbox_mode != "" then . + {sandbox_mode: $sandbox_mode} else . end' \
     > "${tmp_file}"
 

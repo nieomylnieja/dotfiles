@@ -24,7 +24,7 @@ var baseSystemPrompt = template.Must(
 )
 
 const (
-	defaultOpenCodeModel = "openai/gpt-5.4-mini-fast"
+	defaultOpenCodeModel = "openai/gpt-5.5-mini-fast"
 	opencodePromptName   = "commit-prompt.md"
 	opencodeRunMessage   = "Read the attached file and respond with only the commit message text."
 )
