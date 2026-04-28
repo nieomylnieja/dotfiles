@@ -21,9 +21,8 @@ harness-config:
     permission:
       task: deny
   codex:
-    model: gpt-5.5-mini
-    model_reasoning_effort: low
     model_verbosity: low
+    model_reasoning_effort: low
 ---
 
 # Agent

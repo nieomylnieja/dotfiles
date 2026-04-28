@@ -22,6 +22,7 @@ harness-config:
       task: deny
   codex:
     model_verbosity: low
+    model_reasoning_effort: medium
 ---
 
 # Agent

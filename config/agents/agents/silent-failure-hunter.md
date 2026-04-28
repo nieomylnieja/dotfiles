@@ -18,7 +18,7 @@ harness-config:
       task: deny
   codex:
     model: gpt-5.3-codex
-    model_reasoning_effort: low
+    model_reasoning_effort: medium
     model_verbosity: low
 ---
 
