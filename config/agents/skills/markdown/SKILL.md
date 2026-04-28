@@ -22,15 +22,17 @@ You can automatically do some formatting with `markdownfmt` command too.
 
 ## Links vs Code Fences
 
-When referencing a named external resource (library, package, tool, URL),
+When referencing a named external resource (library, package, tool, URL, file),
 prefer a **markdown link** over a bare code fence:
 
 ```md
 <!-- WRONG — just a code fence, not navigable: -->
 `github.com/go-chi/chi`
+`test/inputs`
 
 <!-- RIGHT — linked and formatted: -->
 [github.com/go-chi/chi](https://github.com/go-chi/chi)
+[test/inputs](../test/inputs/)
 ```
 
 Use a bare code fence only for:
