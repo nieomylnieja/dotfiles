@@ -2,6 +2,7 @@ package internal
 
 import (
 	"charm.land/huh/v2"
+	huhspinner "charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
 )
 
@@ -54,5 +55,14 @@ func themeNord() huh.Theme {
 		t.Group.Description = t.Focused.Description
 
 		return t
+	})
+}
+
+func spinnerThemeNord() huhspinner.Theme {
+	return huhspinner.ThemeFunc(func(bool) *huhspinner.Styles {
+		return &huhspinner.Styles{
+			Spinner: lipgloss.NewStyle().Foreground(lipgloss.Color("#88C0D0")),
+			Title:   lipgloss.NewStyle().Foreground(lipgloss.Color("#D8DEE9")),
+		}
 	})
 }

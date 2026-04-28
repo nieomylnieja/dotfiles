@@ -68,6 +68,7 @@ func (g *GitClient) BuildCommitData(files []string) (*PreCommitData, error) {
 	)
 
 	if spinErr := spinner.New().
+		WithTheme(spinnerThemeNord()).
 		Title("Detecting changes").
 		Action(func() {
 			args := append([]string{"diff", "--cached", "--diff-algorithm=minimal", "--"}, files...)
