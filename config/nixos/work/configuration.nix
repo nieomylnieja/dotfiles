@@ -41,6 +41,38 @@
     "kernel.yama.ptrace_scope" = 0;
   };
 
+  # Add compressed swap headroom so the system has a chance to recover before
+  # exhausting RAM and falling into a hard OOM.
+  zramSwap = {
+    enable = true;
+    algorithm = "zstd";
+    memoryPercent = 50;
+    priority = 100;
+  };
+
+  # Monitor the per-user systemd tree instead of the root-owned user.slice so
+  # oomd can target desktop apps while deprioritizing the interactive session.
+  systemd.oomd.settings.OOM = {
+    SwapUsedLimit = "80%";
+    DefaultMemoryPressureLimit = "60%";
+  };
+  systemd.user.units."slice" = {
+    text = ''
+      [Slice]
+      ManagedOOMMemoryPressure=kill
+      ManagedOOMMemoryPressureLimit=60%
+    '';
+    overrideStrategy = "asDropin";
+  };
+  systemd.user.slices.session.sliceConfig = {
+    ManagedOOMPreference = "avoid";
+  };
+  systemd.user.services."wayland-wm@" = {
+    serviceConfig = {
+      ManagedOOMPreference = "avoid";
+    };
+  };
+
   # Define your hostname.
   networking.hostName = "nixos";
   # Uses NetworkManager to obtain an IP address and other configuration
@@ -74,12 +106,11 @@
     theme = "sddm-astronaut-theme";
     extraPackages = with pkgs; [ sddm-astronaut ];
   };
-  services.displayManager.defaultSession = "hyprland-uwsm";
+  services.displayManager.defaultSession = "hyprland";
 
   # Enable Hyprland
   programs.hyprland = {
     enable = true;
-    withUWSM = true;
     xwayland.enable = true;
   };
 

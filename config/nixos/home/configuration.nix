@@ -18,14 +18,15 @@ in
 
   # nix
   nix = {
-    settings.auto-optimise-store = true; # Hardlink identical files.
+    settings = {
+      experimental-features = ["nix-command" "flakes"];
+      auto-optimise-store = true; # Hardlink identical files.
+    };
     gc = {
       automatic = true;
       dates = "weekly";
       options = "--delete-older-than 7d";
     };
-    package = pkgs.nixFlakes;
-    extraOptions = "experimental-features = nix-command flakes";
   };
 
   # Bootloader.
@@ -67,7 +68,7 @@ in
 
   # Configure keymap in X11
   services.libinput.enable = true; # Touchpad support.
-  services.displayManager.defaultSession = "hyprland-uwsm";
+  services.displayManager.defaultSession = "hyprland";
   services.xserver = {
     enable = true;
     xkb = {
@@ -91,7 +92,6 @@ in
   services.gvfs.enable = true;
 
   # Sound
-  sound.mediaKeys.enable = true;
   services.pipewire = {
     enable = true;
     alsa.enable = true;

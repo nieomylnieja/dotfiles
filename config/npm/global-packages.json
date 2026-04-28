@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "agent-browser": "latest"
+    "@openai/codex": "0.125.0"
   }
 }

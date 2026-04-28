@@ -22,12 +22,6 @@
       "type": "sse",
       "url": "https://mcp.atlassian.com/v1/mcp"
     },
-    "nobl9": {
-      "command": "sloctl",
-      "args": [
-        "mcp"
-      ]
-    },
     "deepwiki": {
       "type": "http",
       "url": "https://mcp.deepwiki.com/mcp"

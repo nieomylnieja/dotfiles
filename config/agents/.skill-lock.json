@@ -15,9 +15,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/anthropics/skills.git",
       "skillPath": "skills/skill-creator/SKILL.md",
-      "skillFolderHash": "98a510d1cfef9f82c3b1eec200229ca68725e613",
+      "skillFolderHash": "3cf9a8db32597ba3e24b584a3d696f4e11c7d7b6",
       "installedAt": "2026-02-25T16:17:31.991Z",
-      "updatedAt": "2026-03-11T12:48:57.430Z"
+      "updatedAt": "2026-04-27T14:54:28.353Z"
     },
     "gh-cli": {
       "source": "github/awesome-copilot",
@@ -87,10 +87,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/supabase/agent-skills.git",
       "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
-      "skillFolderHash": "9e4dd36978eedd04efc649b4d431ab5ce4bb3896",
-      "pluginName": "postgres-best-practices",
+      "skillFolderHash": "1ee0423a38c358caa23150dfaaed01bbae020bea",
       "installedAt": "2026-04-13T20:31:02.845Z",
-      "updatedAt": "2026-04-13T20:31:02.845Z"
+      "updatedAt": "2026-04-27T14:54:31.424Z"
     }
   },
   "dismissed": {}

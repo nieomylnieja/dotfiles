@@ -1,24 +1,41 @@
-{ config
-, pkgs
-, lib
-, hyprdynamicmonitorsPkg
-, googleworkspaceCliPkg
-, ...
-}:
-let
+{
+  config,
+  pkgs,
+  lib,
+  hyprdynamicmonitorsPkg,
+  googleworkspaceCliPkg,
+  ...
+}: let
   homeDir = "/home/mh";
   dotfilesDir = "${homeDir}/.dotfiles";
   gdk = pkgs.stable.google-cloud-sdk.withExtraComponents (with pkgs.stable.google-cloud-sdk.components; [
     gke-gcloud-auth-plugin
   ]);
-in
-{
+  sessionVariables = {
+    DOTFILES = "${dotfilesDir}";
+    XDG_SESSION_TYPE = "wayland";
+    XDG_CURRENT_DESKTOP = "Hyprland";
+    GDK_BACKEND = "wayland";
+    QT_QPA_PLATFORM = "wayland";
+    NIXOS_OZONE_WL = "1";
+    MOZ_ENABLE_WAYLAND = "1";
+    BROWSER = "vivaldi";
+    EDITOR = "nvim";
+    _JAVA_AWT_WM_NONREPARENTING = "1";
+    GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
+    GOPATH = "${homeDir}/go";
+    STARSHIP_LOG = "error";
+    SKILLS_AGENTS = "opencode";
+    OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
+  };
+in {
   programs.home-manager.enable = true;
 
   home = {
     username = "mh";
     homeDirectory = homeDir;
     stateVersion = "24.11";
+    inherit sessionVariables;
   };
 
   home.packages = with pkgs; [
@@ -42,15 +59,14 @@ in
     cargo
     cliphist
     csvkit
-    codex
     delta
     diffnav
     direnv
     # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
     (pkgs.symlinkJoin {
       name = "discord";
-      paths = [ pkgs.discord ];
-      buildInputs = [ pkgs.makeWrapper ];
+      paths = [pkgs.discord];
+      buildInputs = [pkgs.makeWrapper];
       postBuild = ''
         wrapProgram $out/bin/discord \
           --set NIXOS_OZONE_WL ""
@@ -101,7 +117,7 @@ in
     libreoffice
     lua
     luajitPackages.luarocks
-    lutris
+    pkgs.stable.lutris
     man
     man-pages
     mesa
@@ -124,7 +140,7 @@ in
     peek
     playerctl
     pulseaudio # For pactl.
-    pdm
+    pkgs.stable.pdm
     python3
     pinentry-qt
     r2modman # for Valheim mods
@@ -142,8 +158,8 @@ in
     signal-desktop
     (pkgs.symlinkJoin {
       name = "slack";
-      paths = [ pkgs.slack ];
-      buildInputs = [ pkgs.makeWrapper ];
+      paths = [pkgs.slack];
+      buildInputs = [pkgs.makeWrapper];
       postBuild = ''
         wrapProgram $out/bin/slack \
           --add-flags "--remote-debugging-port=9222"
@@ -177,7 +193,7 @@ in
 
   # Directories that need to be writable are symlinked instead of copied.
   home.activation = {
-    installGlobalNpmPackages = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    installGlobalNpmPackages = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run env PATH="${pkgs.nodejs}/bin:$PATH" ${pkgs.nodejs}/bin/npm install \
         --global --prefix ${homeDir}/.npm-global \
         --package-lock false \
@@ -185,7 +201,7 @@ in
           ${dotfilesDir}/config/npm/global-packages.json)
     '';
 
-    createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    createLinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
       run [ -d ${config.xdg.configHome}/hypr ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/hypr ${config.xdg.configHome}/hypr
       run [ -d ${config.xdg.configHome}/waybar ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/waybar ${config.xdg.configHome}/waybar
@@ -209,7 +225,7 @@ in
       run mkdir -p ${config.xdg.stateHome}/skills
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
     '';
-    syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    syncCodexConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run mkdir -p ${homeDir}/.codex
     '';
   };
@@ -230,8 +246,8 @@ in
     icon = "slack";
     comment = "Slack Desktop";
     genericName = "Slack Client for Linux";
-    categories = [ "Network" "InstantMessaging" ];
-    mimeType = [ "x-scheme-handler/slack" ];
+    categories = ["Network" "InstantMessaging"];
+    mimeType = ["x-scheme-handler/slack"];
     startupNotify = true;
     settings = {
       StartupWMClass = "Slack";
@@ -254,49 +270,31 @@ in
     # "gh-dash/config.yml".source = ../gh-dash/config.yml;
   };
 
-  xdg.mimeApps =
-    let
-      imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
-      imageAssociations = builtins.listToAttrs (map
-        (t: {
-          name = "image/${t}";
-          value = [ "swayimg.desktop" ];
-        })
-        imageTypes);
-    in
-    {
-      enable = true;
-      defaultApplications =
-        {
-          "application/pdf" = [ "org.pwmt.zathura.desktop" ];
-          "text/html" = "vivaldi-stable.desktop";
-          "x-scheme-handler/http" = "vivaldi-stable.desktop";
-          "x-scheme-handler/https" = "vivaldi-stable.desktop";
-          "x-scheme-handler/about" = "vivaldi-stable.desktop";
-          "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
-        }
-        // imageAssociations;
-    };
-
-  # User session variables (inherited by Hyprland and all launched programs)
-  # PATH is set in hyprland.conf instead
-  systemd.user.sessionVariables = {
-    DOTFILES = "${dotfilesDir}";
-    XDG_SESSION_TYPE = "wayland";
-    XDG_CURRENT_DESKTOP = "Hyprland";
-    GDK_BACKEND = "wayland";
-    QT_QPA_PLATFORM = "wayland";
-    NIXOS_OZONE_WL = "1";
-    MOZ_ENABLE_WAYLAND = "1";
-    BROWSER = "vivaldi";
-    EDITOR = "nvim";
-    _JAVA_AWT_WM_NONREPARENTING = "1";
-    GOLAND_VM_OPTIONS = "${dotfilesDir}/config/jetbrains/idea.vmoptions";
-    GOPATH = "${homeDir}/go";
-    STARSHIP_LOG = "error";
-    SKILLS_AGENTS = "opencode";
-    OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
+  xdg.mimeApps = let
+    imageTypes = ["png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff"];
+    imageAssociations = builtins.listToAttrs (map
+      (t: {
+        name = "image/${t}";
+        value = ["swayimg.desktop"];
+      })
+      imageTypes);
+  in {
+    enable = true;
+    defaultApplications =
+      {
+        "application/pdf" = ["org.pwmt.zathura.desktop"];
+        "text/html" = "vivaldi-stable.desktop";
+        "x-scheme-handler/http" = "vivaldi-stable.desktop";
+        "x-scheme-handler/https" = "vivaldi-stable.desktop";
+        "x-scheme-handler/about" = "vivaldi-stable.desktop";
+        "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
+      }
+      // imageAssociations;
   };
+
+  # User session variables for login shells and systemd/UWSM-launched programs.
+  # PATH is set in hyprland.conf instead.
+  systemd.user.sessionVariables = sessionVariables;
 
   programs.direnv = {
     enable = true;
@@ -353,7 +351,7 @@ in
 
   programs.poetry = {
     enable = true;
-    package = pkgs.poetry.withPlugins (ps: with ps; [ poetry-plugin-shell ]);
+    package = pkgs.poetry.withPlugins (ps: with ps; [poetry-plugin-shell]);
     settings = {
       virtualenvs.create = true;
       virtualenvs.in-project = true;
@@ -363,7 +361,7 @@ in
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
-    plugins = with pkgs; [ rofi-calc ];
+    plugins = with pkgs; [rofi-calc];
     pass.enable = true;
   };
 
@@ -392,7 +390,7 @@ in
     enable = true;
     enableMcpIntegration = true;
     settings = builtins.fromJSON (builtins.readFile ../claude/settings.json);
-    memory.source = ../agents/AGENTS.md;
+    context = ../agents/AGENTS.md;
   };
 
   programs.opencode = {
@@ -402,7 +400,7 @@ in
     '';
     enableMcpIntegration = true;
     settings = builtins.fromJSON (builtins.readFile ../opencode/opencode.json);
-    rules = ../agents/AGENTS.md;
+    context = ../agents/AGENTS.md;
   };
 
   programs.codex = {
@@ -425,13 +423,7 @@ in
     enable = true;
   };
 
-  # Monitor management - use symlink so TUI changes persist
-  home.hyprdynamicmonitors = {
-    enable = true;
-    extraFlags = [ "--disable-power-events" ];
-    installExamples = false;
-    configPath = "${dotfilesDir}/config/hyprdynamicmonitors/config.toml";
-  };
+  # Monitor management is launched by Hyprland so it also runs in plain sessions.
   # Symlink entire config dir so TUI finds themes and configs
   xdg.configFile."hyprdynamicmonitors".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/hyprdynamicmonitors";

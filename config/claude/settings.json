@@ -6,6 +6,7 @@
     "padding": 0
   },
   "model": "claude-opus-4-6",
+  "effortLevel": "high",
   "cleanupPeriodDays": 99999,
   "attribution": {
     "commit": "",
