@@ -1,0 +1,1 @@
+../config/agents/skills/git-worktrees/scripts/setup-worktree.sh
