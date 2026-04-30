@@ -26,9 +26,11 @@ var baseSystemPrompt = template.Must(
 )
 
 const (
-	defaultOpenCodeModel = "openai/gpt-5.5"
-	opencodePromptName   = "commit-prompt.md"
-	opencodeRunMessage   = "Read the attached file and respond with only the commit message text."
+	defaultOpenCodeModel           = "openai/gpt-5.5"
+	defaultOpenCodeReasoningEffort = "low"
+	defaultOpenCodeTextVerbosity   = "medium"
+	opencodePromptName             = "commit-prompt.md"
+	opencodeRunMessage             = "Read the attached file and respond with only the commit message text."
 )
 
 var isolatedOpenCodeFlags = []string{
@@ -153,6 +155,9 @@ func (c *OpenCodeClient) callOpenCode(ctx context.Context, prompt string) (strin
 
 	baseEnv := os.Environ()
 	env := isolatedOpenCodeEnv(baseEnv, sandboxPath)
+	if err := writeOpenCodeConfig(env, c.model); err != nil {
+		return "", err
+	}
 	if err := copyOpenCodeAuth(baseEnv, env); err != nil {
 		return "", err
 	}
@@ -229,6 +234,51 @@ func writePromptFile(prompt string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func writeOpenCodeConfig(env []string, model string) error {
+	provider, modelID, ok := openCodeModelOptions(model)
+	if !ok {
+		return nil
+	}
+
+	configPath := filepath.Join(envValue(env, "XDG_CONFIG_HOME"), "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return fmt.Errorf("creating isolated opencode config directory: %w", err)
+	}
+
+	config := map[string]any{
+		"$schema": "https://opencode.ai/config.json",
+		"provider": map[string]any{
+			provider: map[string]any{
+				"models": map[string]any{
+					modelID: map[string]any{
+						"options": map[string]any{
+							"textVerbosity": defaultOpenCodeTextVerbosity,
+						},
+						"variants": map[string]any{
+							defaultOpenCodeReasoningEffort: map[string]any{
+								"reasoningEffort": defaultOpenCodeReasoningEffort,
+								"textVerbosity":   defaultOpenCodeTextVerbosity,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	content, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding isolated opencode config: %w", err)
+	}
+	content = append(content, '\n')
+
+	if err := os.WriteFile(configPath, content, 0o600); err != nil {
+		return fmt.Errorf("writing isolated opencode config: %w", err)
+	}
+
+	return nil
 }
 
 func createOpenCodeSandbox() (string, error) {
@@ -370,16 +420,33 @@ func envValue(env []string, key string) string {
 	return ""
 }
 
+func openCodeModelOptions(model string) (string, string, bool) {
+	provider, modelID, ok := strings.Cut(model, "/")
+	if !ok {
+		return "", "", false
+	}
+	if provider != "openai" {
+		return "", "", false
+	}
+	if !strings.HasPrefix(modelID, "gpt-5") {
+		return "", "", false
+	}
+
+	return provider, modelID, true
+}
+
 func opencodeArgs(model string, promptPath string) []string {
-	return []string{
+	args := []string{
 		"run",
 		"--pure",
 		"--model",
 		model,
-		opencodeRunMessage,
-		"--file",
-		promptPath,
 	}
+	if _, _, ok := openCodeModelOptions(model); ok {
+		args = append(args, "--variant", defaultOpenCodeReasoningEffort)
+	}
+
+	return append(args, opencodeRunMessage, "--file", promptPath)
 }
 
 func formatOpenCodeError(err error, stdout string, stderr string) error {

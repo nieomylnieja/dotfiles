@@ -1,12 +1,25 @@
 #:schema https://developers.openai.com/codex/config-schema.json
 model = "gpt-5.5"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
+model_auto_compact_token_limit = 150000
 personality = "pragmatic"
+
+plan_mode_reasoning_effort = "high"
 
 approvals_reviewer = "guardian_subagent"
 
 [features]
+codex_hooks = true
 guardian_approval = true
+
+[hooks]
+[[hooks.PostToolUse]]
+matcher = "*"
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "$HOME/.dotfiles/config/codex/scripts/compact-tool-result.sh"
+timeout = 90
+statusMessage = "Compacting tool result with bare Codex"
 
 [agents]
 max_depth = 1

@@ -126,3 +126,19 @@ date -u +%Y%m%dT%H%M%SZ
 
 Never chain commands with `&&`, instead run in parallel,
 each command with its own `Bash()` tool invocation.
+
+## Saving tokens
+
+For log investigation, do not print full logs.
+Save logs to `/tmp`, then use `rg`/`sed` with max_output_tokens <= 4000.
+Summarize only the failing lines and line numbers.
+
+Avoid broad searches when the root folder is large, prefer path-scoped commands:
+
+```bash
+rg -n "BasicAuth" authserver
+
+not:
+
+rg -n "BasicAuth|Bearer" .
+```

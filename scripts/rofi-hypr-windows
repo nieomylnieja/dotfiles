@@ -1,0 +1,1434 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly DEFAULT_ROFI_PROMPT="Window"
+readonly MAX_PROCESS_DEPTH=12
+readonly MAX_DEFAULT_PARALLEL_JOBS=8
+readonly PROC_ROOT="${ROFI_HYPR_WINDOWS_PROC_ROOT:-/proc}"
+
+rows_file=""
+row_dir=""
+wezterm_clients_json=""
+wezterm_panes_json=""
+wezterm_state_class=""
+hypr_clients_json_cached=""
+
+usage() {
+  cat << EOF
+Usage: ${0##*/}
+Search Hyprland windows with Rofi and focus the selected window.
+
+Options:
+  -h, --help  display this help and exit
+  --dump      print rows and exit (no rofi/focus)
+
+Environment:
+  ROFI_HYPR_WINDOWS_JOBS  max parallel row rendering jobs
+
+Exit status:
+  0  success or cancelled selection
+  1  missing dependency or command failure
+  2  usage error
+EOF
+}
+
+fatal() {
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+require_command() {
+  command -v "$1" > /dev/null 2>&1 || fatal "$1 not found"
+}
+
+temp_file() {
+  local timestamp
+
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  mktemp "${TMPDIR:-/tmp}/${0##*/}-${timestamp}.XXXXXX"
+}
+
+temp_dir() {
+  local timestamp
+
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  mktemp -d "${TMPDIR:-/tmp}/${0##*/}-${timestamp}.XXXXXX"
+}
+
+cleanup() {
+  [[ -z "${rows_file}" ]] || rm -f "${rows_file}"
+  [[ -z "${row_dir}" ]] || rm -rf "${row_dir}"
+}
+
+parallel_jobs() {
+  local cpu_count
+  local job_count
+
+  if [[ "${ROFI_HYPR_WINDOWS_JOBS:-}" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s' "${ROFI_HYPR_WINDOWS_JOBS}"
+    return
+  fi
+
+  cpu_count="$(nproc 2> /dev/null || printf '4')"
+  if [[ ! "${cpu_count}" =~ ^[1-9][0-9]*$ ]]; then
+    cpu_count=4
+  fi
+
+  job_count="${cpu_count}"
+  if ((job_count > MAX_DEFAULT_PARALLEL_JOBS)); then
+    job_count="${MAX_DEFAULT_PARALLEL_JOBS}"
+  fi
+
+  printf '%s' "${job_count}"
+}
+
+wait_for_available_slot() {
+  local max_jobs="$1"
+  local running_jobs=()
+
+  while true; do
+    mapfile -t running_jobs < <(jobs -pr)
+    ((${#running_jobs[@]} < max_jobs)) && return
+
+    if ! wait -n; then
+      fatal "Failed to render window row"
+    fi
+  done
+}
+
+wait_for_background_rows() {
+  local status=0
+  local running_jobs=()
+
+  while true; do
+    mapfile -t running_jobs < <(jobs -pr)
+    ((${#running_jobs[@]} == 0)) && break
+
+    if ! wait -n; then
+      status=1
+    fi
+  done
+
+  ((status == 0)) || fatal "Failed to render window row"
+}
+
+short_path() {
+  local path="$1"
+
+  if [[ -n "${HOME:-}" && "${path}" == "${HOME}" ]]; then
+    printf '~'
+    return
+  fi
+
+  if [[ -n "${HOME:-}" && "${path}" == "${HOME}"/* ]]; then
+    printf '%s/%s' '~' "${path#"${HOME}"/}"
+    return
+  fi
+
+  printf '%s' "${path}"
+}
+
+process_cwd() {
+  local pid="$1"
+  local cwd
+
+  cwd="$(readlink "${PROC_ROOT}/${pid}/cwd" 2> /dev/null || true)"
+  [[ -n "${cwd}" ]] || return 0
+
+  short_path "${cwd}"
+}
+
+process_name() {
+  local pid="$1"
+  local name
+
+  if [[ -r "${PROC_ROOT}/${pid}/comm" ]]; then
+    name="$(< "${PROC_ROOT}/${pid}/comm")"
+    printf '%s' "${name}"
+    return
+  fi
+
+  printf 'pid:%s' "${pid}"
+}
+
+process_argv() {
+  local pid="$1"
+
+  [[ -r "${PROC_ROOT}/${pid}/cmdline" ]] || return 0
+  while IFS= read -r -d '' arg; do
+    printf '%s\n' "${arg}"
+  done < "${PROC_ROOT}/${pid}/cmdline"
+}
+
+foreground_process_from_tty() {
+  local tty_name="$1"
+  local tty
+  local pid
+  local stat
+  local command
+  local first_pid=""
+  local first_command=""
+  local first_foreground_pid=""
+  local first_foreground_command=""
+
+  command -v ps > /dev/null 2>&1 || return 1
+  [[ -n "${tty_name}" ]] || return 1
+
+  tty="${tty_name#/dev/}"
+
+  while read -r pid stat command; do
+    [[ -n "${pid}" && -n "${command}" ]] || continue
+
+    if [[ -z "${first_pid}" ]]; then
+      first_pid="${pid}"
+      first_command="${command}"
+    fi
+
+    if [[ "${stat}" == *+* ]]; then
+      if llm_harness_name "${pid}" "${command}" > /dev/null; then
+        printf '%s\t%s' "${pid}" "${command}"
+        return
+      fi
+
+      if [[ -z "${first_foreground_pid}" ]]; then
+        first_foreground_pid="${pid}"
+        first_foreground_command="${command}"
+      fi
+    fi
+  done < <(ps -t "${tty}" -o pid= -o stat= -o comm= 2> /dev/null || true)
+
+  if [[ -n "${first_foreground_pid}" ]]; then
+    printf '%s\t%s' "${first_foreground_pid}" "${first_foreground_command}"
+    return
+  fi
+
+  [[ -n "${first_pid}" ]] || return 1
+  printf '%s\t%s' "${first_pid}" "${first_command}"
+}
+
+trim_text() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "${value}"
+}
+
+truncate_text() {
+  local value="$1"
+  local max_length="$2"
+
+  if ((${#value} <= max_length)); then
+    printf '%s' "${value}"
+    return
+  fi
+
+  printf '%s...' "${value:0:max_length-3}"
+}
+
+basename_without_store_hash() {
+  local value="$1"
+  local base="${value##*/}"
+
+  printf '%s' "${base}"
+}
+
+harness_name_from_token() {
+  local token="$1"
+  local base
+
+  base="$(basename_without_store_hash "${token}")"
+
+  case "${base}" in
+    codex | codex-cli | @openai/codex)
+      printf 'Codex'
+      ;;
+    claude | claude-code)
+      printf 'Claude'
+      ;;
+    opencode | opencode-ai)
+      printf 'OpenCode'
+      ;;
+    gemini | gemini-cli)
+      printf 'Gemini'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+harness_name_from_text() {
+  local text="${1,,}"
+
+  case "${text}" in
+    *codex*)
+      printf 'Codex'
+      ;;
+    *claude*)
+      printf 'Claude'
+      ;;
+    *opencode*)
+      printf 'OpenCode'
+      ;;
+    *gemini*)
+      printf 'Gemini'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+harness_name_from_pane_text() {
+  local text="${1,,}"
+
+  case "${text}" in
+    *openai\ codex*)
+      printf 'Codex'
+      ;;
+    *claude\ code*)
+      printf 'Claude'
+      ;;
+    *opencode*)
+      printf 'OpenCode'
+      ;;
+    *gemini\ cli* | *google\ gemini*)
+      printf 'Gemini'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+llm_harness_name() {
+  local pid="$1"
+  local command="$2"
+  local arg
+  local name
+
+  if name="$(harness_name_from_token "${command}")"; then
+    printf '%s' "${name}"
+    return
+  fi
+
+  while IFS= read -r arg; do
+    if name="$(harness_name_from_token "${arg}")"; then
+      printf '%s' "${name}"
+      return
+    fi
+  done < <(process_argv "${pid}")
+
+  return 1
+}
+
+uri_path() {
+  local value="$1"
+  local without_scheme
+  local without_host
+  local path
+
+  if [[ "${value}" == file://* ]]; then
+    without_scheme="${value#file://}"
+    without_host="/${without_scheme#*/}"
+    path="${without_host}"
+  else
+    path="${value}"
+  fi
+
+  if [[ "${path}" != "/" && "${path}" == */ ]]; then
+    path="${path%/}"
+  fi
+
+  printf '%s' "${path}"
+}
+
+child_pids() {
+  local pid="$1"
+
+  pgrep -P "${pid}" 2> /dev/null || true
+}
+
+descendant_processes() {
+  local pid="$1"
+  local depth=0
+  local current
+  local queue=("${pid}")
+  local next_queue=()
+  local children=()
+
+  while ((depth < MAX_PROCESS_DEPTH)); do
+    ((${#queue[@]} == 0)) && return
+
+    next_queue=()
+    for current in "${queue[@]}"; do
+      printf '%s\n' "${current}"
+
+      mapfile -t children < <(child_pids "${current}" | sort -n)
+      ((${#children[@]} == 0)) || next_queue+=("${children[@]}")
+    done
+
+    queue=("${next_queue[@]}")
+    ((depth += 1))
+  done
+}
+
+process_score() {
+  local pid="$1"
+  local command="$2"
+
+  if llm_harness_name "${pid}" "${command}" > /dev/null; then
+    printf '95'
+    return
+  fi
+
+  case "${command}" in
+    nvim | vim | vi | view | hx | helix | emacs | emacsclient)
+      printf '100'
+      ;;
+    less | man | ssh | lazygit | gitui | yazi | ranger | lf | btop | htop | top)
+      printf '80'
+      ;;
+    node | deno | bun | python | python3 | go | cargo | npm | pnpm | yarn)
+      printf '60'
+      ;;
+    bash | zsh | fish | sh | dash)
+      printf '20'
+      ;;
+    Alacritty | wezterm | wezterm-gui | kitty | foot | footclient | ghostty | xterm | XTerm | st)
+      printf '0'
+      ;;
+    gopls | rust-analyzer | nil | nixd | lua-language-server | pyright-langserver | basedpyright-langserver | typescript-language-server | vscode-json-language-server | yaml-language-server | marksman)
+      printf -- '-100'
+      ;;
+    *)
+      printf '50'
+      ;;
+  esac
+}
+
+preferred_process() {
+  local pid="$1"
+  local current
+  local command
+  local score
+  local best_pid="${pid}"
+  local best_score=-1000
+
+  while IFS= read -r current; do
+    command="$(process_name "${current}")"
+    score="$(process_score "${current}" "${command}")"
+
+    if ((score > best_score)); then
+      best_pid="${current}"
+      best_score="${score}"
+    fi
+  done < <(descendant_processes "${pid}")
+
+  printf '%s' "${best_pid}"
+}
+
+process_first_non_option_arg() {
+  local pid="$1"
+  local arg
+
+  while IFS= read -r arg; do
+    [[ -n "${arg}" ]] || continue
+    [[ "${arg}" == -* || "${arg}" == +* ]] && continue
+
+    short_path "${arg}"
+    return
+  done < <(process_argv "${pid}" | tail -n +2)
+}
+
+nvim_option_takes_arg() {
+  local option="$1"
+
+  case "${option}" in
+    -c | -S | -u | -i | --cmd | --listen | --server | --startuptime | --log)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+plausible_file_arg() {
+  local arg="$1"
+  local cwd="$2"
+
+  [[ -n "${arg}" ]] || return 1
+  [[ "${arg}" == -* || "${arg}" == +* ]] && return 1
+  [[ "${arg}" == *' '* || "${arg}" == *';'* ]] && return 1
+
+  if [[ "${arg}" = /* ]]; then
+    [[ -e "${arg}" || "${arg}" == */* || "${arg}" == *.* ]]
+    return
+  fi
+
+  if [[ -n "${cwd}" && -e "${cwd}/${arg}" ]]; then
+    return 0
+  fi
+
+  [[ "${arg}" == */* || "${arg}" == *.* ]]
+}
+
+nvim_display_target() {
+  local pid="$1"
+  local arg
+  local cwd
+  local skip_next=0
+
+  cwd="$(readlink "${PROC_ROOT}/${pid}/cwd" 2> /dev/null || true)"
+
+  while IFS= read -r arg; do
+    if ((skip_next)); then
+      skip_next=0
+      continue
+    fi
+
+    if nvim_option_takes_arg "${arg}"; then
+      skip_next=1
+      continue
+    fi
+
+    [[ "${arg}" == --*=* ]] && continue
+
+    if plausible_file_arg "${arg}" "${cwd}"; then
+      short_path "${arg}"
+      return
+    fi
+  done < <(process_argv "${pid}" | tail -n +2)
+}
+
+process_display_target() {
+  local pid="$1"
+  local command="$2"
+
+  case "${command}" in
+    nvim)
+      nvim_display_target "${pid}"
+      ;;
+    vim | vi | view | hx | helix | emacs | emacsclient)
+      process_first_non_option_arg "${pid}"
+      ;;
+    node | deno | bun | python | python3 | go | cargo | npm | pnpm | yarn)
+      process_first_non_option_arg "${pid}"
+      ;;
+    *)
+      ;;
+  esac
+}
+
+harness_display_context() {
+  local pid="$1"
+  local command="$2"
+  local harness
+  local cwd
+
+  harness="$(llm_harness_name "${pid}" "${command}")" || return 1
+  cwd="$(process_cwd "${pid}")"
+
+  if [[ -n "${cwd}" ]]; then
+    printf '%s  %s' "${harness}" "${cwd}"
+    return
+  fi
+
+  printf '%s' "${harness}"
+}
+
+display_with_context() {
+  local name="$1"
+  local context="$2"
+
+  if [[ -n "${context}" ]]; then
+    printf '%s  %s' "${name}" "${context}"
+    return
+  fi
+
+  printf '%s' "${name}"
+}
+
+codex_session_name_from_text() {
+  local text="$1"
+  local session
+
+  session="$(
+    printf '%s\n' "${text}" \
+      | awk '
+        /^[[:space:]]*›[[:space:]]+/ {
+          line = $0
+          sub(/^[[:space:]]*›[[:space:]]+/, "", line)
+          sub(/[[:space:]]+$/, "", line)
+          if (line != "") {
+            session = line
+          }
+        }
+
+        END {
+          if (session != "") {
+            print session
+          } else {
+            exit 1
+          }
+        }
+      '
+  )" || return 1
+
+  truncate_text "$(trim_text "${session}")" 72
+}
+
+codex_display_with_session() {
+  local text="$1"
+  local cwd="$2"
+  local session
+  local context
+
+  if session="$(codex_session_name_from_text "${text}")"; then
+    context="${session}"
+    if [[ -n "${cwd}" ]]; then
+      context="${context}  ${cwd}"
+    fi
+
+    display_with_context Codex "${context}"
+    return
+  fi
+
+  display_with_context Codex "${cwd}"
+}
+
+codex_display_with_session_and_pane() {
+  local text="$1"
+  local cwd="$2"
+  local pane_id="$3"
+  local base
+
+  base="$(codex_display_with_session "${text}" "${cwd}")"
+  if [[ -n "${pane_id}" ]]; then
+    printf '%s  [pane:%s]' "${base}" "${pane_id}"
+    return
+  fi
+
+  printf '%s' "${base}"
+}
+
+wezterm_json() {
+  local class="$1"
+  local command_name="$2"
+  local output
+
+  command -v wezterm > /dev/null 2>&1 || return 1
+
+  if [[ -n "${class}" ]]; then
+    if output="$(wezterm cli --class "${class}" "${command_name}" --format json 2> /dev/null)" && [[ -n "${output}" ]]; then
+      printf '%s\n' "${output}"
+      return
+    fi
+  fi
+
+  if output="$(wezterm cli "${command_name}" --format json 2> /dev/null)" && [[ -n "${output}" ]]; then
+    printf '%s\n' "${output}"
+    return
+  fi
+
+  return 1
+}
+
+load_wezterm_state() {
+  local class="$1"
+
+  if [[ "${wezterm_state_class}" == "${class}" && -n "${wezterm_clients_json}" && -n "${wezterm_panes_json}" ]]; then
+    return 0
+  fi
+
+  wezterm_clients_json=""
+  wezterm_panes_json=""
+  wezterm_state_class="${class}"
+
+  wezterm_clients_json="$(wezterm_json "${class}" list-clients)" || return 1
+  wezterm_panes_json="$(wezterm_json "${class}" list)" || return 1
+}
+
+normalized_wezterm_title() {
+  local title="$1"
+
+  title="${title#Copy mode: }"
+  printf '%s' "${title}"
+}
+
+select_title_candidate_pane_id() {
+  local selection_index="$1"
+  shift
+  local candidates=("$@")
+  local count
+  local selected_index
+
+  count="${#candidates[@]}"
+  ((count > 0)) || return 1
+  selected_index=$((selection_index % count))
+  printf '%s' "${candidates[${selected_index}]}"
+}
+
+wezterm_window_ordinal() {
+  local address="$1"
+  local class="$2"
+  local normalized_title="$3"
+  local ordinal
+
+  [[ -n "${hypr_clients_json_cached}" ]] || {
+    printf '0'
+    return
+  }
+
+  ordinal="$(
+    printf '%s\n' "${hypr_clients_json_cached}" \
+      | jq -r --arg address "${address}" --arg class "${class}" --arg title "${normalized_title}" '
+        def norm_title:
+          (. // "") | sub("^Copy mode: "; "");
+
+        [
+          .[]
+          | select((.class // "") == $class)
+          | {
+              address: .address,
+              title: ((.title // "") | norm_title)
+            }
+        ] as $clients
+        | [
+            $clients[]
+            | select(.title == $title)
+            | .address
+          ] as $matching_addresses
+        | ($matching_addresses | index($address)) // 0
+      '
+  )"
+
+  [[ "${ordinal}" =~ ^[0-9]+$ ]] || ordinal=0
+  printf '%s' "${ordinal}"
+}
+
+wezterm_focused_pane_id() {
+  local client_pid="$1"
+
+  [[ "${client_pid}" =~ ^[0-9]+$ ]] || return 1
+
+  printf '%s\n' "${wezterm_clients_json}" \
+    | jq -r --argjson pid "${client_pid}" '
+      . as $clients
+      | (
+          [$clients[] | select(.pid == $pid) | .focused_pane_id]
+          + (
+            if ($clients | length) == 1 then
+              [$clients[0].focused_pane_id]
+            else
+              []
+            end
+          )
+        )
+      | map(select(. != null and . != ""))
+      | first // empty
+    '
+}
+
+wezterm_pane_tsv() {
+  local pane_id="$1"
+
+  [[ "${pane_id}" =~ ^[0-9]+$ ]] || return 1
+
+  printf '%s\n' "${wezterm_panes_json}" \
+    | jq -r --argjson pane_id "${pane_id}" '
+      map(select(.pane_id == $pane_id))
+      | first
+      | select(. != null)
+      | (
+          [
+            (.title // ""),
+            (.cwd // ""),
+            (.tty_name // "")
+          ]
+          | map(tostring)
+          | join("\u001f")
+        )
+    '
+}
+
+wezterm_pane_ids_for_title() {
+  local title="$1"
+
+  printf '%s\n' "${wezterm_panes_json}" \
+    | jq -r --arg title "${title}" '
+      def simplified_title:
+        if contains(" ") then
+          split(" ")[-1]
+        else
+          .
+        end;
+
+      . as $panes
+      | (
+          if $title == "" then
+            [
+              $panes[]
+              | select((.window_title // "") == "" and (.title // "") == "")
+              | .pane_id
+            ]
+          else
+            [
+              $panes[]
+              | select((.window_title // "") == $title or (.title // "") == $title)
+              | .pane_id
+            ]
+          end
+        ) as $exact
+      | if ($exact | length) > 0 then
+          $exact[]
+        elif ($title | contains(" ")) then
+          [
+            $panes[]
+            | select(
+                (
+                  ((.window_title // "") | contains(" "))
+                  and ((.window_title // "") | simplified_title) == ($title | simplified_title)
+                )
+                or (
+                  ((.title // "") | contains(" "))
+                  and ((.title // "") | simplified_title) == ($title | simplified_title)
+                )
+              )
+            | .pane_id
+          ][]
+        else
+          [
+            $panes[]
+            | select(
+                ((.window_title // "") | simplified_title) == ($title | simplified_title)
+                or ((.title // "") | simplified_title) == ($title | simplified_title)
+              )
+            | .pane_id
+          ][]
+        end
+    '
+}
+
+wezterm_get_text() {
+  local class="$1"
+  local pane_id="$2"
+  local output
+
+  command -v wezterm > /dev/null 2>&1 || return 1
+
+  if [[ -n "${class}" ]]; then
+    if output="$(wezterm cli --class "${class}" get-text --pane-id "${pane_id}" 2> /dev/null)"; then
+      printf '%s\n' "${output}"
+      return
+    fi
+  fi
+
+  if output="$(wezterm cli get-text --pane-id "${pane_id}" 2> /dev/null)"; then
+    printf '%s\n' "${output}"
+    return
+  fi
+
+  return 1
+}
+
+wezterm_context_from_pane() {
+  local class="$1"
+  local pane_id="$2"
+  local allow_title_fallback="$3"
+  local pane_tsv
+  local title
+  local cwd
+  local tty_name
+  local cwd_path
+  local harness
+  local foreground_process
+  local foreground_pid
+  local foreground_command
+  local pane_text=""
+
+  pane_tsv="$(wezterm_pane_tsv "${pane_id}")"
+  [[ -n "${pane_tsv}" ]] || return 1
+
+  IFS=$'\x1f' read -r title cwd tty_name <<< "${pane_tsv}"
+  cwd_path="$(short_path "$(uri_path "${cwd}")")"
+
+  if harness="$(harness_name_from_text "${title}")"; then
+    if [[ "${harness}" == "Codex" ]]; then
+      codex_display_with_session_and_pane "${title}" "${cwd_path}" "${pane_id}"
+      return
+    fi
+
+    display_with_context "${harness}" "${cwd_path}"
+    return
+  fi
+
+  if foreground_process="$(foreground_process_from_tty "${tty_name}")"; then
+    IFS=$'\t' read -r foreground_pid foreground_command <<< "${foreground_process}"
+
+    if harness="$(llm_harness_name "${foreground_pid}" "${foreground_command}")"; then
+      if [[ "${harness}" == "Codex" ]]; then
+        if [[ -z "${pane_text}" ]]; then
+          pane_text="$(wezterm_get_text "${class}" "${pane_id}" 2> /dev/null || true)"
+        fi
+        codex_display_with_session_and_pane "${pane_text}" "${cwd_path}" "${pane_id}"
+        return
+      fi
+
+      display_with_context "${harness}" "${cwd_path}"
+      return
+    fi
+
+    display_with_context "${foreground_command}" "${cwd_path}"
+    return
+  fi
+
+  if pane_text="$(wezterm_get_text "${class}" "${pane_id}")"; then
+    if harness="$(harness_name_from_pane_text "${pane_text}")"; then
+      if [[ "${harness}" == "Codex" ]]; then
+        codex_display_with_session_and_pane "${pane_text}" "${cwd_path}" "${pane_id}"
+        return
+      fi
+
+      display_with_context "${harness}" "${cwd_path}"
+      return
+    fi
+  fi
+
+  if [[ "${allow_title_fallback}" == "1" && -n "${title}" ]]; then
+    printf '%s' "${title}"
+    return
+  fi
+
+  return 1
+}
+
+wezterm_harness_context_by_cwd() {
+  local class="$1"
+  local match_cwd="$2"
+  local pane_id
+
+  [[ -n "${match_cwd}" ]] || return 1
+
+  while IFS= read -r pane_id; do
+    if wezterm_context_from_pane "${class}" "${pane_id}" 0; then
+      return
+    fi
+  done < <(
+    printf '%s\n' "${wezterm_panes_json}" \
+      | jq -r --arg cwd "${match_cwd}" '
+        .[]
+        | select(
+            (.cwd // "")
+            | sub("^file://[^/]*"; "")
+            | if . != "/" then sub("/+$"; "") else . end
+            | . == $cwd
+          )
+        | .pane_id
+      '
+  )
+
+  return 1
+}
+
+wezterm_unique_harness_context() {
+  local class="$1"
+  local pane_id
+  local context
+  local matches=()
+
+  while IFS= read -r pane_id; do
+    if context="$(wezterm_context_from_pane "${class}" "${pane_id}" 0)"; then
+      matches+=("${context}")
+    fi
+  done < <(
+    printf '%s\n' "${wezterm_panes_json}" \
+      | jq -r '.[].pane_id'
+  )
+
+  ((${#matches[@]} == 1)) || return 1
+  printf '%s' "${matches[0]}"
+}
+
+wezterm_pane_context() {
+  local client_pid="$1"
+  local class="$2"
+  local client_title="$3"
+  local address="$4"
+  local pane_id
+  local normalized_title
+  local title_pane_ids=()
+  local client_cwd
+  local selection_index=0
+
+  load_wezterm_state "${class}" || return 1
+
+  normalized_title="$(normalized_wezterm_title "${client_title}")"
+  mapfile -t title_pane_ids < <(wezterm_pane_ids_for_title "${normalized_title}")
+  if ((${#title_pane_ids[@]} > 0)); then
+    selection_index="$(wezterm_window_ordinal "${address}" "${class}" "${normalized_title}")"
+    pane_id="$(select_title_candidate_pane_id "${selection_index}" "${title_pane_ids[@]}")" || return 1
+    if wezterm_context_from_pane "${class}" "${pane_id}" 0; then
+      return
+    fi
+
+    if wezterm_context_from_pane "${class}" "${pane_id}" 1; then
+      return
+    fi
+  fi
+
+  client_cwd="$(readlink "${PROC_ROOT}/${client_pid}/cwd" 2> /dev/null || true)"
+
+  if wezterm_harness_context_by_cwd "${class}" "${client_cwd}"; then
+    return
+  fi
+
+  return 1
+}
+
+terminal_context() {
+  local pid="$1"
+  local class="${2:-}"
+  local title="${3:-}"
+  local address="${4:-}"
+  local preferred_pid
+  local command
+  local harness_context
+  local wezterm_context
+  local target
+  local cwd
+
+  if [[ "${class}" == "WezTerm" || "${class}" == "wezterm" || "${class}" == "org.wezfurlong.wezterm" ]]; then
+    if wezterm_context="$(wezterm_pane_context "${pid}" "${class}" "${title}" "${address}")"; then
+      printf '%s' "${wezterm_context}"
+      return
+    fi
+
+    if [[ -n "${title}" ]]; then
+      printf '%s' "${title}"
+      return
+    fi
+
+    printf '%s' "$(terminal_name "${class}")"
+    return
+  fi
+
+  preferred_pid="$(preferred_process "${pid}")"
+  command="$(process_name "${preferred_pid}")"
+
+  if harness_context="$(harness_display_context "${preferred_pid}" "${command}")"; then
+    printf '%s' "${harness_context}"
+    return
+  fi
+
+  target="$(process_display_target "${preferred_pid}" "${command}")"
+
+  if [[ -n "${target}" ]]; then
+    printf '%s  %s' "${command}" "${target}"
+    return
+  fi
+
+  cwd="$(process_cwd "${preferred_pid}")"
+
+  if [[ -n "${cwd}" ]]; then
+    printf '%s  %s' "${command}" "${cwd}"
+    return
+  fi
+
+  printf '%s' "${command}"
+}
+
+terminal_context_is_strong() {
+  local context="$1"
+
+  case "${context}" in
+    Codex* | Claude* | Gemini* | OpenCode*)
+      return 0
+      ;;
+    nvim\ \ * | vim\ \ * | vi\ \ * | hx\ \ * | helix\ \ * | emacs\ \ * | emacsclient\ \ *)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+terminal_context_is_shell() {
+  local context="$1"
+
+  case "${context}" in
+    bash | bash\ \ * | zsh | zsh\ \ * | fish | fish\ \ * | sh | sh\ \ * | dash | dash\ \ *)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+window_label() {
+  local class="$1"
+  local title="$2"
+  local pid="$3"
+  local address="$4"
+  local context
+
+  if is_terminal_class "${class}"; then
+    context="$(terminal_context "${pid}" "${class}" "${title}" "${address}")"
+    if is_generic_terminal_window "${class}" "${title}" || terminal_context_is_strong "${context}" || terminal_context_is_shell "${context}"; then
+      printf '%s' "${context}"
+      return
+    fi
+  fi
+
+  printf '%s' "${title:-${class}}"
+}
+
+is_generic_terminal_window() {
+  local class="$1"
+  local title="$2"
+  local name
+
+  is_terminal_class "${class}" || return 1
+
+  name="$(terminal_name "${class}")"
+  [[ -z "${title}" || "${title}" == "${class}" || "${title}" == "${name}" || "${title}" == "${name,,}" ]]
+}
+
+is_terminal_class() {
+  local class="$1"
+
+  case "${class}" in
+    Alacritty | WezTerm | wezterm | org.wezfurlong.wezterm | Kitty | kitty | foot | footclient | Ghostty | ghostty | com.mitchellh.ghostty | xterm | XTerm | st | st-256color)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+terminal_name() {
+  local class="$1"
+
+  case "${class}" in
+    Alacritty)
+      printf 'Alacritty'
+      ;;
+    WezTerm | wezterm | org.wezfurlong.wezterm)
+      printf 'WezTerm'
+      ;;
+    Kitty | kitty)
+      printf 'Kitty'
+      ;;
+    foot | footclient)
+      printf 'Foot'
+      ;;
+    Ghostty | ghostty | com.mitchellh.ghostty)
+      printf 'Ghostty'
+      ;;
+    xterm | XTerm)
+      printf 'xterm'
+      ;;
+    st | st-256color)
+      printf 'st'
+      ;;
+    *)
+      printf '%s' "${class}"
+      ;;
+  esac
+}
+
+app_name() {
+  local class="$1"
+
+  case "${class}" in
+    Vivaldi | vivaldi | Vivaldi-stable | vivaldi-stable)
+      printf 'Vivaldi'
+      ;;
+    *)
+      if is_terminal_class "${class}"; then
+        terminal_name "${class}"
+        return
+      fi
+
+      printf '%s' "${class}"
+      ;;
+  esac
+}
+
+app_icon() {
+  local class="$1"
+
+  case "${class}" in
+    Alacritty)
+      printf 'alacritty'
+      ;;
+    Vivaldi | vivaldi | Vivaldi-stable | vivaldi-stable)
+      printf 'vivaldi'
+      ;;
+    WezTerm | wezterm | org.wezfurlong.wezterm)
+      printf 'org.wezfurlong.wezterm'
+      ;;
+    Kitty | kitty)
+      printf 'kitty'
+      ;;
+    foot | footclient)
+      printf 'foot'
+      ;;
+    Ghostty | ghostty | com.mitchellh.ghostty)
+      printf 'com.mitchellh.ghostty'
+      ;;
+    xterm | XTerm)
+      printf 'xterm'
+      ;;
+    st | st-256color)
+      printf 'utilities-terminal'
+      ;;
+    *)
+      printf '%s' "${class,,}"
+      ;;
+  esac
+}
+
+workspace_display() {
+  local workspace="$1"
+
+  printf '[%s]' "${workspace}"
+}
+
+hyprland_clients_json() {
+  local clients_json
+
+  if ! clients_json="$(hyprctl clients -j 2>&1)"; then
+    fatal "hyprctl clients -j failed: ${clients_json}"
+  fi
+
+  [[ -n "${clients_json}" ]] || fatal "hyprctl clients -j returned empty output"
+  printf '%s\n' "${clients_json}"
+}
+
+client_rows_tsv() {
+  local clients_json="$1"
+
+  if ! printf '%s\n' "${clients_json}" \
+    | jq -r '
+      sort_by(.workspace.id, .class, .title)
+      | to_entries[]
+      | (
+          [
+            .key,
+            .value.address,
+            (.value.workspace.name // (.value.workspace.id | tostring)),
+            (.value.class // "unknown"),
+            (.value.title // ""),
+            (.value.pid | tostring)
+          ]
+          | map(tostring)
+          | join("\u001f")
+        )
+    '; then
+    fatal "Failed to parse hyprctl clients JSON"
+  fi
+}
+
+display_widths() {
+  local clients_tsv="$1"
+  local index
+  local address
+  local workspace
+  local class
+  local title
+  local pid
+  local app
+  local workspace_text
+  local workspace_width=0
+  local app_width=0
+
+  while IFS=$'\x1f' read -r index address workspace class title pid; do
+    workspace_text="$(workspace_display "${workspace}")"
+    app="$(app_name "${class}")"
+
+    ((${#workspace_text} > workspace_width)) && workspace_width="${#workspace_text}"
+    ((${#app} > app_width)) && app_width="${#app}"
+  done <<< "${clients_tsv}"
+
+  printf '%s\t%s' "${workspace_width}" "${app_width}"
+}
+
+write_window_row() {
+  local output_dir="$1"
+  local index="$2"
+  local address="$3"
+  local workspace="$4"
+  local class="$5"
+  local title="$6"
+  local pid="$7"
+  local workspace_width="$8"
+  local app_width="$9"
+  local label
+  local icon
+  local app
+  local display
+  local meta
+  local row_file
+  local workspace_text
+
+  label="$(window_label "${class}" "${title}" "${pid}" "${address}")"
+  app="$(app_name "${class}")"
+  icon="$(app_icon "${class}")"
+  workspace_text="$(workspace_display "${workspace}")"
+  printf -v display '%-*s  %-*s  %s' "${workspace_width}" "${workspace_text}" "${app_width}" "${app}" "${label}"
+  meta="${class} ${title} ${label} ${app}"
+  printf -v row_file '%s/%06d.row' "${output_dir}" "${index}"
+
+  printf '%s\t\0display\x1f%s\x1ficon\x1f%s\x1fmeta\x1f%s\n' "${address}" "${display}" "${icon}" "${meta}" > "${row_file}"
+}
+
+write_window_rows() {
+  local output_file="$1"
+  local output_dir="$2"
+  local clients_json
+  local clients_tsv
+  local index
+  local address
+  local workspace
+  local class
+  local title
+  local pid
+  local widths
+  local workspace_width
+  local app_width
+  local row_files=()
+
+  clients_json="$(hyprland_clients_json)"
+  hypr_clients_json_cached="${clients_json}"
+  clients_tsv="$(client_rows_tsv "${clients_json}")"
+  [[ -n "${clients_tsv}" ]] || return 0
+
+  widths="$(display_widths "${clients_tsv}")"
+  IFS=$'\t' read -r workspace_width app_width <<< "${widths}"
+
+  while IFS=$'\x1f' read -r index address workspace class title pid; do
+    write_window_row "${output_dir}" "${index}" "${address}" "${workspace}" "${class}" "${title}" "${pid}" "${workspace_width}" "${app_width}"
+  done <<< "${clients_tsv}"
+
+  shopt -s nullglob
+  row_files=("${output_dir}"/*.row)
+  shopt -u nullglob
+
+  ((${#row_files[@]} > 0)) || return 0
+  cat "${row_files[@]}" > "${output_file}"
+}
+
+dump_window_rows() {
+  local clients_json
+  local clients_tsv
+  local index
+  local address
+  local workspace
+  local class
+  local title
+  local pid
+  local widths
+  local workspace_width
+  local app_width
+  local label
+  local app
+  local display
+  local workspace_text
+
+  clients_json="$(hyprland_clients_json)"
+  hypr_clients_json_cached="${clients_json}"
+  clients_tsv="$(client_rows_tsv "${clients_json}")"
+  [[ -n "${clients_tsv}" ]] || return 0
+
+  widths="$(display_widths "${clients_tsv}")"
+  IFS=$'\t' read -r workspace_width app_width <<< "${widths}"
+
+  while IFS=$'\x1f' read -r index address workspace class title pid; do
+    label="$(window_label "${class}" "${title}" "${pid}" "${address}")"
+    app="$(app_name "${class}")"
+    workspace_text="$(workspace_display "${workspace}")"
+    printf -v display '%-*s  %-*s  %s' "${workspace_width}" "${workspace_text}" "${app_width}" "${app}" "${label}"
+    printf '%s\t%s\n' "${address}" "${display}"
+  done <<< "${clients_tsv}"
+}
+
+focus_window() {
+  local address="$1"
+
+  hyprctl dispatch focuswindow "address:${address}"
+}
+
+select_window() {
+  local rows_file="$1"
+
+  rofi \
+    -dmenu \
+    -i \
+    -no-custom \
+    -show-icons \
+    -p "${DEFAULT_ROFI_PROMPT}" \
+    -input "${rows_file}"
+}
+
+main() {
+  local dump_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      --dump)
+        dump_mode=1
+        shift
+        ;;
+      -*)
+        fatal "Unknown option: $1" 2
+        ;;
+      *)
+        fatal "Unexpected argument: $1" 2
+        ;;
+    esac
+  done
+
+  require_command hyprctl
+  require_command jq
+  require_command mktemp
+  require_command pgrep
+
+  if ((dump_mode)); then
+    dump_window_rows
+    exit 0
+  fi
+
+  require_command rofi
+
+  rows_file="$(temp_file)"
+  row_dir="$(temp_dir)"
+  trap cleanup EXIT
+
+  write_window_rows "${rows_file}" "${row_dir}"
+  [[ -s "${rows_file}" ]] || exit 0
+
+  local selection
+  if ! selection="$(select_window "${rows_file}")"; then
+    exit 0
+  fi
+
+  [[ -n "${selection}" ]] || exit 0
+
+  local address="${selection%%$'\t'*}"
+  [[ -n "${address}" ]] || fatal "Could not parse selected window address"
+
+  focus_window "${address}"
+}
+
+main "$@"

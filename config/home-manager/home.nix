@@ -42,9 +42,9 @@ in {
     hyprdynamicmonitorsPkg
     googleworkspaceCliPkg
     anki
+    alacritty
     awscli2
     apg
-    alacritty
     alejandra
     ansible
     bat
@@ -224,6 +224,7 @@ in {
       done
       run mkdir -p ${config.xdg.stateHome}/skills
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
+      ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/wezterm/wezterm.lua ${config.xdg.configHome}/wezterm/wezterm.lua
     '';
     syncCodexConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
       run mkdir -p ${homeDir}/.codex
@@ -255,9 +256,10 @@ in {
   };
 
   xdg.configFile = {
-    # "git/config".source = ../git/config;
+    "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
     "rofi".source = ../rofi;
+    # "wezterm".source = ../wezterm;
     "alacritty".source = ../alacritty;
     "ideavim".source = ../ideavim;
     "direnv/direnvrc".source = ../direnv/direnvrc;

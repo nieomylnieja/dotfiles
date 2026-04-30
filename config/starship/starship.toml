@@ -42,6 +42,7 @@ style = '#ebcb8b'
 [kubernetes]
 format = '[$namespace $symbol](blue)[$context](#8fbcbb) '
 disabled = false
+symbol = "󱃾 "
 
 [status]
 disabled = false
@@ -60,7 +61,7 @@ disabled = true
 [aws]
 format = '[|](#4c566a) [$symbol($profile )]($style)'
 style = "bold blue"
-symbol = "☁️ "
+symbol = "󰅟 "
 
 # Nobl9 specific
 [custom.sloctl]

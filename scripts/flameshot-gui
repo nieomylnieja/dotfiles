@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if pgrep -x rofi > /dev/null; then
+  pkill -x rofi
+  sleep 0.15
+fi
+
+exec env XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland flameshot gui "$@"
