@@ -7,6 +7,25 @@ local config = wezterm.config_builder()
 
 config.automatically_reload_config = true
 
+local nord = {
+  nord0 = '#2E3440',
+  nord1 = '#3B4252',
+  nord2 = '#434C5E',
+  nord3 = '#4C566A',
+  nord4 = '#D8DEE9',
+  nord5 = '#E5E9F0',
+  nord6 = '#ECEFF4',
+  nord7 = '#8FBCBB',
+  nord8 = '#88C0D0',
+  nord9 = '#81A1C1',
+  nord10 = '#5E81AC',
+  nord11 = '#BF616A',
+  nord12 = '#D08770',
+  nord13 = '#EBCB8B',
+  nord14 = '#A3BE8C',
+  nord15 = '#B48EAD',
+}
+
 config.font = wezterm.font {
   family = 'mononoki Nerd Font',
   weight = 'Regular',
@@ -15,30 +34,54 @@ config.font_size = 12
 config.line_height = 1.2
 
 config.colors = {
-  foreground = '#D8DEE9',
-  background = '#2E3440',
-  cursor_bg = '#D8DEE9',
-  cursor_fg = '#2E3440',
-  cursor_border = '#D8DEE9',
+  foreground = nord.nord4,
+  background = nord.nord0,
+  cursor_bg = nord.nord4,
+  cursor_fg = nord.nord0,
+  cursor_border = nord.nord4,
   ansi = {
-    '#3B4252',
-    '#BF616A',
-    '#A3BE8C',
-    '#EBCB8B',
-    '#81A1C1',
-    '#B48EAD',
-    '#88C0D0',
-    '#E5E9F0',
+    nord.nord1,
+    nord.nord11,
+    nord.nord14,
+    nord.nord13,
+    nord.nord9,
+    nord.nord15,
+    nord.nord8,
+    nord.nord5,
   },
   brights = {
-    '#4C566A',
-    '#BF616A',
-    '#A3BE8C',
-    '#EBCB8B',
-    '#81A1C1',
-    '#B48EAD',
-    '#8FBCBB',
-    '#ECEFF4',
+    nord.nord3,
+    nord.nord11,
+    nord.nord14,
+    nord.nord13,
+    nord.nord9,
+    nord.nord15,
+    nord.nord7,
+    nord.nord6,
+  },
+  tab_bar = {
+    background = nord.nord0,
+    active_tab = {
+      bg_color = nord.nord3,
+      fg_color = nord.nord6,
+    },
+    inactive_tab = {
+      bg_color = nord.nord1,
+      fg_color = nord.nord4,
+    },
+    inactive_tab_hover = {
+      bg_color = nord.nord2,
+      fg_color = nord.nord6,
+    },
+    new_tab = {
+      bg_color = nord.nord0,
+      fg_color = nord.nord4,
+    },
+    new_tab_hover = {
+      bg_color = nord.nord2,
+      fg_color = nord.nord6,
+    },
+    inactive_tab_edge = nord.nord0,
   },
 }
 
@@ -53,6 +96,19 @@ table.insert(config.hyperlink_rules, {
 
 config.window_decorations = 'TITLE | RESIZE'
 config.hide_tab_bar_if_only_one_tab = true
+config.use_fancy_tab_bar = false
+config.window_frame = {
+  active_titlebar_bg = nord.nord0,
+  inactive_titlebar_bg = nord.nord0,
+  active_titlebar_fg = nord.nord6,
+  inactive_titlebar_fg = nord.nord4,
+  active_titlebar_border_bottom = nord.nord0,
+  inactive_titlebar_border_bottom = nord.nord0,
+  button_bg = nord.nord0,
+  button_fg = nord.nord4,
+  button_hover_bg = nord.nord2,
+  button_hover_fg = nord.nord6,
+}
 config.window_padding = {
   left = 0,
   right = 0,
@@ -132,15 +188,37 @@ local function resolve_path(pane, path)
   return path
 end
 
+local function file_exists(path)
+  local file = io.open(path, 'r')
+  if file == nil then
+    return false
+  end
+
+  file:close()
+  return true
+end
+
 wezterm.on('open-uri', function(window, pane, uri)
   local path, line = uri:match '^https://wezterm%-file%-link/(.-):(%d+)$'
   if path == nil then
     return
   end
 
+  local resolved_path = resolve_path(pane, path)
+  if not file_exists(resolved_path) then
+    wezterm.log_warn('File link does not exist: ' .. resolved_path)
+    return false
+  end
+
+  local mods = window:keyboard_modifiers()
+  local spawn_action = act.SpawnCommandInNewTab
+  if mods:find 'CTRL' then
+    spawn_action = act.SpawnCommandInNewWindow
+  end
+
   window:perform_action(
-    act.SpawnCommandInNewWindow {
-      args = { 'nvim', '+' .. line, resolve_path(pane, path) },
+    spawn_action {
+      args = { 'nvim', '+' .. line, resolved_path },
     },
     pane
   )
