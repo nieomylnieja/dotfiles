@@ -1,7 +1,7 @@
 # If not running interactively, don't do anything
 case $- in
-*i*) ;;
-*) return ;;
+  *i*) ;;
+  *) return ;;
 esac
 
 # allow aliases
@@ -28,7 +28,19 @@ bind "set completion-ignore-case on"
 # those fancy rust speeders
 alias ls='eza --group-directories-first'
 alias du='dust'
-alias cat='bat'
+
+cat() {
+  if [[ -t 1 && $# -eq 1 && -f "$1" ]]; then
+    case "$(file --mime-type -b -- "$1")" in
+      image/*)
+        wezterm imgcat -- "$1"
+        return
+        ;;
+    esac
+  fi
+
+  bat "$@"
+}
 
 # Alias definitions.
 alias cd..='cd ..'
@@ -62,8 +74,6 @@ alias dstart='sudo systemctl start docker.socket && sudo systemctl start docker.
 alias cp="cp -i"
 alias mv='mv -i'
 alias rm='rm -I'
-
-alias opencode-dev='bun run --cwd ~/projects/opencode/packages/opencode --conditions=browser src/index.ts'
 
 # Functions
 source "${DOTFILES}/config/bash/functions"
@@ -148,7 +158,7 @@ eval "$(direnv hook bash)"
 
 # Completions for programs with "cmd completion bash" generators
 for cmd in kubefwd; do
-  command -v "${cmd}" &>/dev/null && eval "$(${cmd} completion bash)"
+  command -v "${cmd}" &> /dev/null && eval "$(${cmd} completion bash)"
 done
 
 # Custom completions
