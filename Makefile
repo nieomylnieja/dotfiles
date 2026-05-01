@@ -1,4 +1,4 @@
-update: update/flakes update/skills
+update: update/flakes update/skills update/agents
 
 update/flakes:
 	nix flake update --commit-lock-file
@@ -6,6 +6,11 @@ update/flakes:
 
 update/skills:
 	npx skills update
+
+update/agents:
+	./config/agents/scripts/sync-agents.sh
+	./config/agents/scripts/sync-permissions.sh
+	./config/codex/scripts/merge-config.sh
 
 rebuild:
 	sudo nixos-rebuild switch --flake .#work
