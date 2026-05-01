@@ -78,16 +78,14 @@ cmp.setup.cmdline("/", {
 -- `:` cmdline setup.
 cmp.setup.cmdline(":", {
   mapping = cmp.mapping.preset.cmdline(),
-  sources = cmp.config.sources({
-    { name = "path" },
-  }, {
+  sources = {
     {
       name = "cmdline",
       option = {
         ignore_cmds = { "Man", "!" },
       },
     },
-  }),
+  },
 })
 
 -- DAP, only works with daps supporting 'supportsCompletionsRequest'.
