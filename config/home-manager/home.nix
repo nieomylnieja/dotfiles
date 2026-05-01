@@ -1,11 +1,11 @@
-{
-  config,
-  pkgs,
-  lib,
-  hyprdynamicmonitorsPkg,
-  googleworkspaceCliPkg,
-  ...
-}: let
+{ config
+, pkgs
+, lib
+, hyprdynamicmonitorsPkg
+, googleworkspaceCliPkg
+, ...
+}:
+let
   homeDir = "/home/mh";
   dotfilesDir = "${homeDir}/.dotfiles";
   gdk = pkgs.stable.google-cloud-sdk.withExtraComponents (with pkgs.stable.google-cloud-sdk.components; [
@@ -28,7 +28,8 @@
     SKILLS_AGENTS = "opencode";
     OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
   };
-in {
+in
+{
   programs.home-manager.enable = true;
 
   home = {
@@ -43,6 +44,7 @@ in {
     googleworkspaceCliPkg
     anki
     alacritty
+    agent-browser
     awscli2
     apg
     alejandra
@@ -65,8 +67,8 @@ in {
     # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
     (pkgs.symlinkJoin {
       name = "discord";
-      paths = [pkgs.discord];
-      buildInputs = [pkgs.makeWrapper];
+      paths = [ pkgs.discord ];
+      buildInputs = [ pkgs.makeWrapper ];
       postBuild = ''
         wrapProgram $out/bin/discord \
           --set NIXOS_OZONE_WL ""
@@ -158,8 +160,8 @@ in {
     signal-desktop
     (pkgs.symlinkJoin {
       name = "slack";
-      paths = [pkgs.slack];
-      buildInputs = [pkgs.makeWrapper];
+      paths = [ pkgs.slack ];
+      buildInputs = [ pkgs.makeWrapper ];
       postBuild = ''
         wrapProgram $out/bin/slack \
           --add-flags "--remote-debugging-port=9222"
@@ -193,7 +195,7 @@ in {
 
   # Directories that need to be writable are symlinked instead of copied.
   home.activation = {
-    installGlobalNpmPackages = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    installGlobalNpmPackages = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run env PATH="${pkgs.nodejs}/bin:$PATH" ${pkgs.nodejs}/bin/npm install \
         --global --prefix ${homeDir}/.npm-global \
         --package-lock false \
@@ -201,7 +203,7 @@ in {
           ${dotfilesDir}/config/npm/global-packages.json)
     '';
 
-    createLinks = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    createLinks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run [ -d ${config.xdg.configHome}/nvim ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/nvim ${config.xdg.configHome}/nvim
       run [ -d ${config.xdg.configHome}/hypr ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/hypr ${config.xdg.configHome}/hypr
       run [ -d ${config.xdg.configHome}/waybar ] || ln -s $VERBOSE_ARG ${dotfilesDir}/config/waybar ${config.xdg.configHome}/waybar
@@ -226,7 +228,7 @@ in {
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/wezterm/wezterm.lua ${config.xdg.configHome}/wezterm/wezterm.lua
     '';
-    syncCodexConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p ${homeDir}/.codex
     '';
   };
@@ -247,8 +249,8 @@ in {
     icon = "slack";
     comment = "Slack Desktop";
     genericName = "Slack Client for Linux";
-    categories = ["Network" "InstantMessaging"];
-    mimeType = ["x-scheme-handler/slack"];
+    categories = [ "Network" "InstantMessaging" ];
+    mimeType = [ "x-scheme-handler/slack" ];
     startupNotify = true;
     settings = {
       StartupWMClass = "Slack";
@@ -272,27 +274,29 @@ in {
     # "gh-dash/config.yml".source = ../gh-dash/config.yml;
   };
 
-  xdg.mimeApps = let
-    imageTypes = ["png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff"];
-    imageAssociations = builtins.listToAttrs (map
-      (t: {
-        name = "image/${t}";
-        value = ["swayimg.desktop"];
-      })
-      imageTypes);
-  in {
-    enable = true;
-    defaultApplications =
-      {
-        "application/pdf" = ["org.pwmt.zathura.desktop"];
-        "text/html" = "vivaldi-stable.desktop";
-        "x-scheme-handler/http" = "vivaldi-stable.desktop";
-        "x-scheme-handler/https" = "vivaldi-stable.desktop";
-        "x-scheme-handler/about" = "vivaldi-stable.desktop";
-        "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
-      }
-      // imageAssociations;
-  };
+  xdg.mimeApps =
+    let
+      imageTypes = [ "png" "jpeg" "gif" "webp" "bmp" "svg+xml" "tiff" ];
+      imageAssociations = builtins.listToAttrs (map
+        (t: {
+          name = "image/${t}";
+          value = [ "swayimg.desktop" ];
+        })
+        imageTypes);
+    in
+    {
+      enable = true;
+      defaultApplications =
+        {
+          "application/pdf" = [ "org.pwmt.zathura.desktop" ];
+          "text/html" = "vivaldi-stable.desktop";
+          "x-scheme-handler/http" = "vivaldi-stable.desktop";
+          "x-scheme-handler/https" = "vivaldi-stable.desktop";
+          "x-scheme-handler/about" = "vivaldi-stable.desktop";
+          "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
+        }
+        // imageAssociations;
+    };
 
   # User session variables for login shells and systemd/UWSM-launched programs.
   # PATH is set in hyprland.conf instead.
@@ -353,7 +357,7 @@ in {
 
   programs.poetry = {
     enable = true;
-    package = pkgs.poetry.withPlugins (ps: with ps; [poetry-plugin-shell]);
+    package = pkgs.poetry.withPlugins (ps: with ps; [ poetry-plugin-shell ]);
     settings = {
       virtualenvs.create = true;
       virtualenvs.in-project = true;
@@ -363,7 +367,7 @@ in {
   # Can't be listed in packages list, as it will create two colliding binaries.
   programs.rofi = {
     enable = true;
-    plugins = with pkgs; [rofi-calc];
+    plugins = with pkgs; [ rofi-calc ];
     pass.enable = true;
   };
 
