@@ -68,12 +68,12 @@
 [delta]
 	syntax-theme = Nord
   whitespace-error-style = 22 reverse
-	plus-style = "#8FBCBB bold black"
-	plus-emph-style = "#254117 #8FBCBB"
-	plus-non-emph-style = "#8FBCBB"
-  minus-style = "#D08770 bold black"
-	minus-emph-style = "#D08770 #800517"
-	minus-non-emph-style = "#D08770"
+	plus-style = syntax "#0f2f2d"
+	plus-emph-style = syntax "#1f4d4a"
+	plus-non-emph-style = syntax "#0f2f2d"
+  minus-style = syntax "#351512"
+	minus-emph-style = syntax "#5f1f17"
+	minus-non-emph-style = syntax "#351512"
 
 	commit-decoration-style = bold yellow box ul
   file-style = omit

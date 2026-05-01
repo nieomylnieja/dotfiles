@@ -128,6 +128,72 @@ config.keys = {
 
 config.mouse_bindings = {
   {
+    event = { Down = { streak = 1, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.SelectTextAtMouseCursor 'Cell',
+  },
+  {
+    event = { Drag = { streak = 1, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.ExtendSelectionToMouseCursor 'Cell',
+  },
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.CompleteSelectionOrOpenLinkAtMouseCursor 'ClipboardAndPrimarySelection',
+  },
+  {
+    event = { Down = { streak = 2, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.SelectTextAtMouseCursor 'Word',
+  },
+  {
+    event = { Drag = { streak = 2, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.ExtendSelectionToMouseCursor 'Word',
+  },
+  {
+    event = { Up = { streak = 2, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.CompleteSelection 'ClipboardAndPrimarySelection',
+  },
+  {
+    event = { Down = { streak = 3, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.SelectTextAtMouseCursor 'Line',
+  },
+  {
+    event = { Drag = { streak = 3, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.ExtendSelectionToMouseCursor 'Line',
+  },
+  {
+    event = { Up = { streak = 3, button = 'Left' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.CompleteSelection 'ClipboardAndPrimarySelection',
+  },
+  {
+    event = { Down = { streak = 1, button = 'Middle' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.PasteFrom 'PrimarySelection',
+  },
+  {
+    event = { Down = { streak = 1, button = 'Right' } },
+    mods = 'NONE',
+    mouse_reporting = true,
+    action = act.PasteFrom 'Clipboard',
+  },
+  {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
     action = act.OpenLinkAtMouseCursor,

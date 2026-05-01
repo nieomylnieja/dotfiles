@@ -19,7 +19,7 @@ matcher = "*"
 type = "command"
 command = "$HOME/.dotfiles/config/codex/scripts/compact-tool-result.sh"
 timeout = 90
-statusMessage = "Compacting tool result with bare Codex"
+statusMessage = "Compacting large tool result"
 
 [agents]
 max_depth = 1

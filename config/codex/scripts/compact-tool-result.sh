@@ -4,10 +4,11 @@ set -euo pipefail
 
 readonly PROG="${0##*/}"
 readonly DEFAULT_THRESHOLD_CHARS=8000
-readonly DEFAULT_HEAD_LINES=32
-readonly DEFAULT_TAIL_LINES=16
-readonly DEFAULT_NOTABLE_LINES=48
-readonly DEFAULT_COMPACTION_MODE="agent"
+readonly DEFAULT_HEAD_LINES=8
+readonly DEFAULT_TAIL_LINES=4
+readonly DEFAULT_NOTABLE_LINES=12
+readonly DEFAULT_MAX_CONTEXT_CHARS=1800
+readonly DEFAULT_COMPACTION_MODE="deterministic"
 readonly DEFAULT_COMPACTOR_MODEL="gpt-5.4-mini"
 readonly DEFAULT_COMPACTOR_REASONING_EFFORT="low"
 readonly DEFAULT_AGENT_INPUT_MAX_CHARS=120000
@@ -19,13 +20,18 @@ Usage: ${PROG} [OPTION]...
 Emit compact model context for large Codex PostToolUse results.
 
 Reads a Codex PostToolUse hook JSON payload from stdin. When the tool response
-is larger than CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS, asks a bare Codex
-worker to compact it and emits the worker summary as model-visible hook context.
+is larger than CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS, emits bounded
+model-visible hook context. Agent mode can optionally ask a bare Codex worker
+to compact the result before applying the output cap.
 
 Environment:
   CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS  minimum extracted result size
                                              before compaction context is emitted
                                              (default: ${DEFAULT_THRESHOLD_CHARS})
+  CODEX_TOOL_RESULT_COMPACT_MAX_CONTEXT_CHARS
+                                             max model-visible hook context bytes
+                                             emitted by this script
+                                             (default: ${DEFAULT_MAX_CONTEXT_CHARS})
   CODEX_TOOL_RESULT_COMPACT_MODE             agent or deterministic
                                              (default: ${DEFAULT_COMPACTION_MODE})
   CODEX_TOOL_RESULT_COMPACTOR_MODEL          bare worker model
@@ -88,6 +94,26 @@ positive_integer_or_default() {
   fi
 
   printf '%s\n' "${default_value}"
+}
+
+truncate_text() {
+  local input_text="$1"
+  local max_chars="$2"
+  local marker
+  marker=$'\n[compact-tool-result: truncated hook context]'
+
+  if ((${#input_text} <= max_chars)); then
+    printf '%s\n' "${input_text}"
+    return 0
+  fi
+
+  if ((${#marker} >= max_chars)); then
+    printf '%s\n' "${input_text:0:max_chars}"
+    return 0
+  fi
+
+  local retained_chars="$((max_chars - ${#marker}))"
+  printf '%s\n' "${input_text:0:retained_chars}${marker}"
 }
 
 extract_tool_response_text() {
@@ -213,9 +239,13 @@ slice_boundary_lines() {
 
 emit_context_json() {
   local summary_text="$1"
+  local max_context_chars="$2"
+  local truncated_summary
+
+  truncated_summary="$(truncate_text "${summary_text}" "${max_context_chars}")"
 
   jq -n \
-    --arg summary_text "${summary_text}" \
+    --arg summary_text "${truncated_summary}" \
     '{
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
@@ -230,11 +260,12 @@ emit_deterministic_compaction_context() {
   local line_count="$3"
   local notable_file="$4"
   local boundary_file="$5"
+  local max_context_chars="$6"
   local notable_text
   local boundary_text
 
-  notable_text="$(sed -n '1,120p' "${notable_file}")"
-  boundary_text="$(sed -n '1,120p' "${boundary_file}")"
+  notable_text="$(sed -n '1,40p' "${notable_file}")"
+  boundary_text="$(sed -n '1,40p' "${boundary_file}")"
 
   local summary_text
   summary_text="$(jq -n -r \
@@ -253,7 +284,7 @@ emit_deterministic_compaction_context() {
       + $boundary_text
       + "\n</tool_result_compaction>"')"
 
-  emit_context_json "${summary_text}"
+  emit_context_json "${summary_text}" "${max_context_chars}"
 }
 
 run_agent_compaction() {
@@ -327,6 +358,10 @@ main() {
   threshold_chars="$(positive_integer_or_default \
     "${CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS:-}" \
     "${DEFAULT_THRESHOLD_CHARS}")"
+  local max_context_chars
+  max_context_chars="$(positive_integer_or_default \
+    "${CODEX_TOOL_RESULT_COMPACT_MAX_CONTEXT_CHARS:-}" \
+    "${DEFAULT_MAX_CONTEXT_CHARS}")"
   local agent_max_chars
   agent_max_chars="$(positive_integer_or_default \
     "${CODEX_TOOL_RESULT_COMPACT_AGENT_MAX_CHARS:-}" \
@@ -407,7 +442,7 @@ main() {
 The previous ${tool_name} result was compacted by a bare Codex worker.
 
 ${agent_summary}
-</tool_result_compaction>"
+</tool_result_compaction>" "${max_context_chars}"
         exit 0
       fi
     fi
@@ -420,7 +455,8 @@ ${agent_summary}
     "${char_count}" \
     "${line_count}" \
     "${notable_file}" \
-    "${boundary_file}"
+    "${boundary_file}" \
+    "${max_context_chars}"
 }
 
 main "$@"
