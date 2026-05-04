@@ -217,6 +217,8 @@ theme.loadTreeSitter = function()
     ["@exception"] = { fg = nord.purple },
     ["@funtion.macro"] = { fg = nord.teal },
     ["@include"] = { fg = nord.glacier },
+    ["@injection.background.awk"] = { bg = "#4A604D" },
+    ["@injection.background.jq"] = { bg = "#4A604D" },
     ["@label"] = { fg = nord.blue },
     ["@operator"] = { fg = nord.glacier },
     ["@parameter"] = { fg = nord.darkest_white },

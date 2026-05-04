@@ -67,6 +67,8 @@ I can make mistakes when interacting with you, that's why it's crucial.
 
 - Use [rg](https://github.com/BurntSushi/ripgrep) instead of grep
 - Use [fd](https://github.com/sharkdp/fd) instead of find
+- Use [kislyuk's yq](https://github.com/kislyuk/yq) over
+  [mikefarah's yq](https://github.com/mikefarah/yq)
 
 ## Skills
 

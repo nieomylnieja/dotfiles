@@ -302,6 +302,23 @@ in
   # PATH is set in hyprland.conf instead.
   systemd.user.sessionVariables = sessionVariables;
 
+  systemd.user.services.hyprdynamicmonitors-prepare = {
+    Unit = {
+      Description = "HyprDynamicMonitors boot-time monitor cleanup";
+      Before = [ "graphical-session-pre.target" ];
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${hyprdynamicmonitorsPkg}/bin/hyprdynamicmonitors prepare --config ${config.xdg.configHome}/hyprdynamicmonitors/config.toml";
+      TimeoutStartSec = 3;
+      RemainAfterExit = true;
+    };
+    Install.WantedBy = [
+      "default.target"
+      "graphical-session-pre.target"
+    ];
+  };
+
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
@@ -429,7 +446,8 @@ in
     enable = true;
   };
 
-  # Monitor management is launched by Hyprland so it also runs in plain sessions.
+  # The monitor-management daemon is launched by Hyprland so it also runs in plain sessions.
+  # The prepare service above only cleans stale disable entries before the session starts.
   # Symlink entire config dir so TUI finds themes and configs
   xdg.configFile."hyprdynamicmonitors".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/hyprdynamicmonitors";

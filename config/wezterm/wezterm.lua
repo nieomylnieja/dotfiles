@@ -90,7 +90,7 @@ config.alternate_buffer_wheel_scroll_speed = 6
 
 config.hyperlink_rules = wezterm.default_hyperlink_rules()
 table.insert(config.hyperlink_rules, {
-  regex = [[[/~A-Za-z0-9_.@%+=,-]+/[/~A-Za-z0-9_.@%+=,-]+:\d+]],
+  regex = [[[/~A-Za-z0-9_.@%+=,-]+/[/~A-Za-z0-9_.@%+=,-]+(?::\d+)?]],
   format = 'https://wezterm-file-link/$0',
 })
 
@@ -266,6 +266,11 @@ end
 
 wezterm.on('open-uri', function(window, pane, uri)
   local path, line = uri:match '^https://wezterm%-file%-link/(.-):(%d+)$'
+  if path == nil then
+    path = uri:match '^https://wezterm%-file%-link/(.+)$'
+    line = '1'
+  end
+
   if path == nil then
     return
   end

@@ -171,6 +171,39 @@
 
   # Enable sound with pipewire.
   security.rtkit.enable = true;
+  services.pipewire.extraLadspaPackages = [ pkgs.rnnoise-plugin ];
+  services.pipewire.extraConfig.pipewire."99-rnnoise-source" = {
+    "context.modules" = [
+      {
+        name = "libpipewire-module-filter-chain";
+        flags = [ "nofail" ];
+        args = {
+          "node.description" = "Noise Canceling Source";
+          "media.name" = "Noise Canceling Source";
+          "filter.graph" = {
+            nodes = [
+              {
+                type = "ladspa";
+                name = "rnnoise";
+                plugin = "librnnoise_ladspa";
+                label = "noise_suppressor_mono";
+                control."VAD Threshold (%)" = 50.0;
+              }
+            ];
+          };
+          "audio.position" = [ "MONO" ];
+          "capture.props" = {
+            "node.name" = "effect_input.rnnoise";
+            "node.passive" = true;
+          };
+          "playback.props" = {
+            "node.name" = "effect_output.rnnoise";
+            "media.class" = "Audio/Source";
+          };
+        };
+      }
+    ];
+  };
 
   # Bluetooth
   hardware.bluetooth.enable = true;
@@ -228,8 +261,6 @@
     clamav
     sddm-astronaut
   ];
-
-  programs.noisetorch.enable = true;
 
   # Anti-virus
   services.clamav.daemon.enable = true;

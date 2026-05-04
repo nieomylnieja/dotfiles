@@ -46,6 +46,8 @@ return {
         "vimdoc",
         "go",
         "bash",
+        "awk",
+        "jq",
         "regex",
         "markdown",
         "markdown_inline",

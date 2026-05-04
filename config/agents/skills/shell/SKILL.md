@@ -3,7 +3,8 @@ name: shell
 description: >
   Use this skill when you're working with shell scripts (bash, sh).
   Covers script structure, formatting (shfmt), linting (shellcheck),
-  argument parsing, help messages, error handling, and security.
+  argument parsing, help messages, embedded awk/jq/yq transformations,
+  error handling, and security.
 allowed-tools: Bash(shellcheck *) Bash(shfmt *)
 ---
 
@@ -331,6 +332,72 @@ symlink attack risk.
   never `let`, `expr`, or `$[ ]`
 - **Use `$(command)`** not backticks
 - **Use `command -v`** not `which`
+
+## Multiline Strings and Embedded Tool Programs
+
+Prefer heredocs for multiline strings.
+This is especially important for embedded programs passed to tools like
+`awk`, `jq` and `yq`.
+Treat those transformations as source code:
+format them over multiple lines,
+indent them for readability,
+and pass them inline at the command invocation.
+
+Use an unquoted heredoc delimiter by default:
+
+```bash
+jq "$(cat <<JQ
+.items
+| map(select(.enabled == true))
+| sort_by(.name)
+| .[]
+| {
+    name,
+    id,
+    tags: (.tags // [])
+  }
+JQ
+)" "${input_file}"
+```
+
+For `awk`, keep shell values outside the program
+and pass them with `-v`.
+Quote the heredoc delimiter when the embedded program contains
+native `$` syntax:
+
+```bash
+awk -v wanted_status="${status}" "$(cat <<'AWK'
+BEGIN {
+  FS = OFS = ","
+}
+
+NR == 1 {
+  print "name", "status"
+  next
+}
+
+$3 == wanted_status {
+  print $1, $3
+}
+AWK
+)" "${input_file}"
+```
+
+Rules:
+
+- Prefer heredocs over dense one-line quoted programs
+  once the transformation has branching, multiple pipes,
+  nested objects, or more than one logical step.
+- Prefer using the heredoc inline at the tool invocation
+  instead of assigning the expression to a temporary variable.
+- Use unquoted delimiters like `<<JQ` and `<<YQ` by default.
+- Use quoted delimiters like `<<'AWK'` only when the embedded program contains
+  native `$` syntax that the shell must not expand.
+- Use tool-native parameter passing
+  (`jq --arg`, `jq --argjson`, `awk -v`, `yq` variables)
+  instead of interpolating shell variables into the heredoc.
+- Keep the delimiter name specific to the embedded language.
+- Do not use `eval` to run generated shell.
 
 ## Arrays
 
