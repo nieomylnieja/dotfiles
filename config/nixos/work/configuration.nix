@@ -29,11 +29,13 @@
   boot.loader.systemd-boot.graceful = true;
   boot.loader.efi.canTouchEfiVariables = false;
 
-  # Intel GPU optimizations for gaming
+  # Intel GPU display driver selection.
   boot.kernelParams = [
-    "i915.enable_guc=2" # Enable GuC/HuC firmware loading
-    "i915.enable_fbc=1" # Enable framebuffer compression
-    "i915.fastboot=1" # Fastboot support
+    # Linux 6.18 loads xe for this Raptor Lake-P GPU, but requires an explicit
+    # force_probe for PCI ID a7a0. Without it the system falls back to simpledrm,
+    # leaving the laptop panel without a usable backlight device.
+    "xe.force_probe=a7a0"
+    "i915.force_probe=!a7a0"
   ];
 
   # Allow debuggers (like GoLand) to attach to running processes.
@@ -271,6 +273,12 @@
 
   # Yubikey support.
   services.udev.packages = [ pkgs.yubikey-personalization pkgs.bazecor ];
+  services.udev.extraRules = ''
+    # Allow MakeCode/WebUSB to access BBC micro:bit CMSIS-DAP.
+    SUBSYSTEM=="usb", ATTR{idVendor}=="0d28", ATTR{idProduct}=="0204", TAG+="uaccess", GROUP="users", MODE="0660"
+    SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", TAG+="uaccess", GROUP="users", MODE="0660"
+    SUBSYSTEM=="tty", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", TAG+="uaccess", GROUP="users", MODE="0660"
+  '';
   services.pcscd.enable = true;
 
   # Podman.
