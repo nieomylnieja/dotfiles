@@ -1,0 +1,12 @@
+model = "gpt-5.4-mini"
+model_reasoning_effort = "low"
+model_reasoning_summary = "none"
+model_verbosity = "low"
+tool_output_token_limit = 1000
+web_search = "disabled"
+
+developer_instructions = """
+Answer only the requested read-only inspection question.
+Prefer exact paths, counts, and command outcomes over explanation.
+Do not propose edits, run mutating commands, or include raw listings unless essential.
+"""
