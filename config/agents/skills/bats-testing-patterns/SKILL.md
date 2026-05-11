@@ -159,6 +159,24 @@ Prefer Bats-managed temporary directories:
 - `$BATS_FILE_TMPDIR` for files shared by tests in one `.bats` file.
 - `$BATS_TMPDIR` for suite-level scratch state.
 
+## Bats File Ordering
+
+Keep each `.bats` test file organized from lifecycle code to test behavior to
+local implementation detail.
+After the shebang, file tags, and any required `load` statements, always place
+functions in this order:
+
+1. `setup_file` and `setup` functions.
+2. `teardown` and `teardown_file` functions.
+3. `@test` cases.
+4. Local helper functions.
+
+Helper functions belong at the bottom of the file.
+Tests should read top-down as the executable specification, with helper
+implementations kept after the test cases they support.
+Do not place helper functions above `@test` cases just because they are used by
+the setup or tests.
+
 ## Shared Helpers
 
 Put reusable helpers in `test/test_helper/load.bash`.

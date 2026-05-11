@@ -243,6 +243,10 @@ in
     initExtra = builtins.readFile ../bash/bashrc;
   };
 
+  programs.prismlauncher = {
+    enable = true;
+  };
+
   xdg.desktopEntries.slack = {
     name = "Slack";
     exec = "slack --remote-debugging-port=9222 -s %U";
@@ -294,6 +298,10 @@ in
           "x-scheme-handler/https" = "vivaldi-stable.desktop";
           "x-scheme-handler/about" = "vivaldi-stable.desktop";
           "x-scheme-handler/unknown" = "vivaldi-stable.desktop";
+          "x-scheme-handler/prismlauncher" = [
+            "org.prismlauncher.PrismLauncher.desktop"
+            "prismlauncher.desktop"
+          ];
         }
         // imageAssociations;
     };

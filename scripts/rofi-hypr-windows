@@ -12,7 +12,6 @@ row_dir=""
 wezterm_clients_json=""
 wezterm_panes_json=""
 wezterm_state_class=""
-hypr_clients_json_cached=""
 
 usage() {
   cat << EOF
@@ -659,57 +658,6 @@ normalized_wezterm_title() {
   printf '%s' "${title}"
 }
 
-select_title_candidate_pane_id() {
-  local selection_index="$1"
-  shift
-  local candidates=("$@")
-  local count
-  local selected_index
-
-  count="${#candidates[@]}"
-  ((count > 0)) || return 1
-  selected_index=$((selection_index % count))
-  printf '%s' "${candidates[${selected_index}]}"
-}
-
-wezterm_window_ordinal() {
-  local address="$1"
-  local class="$2"
-  local normalized_title="$3"
-  local ordinal
-
-  [[ -n "${hypr_clients_json_cached}" ]] || {
-    printf '0'
-    return
-  }
-
-  ordinal="$(
-    printf '%s\n' "${hypr_clients_json_cached}" \
-      | jq -r --arg address "${address}" --arg class "${class}" --arg title "${normalized_title}" '
-        def norm_title:
-          (. // "") | sub("^Copy mode: "; "");
-
-        [
-          .[]
-          | select((.class // "") == $class)
-          | {
-              address: .address,
-              title: ((.title // "") | norm_title)
-            }
-        ] as $clients
-        | [
-            $clients[]
-            | select(.title == $title)
-            | .address
-          ] as $matching_addresses
-        | ($matching_addresses | index($address)) // 0
-      '
-  )"
-
-  [[ "${ordinal}" =~ ^[0-9]+$ ]] || ordinal=0
-  printf '%s' "${ordinal}"
-}
-
 wezterm_focused_pane_id() {
   local client_pid="$1"
 
@@ -906,32 +854,20 @@ wezterm_context_from_pane() {
   return 1
 }
 
-wezterm_harness_context_by_cwd() {
-  local class="$1"
-  local match_cwd="$2"
-  local pane_id
+wezterm_pane_id_for_client() {
+  local _client_pid="$1"
+  local class="$2"
+  local client_title="$3"
+  local _address="$4"
+  local normalized_title
+  local title_pane_ids=()
 
-  [[ -n "${match_cwd}" ]] || return 1
+  load_wezterm_state "${class}" || return 1
 
-  while IFS= read -r pane_id; do
-    if wezterm_context_from_pane "${class}" "${pane_id}" 0; then
-      return
-    fi
-  done < <(
-    printf '%s\n' "${wezterm_panes_json}" \
-      | jq -r --arg cwd "${match_cwd}" '
-        .[]
-        | select(
-            (.cwd // "")
-            | sub("^file://[^/]*"; "")
-            | if . != "/" then sub("/+$"; "") else . end
-            | . == $cwd
-          )
-        | .pane_id
-      '
-  )
-
-  return 1
+  normalized_title="$(normalized_wezterm_title "${client_title}")"
+  mapfile -t title_pane_ids < <(wezterm_pane_ids_for_title "${normalized_title}")
+  ((${#title_pane_ids[@]} == 1)) || return 1
+  printf '%s' "${title_pane_ids[0]}"
 }
 
 wezterm_unique_harness_context() {
@@ -958,31 +894,12 @@ wezterm_pane_context() {
   local class="$2"
   local client_title="$3"
   local address="$4"
-  local pane_id
-  local normalized_title
-  local title_pane_ids=()
-  local client_cwd
-  local selection_index=0
+  local pane_id="${5:-}"
 
   load_wezterm_state "${class}" || return 1
 
-  normalized_title="$(normalized_wezterm_title "${client_title}")"
-  mapfile -t title_pane_ids < <(wezterm_pane_ids_for_title "${normalized_title}")
-  if ((${#title_pane_ids[@]} > 0)); then
-    selection_index="$(wezterm_window_ordinal "${address}" "${class}" "${normalized_title}")"
-    pane_id="$(select_title_candidate_pane_id "${selection_index}" "${title_pane_ids[@]}")" || return 1
-    if wezterm_context_from_pane "${class}" "${pane_id}" 0; then
-      return
-    fi
-
-    if wezterm_context_from_pane "${class}" "${pane_id}" 1; then
-      return
-    fi
-  fi
-
-  client_cwd="$(readlink "${PROC_ROOT}/${client_pid}/cwd" 2> /dev/null || true)"
-
-  if wezterm_harness_context_by_cwd "${class}" "${client_cwd}"; then
+  if [[ -n "${pane_id}" ]] || pane_id="$(wezterm_pane_id_for_client "${client_pid}" "${class}" "${client_title}" "${address}")"; then
+    wezterm_context_from_pane "${class}" "${pane_id}" 1
     return
   fi
 
@@ -994,6 +911,7 @@ terminal_context() {
   local class="${2:-}"
   local title="${3:-}"
   local address="${4:-}"
+  local wezterm_pane_id="${5:-}"
   local preferred_pid
   local command
   local harness_context
@@ -1002,7 +920,7 @@ terminal_context() {
   local cwd
 
   if [[ "${class}" == "WezTerm" || "${class}" == "wezterm" || "${class}" == "org.wezfurlong.wezterm" ]]; then
-    if wezterm_context="$(wezterm_pane_context "${pid}" "${class}" "${title}" "${address}")"; then
+    if wezterm_context="$(wezterm_pane_context "${pid}" "${class}" "${title}" "${address}" "${wezterm_pane_id}")"; then
       printf '%s' "${wezterm_context}"
       return
     fi
@@ -1075,10 +993,11 @@ window_label() {
   local title="$2"
   local pid="$3"
   local address="$4"
+  local wezterm_pane_id="${5:-}"
   local context
 
   if is_terminal_class "${class}"; then
-    context="$(terminal_context "${pid}" "${class}" "${title}" "${address}")"
+    context="$(terminal_context "${pid}" "${class}" "${title}" "${address}" "${wezterm_pane_id}")"
     if is_generic_terminal_window "${class}" "${title}" || terminal_context_is_strong "${context}" || terminal_context_is_shell "${context}"; then
       printf '%s' "${context}"
       return
@@ -1104,6 +1023,19 @@ is_terminal_class() {
 
   case "${class}" in
     Alacritty | WezTerm | wezterm | org.wezfurlong.wezterm | Kitty | kitty | foot | footclient | Ghostty | ghostty | com.mitchellh.ghostty | xterm | XTerm | st | st-256color)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_wezterm_class() {
+  local class="$1"
+
+  case "${class}" in
+    WezTerm | wezterm | org.wezfurlong.wezterm)
       return 0
       ;;
     *)
@@ -1277,8 +1209,15 @@ write_window_row() {
   local meta
   local row_file
   local workspace_text
+  local selection_value
+  local wezterm_pane_id=""
 
-  label="$(window_label "${class}" "${title}" "${pid}" "${address}")"
+  selection_value="${address}"
+  if is_wezterm_class "${class}" && wezterm_pane_id="$(wezterm_pane_id_for_client "${pid}" "${class}" "${title}" "${address}")"; then
+    selection_value="${address}"$'\t'"${class}"$'\t'"${wezterm_pane_id}"
+  fi
+  label="$(window_label "${class}" "${title}" "${pid}" "${address}" "${wezterm_pane_id}")"
+
   app="$(app_name "${class}")"
   icon="$(app_icon "${class}")"
   workspace_text="$(workspace_display "${workspace}")"
@@ -1286,7 +1225,7 @@ write_window_row() {
   meta="${class} ${title} ${label} ${app}"
   printf -v row_file '%s/%06d.row' "${output_dir}" "${index}"
 
-  printf '%s\t\0display\x1f%s\x1ficon\x1f%s\x1fmeta\x1f%s\n' "${address}" "${display}" "${icon}" "${meta}" > "${row_file}"
+  printf '%s\0display\x1f%s\x1ficon\x1f%s\x1fmeta\x1f%s\n' "${selection_value}" "${display}" "${icon}" "${meta}" > "${row_file}"
 }
 
 write_window_rows() {
@@ -1306,7 +1245,6 @@ write_window_rows() {
   local row_files=()
 
   clients_json="$(hyprland_clients_json)"
-  hypr_clients_json_cached="${clients_json}"
   clients_tsv="$(client_rows_tsv "${clients_json}")"
   [[ -n "${clients_tsv}" ]] || return 0
 
@@ -1343,7 +1281,6 @@ dump_window_rows() {
   local workspace_text
 
   clients_json="$(hyprland_clients_json)"
-  hypr_clients_json_cached="${clients_json}"
   clients_tsv="$(client_rows_tsv "${clients_json}")"
   [[ -n "${clients_tsv}" ]] || return 0
 
@@ -1363,6 +1300,27 @@ focus_window() {
   local address="$1"
 
   hyprctl dispatch focuswindow "address:${address}"
+}
+
+activate_wezterm_pane() {
+  local class="$1"
+  local pane_id="$2"
+  local output
+
+  [[ "${pane_id}" =~ ^[0-9]+$ ]] || return 0
+  require_command wezterm
+
+  if [[ -n "${class}" ]]; then
+    if output="$(wezterm cli --class "${class}" activate-pane --pane-id "${pane_id}" 2>&1)"; then
+      return
+    fi
+  fi
+
+  if output="$(wezterm cli activate-pane --pane-id "${pane_id}" 2>&1)"; then
+    return
+  fi
+
+  fatal "wezterm cli activate-pane --pane-id ${pane_id} failed: ${output}"
 }
 
 select_window() {
@@ -1428,7 +1386,20 @@ main() {
   local address="${selection%%$'\t'*}"
   [[ -n "${address}" ]] || fatal "Could not parse selected window address"
 
+  local selection_rest=""
+  local selected_class=""
+  local selected_pane_id=""
+
+  if [[ "${selection}" == *$'\t'* ]]; then
+    selection_rest="${selection#*$'\t'}"
+    selected_class="${selection_rest%%$'\t'*}"
+    if [[ "${selection_rest}" == *$'\t'* ]]; then
+      selected_pane_id="${selection_rest#*$'\t'}"
+    fi
+  fi
+
   focus_window "${address}"
+  activate_wezterm_pane "${selected_class}" "${selected_pane_id}"
 }
 
 main "$@"

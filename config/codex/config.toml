@@ -1,19 +1,18 @@
 #:schema https://developers.openai.com/codex/config-schema.json
 model = "gpt-5.5"
 model_reasoning_effort = "medium"
+personality = "pragmatic"
+approvals_reviewer = "guardian_subagent"
+model_auto_compact_token_limit = 90000
+plan_mode_reasoning_effort = "medium"
 model_reasoning_summary = "none"
 model_verbosity = "low"
-model_auto_compact_token_limit = 90000
 tool_output_token_limit = 2500
-personality = "pragmatic"
 web_search = "cached"
 
-plan_mode_reasoning_effort = "medium"
-
-approvals_reviewer = "guardian_subagent"
-
 [features]
-codex_hooks = true
+hooks = true
+terminal_resize_reflow = true
 guardian_approval = true
 
 [tools.web_search]
@@ -73,3 +72,4 @@ startup_timeout_sec = 15
 
 [tui]
 theme = "nord"
+vim_mode_default = true

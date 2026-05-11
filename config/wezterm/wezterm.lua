@@ -119,6 +119,7 @@ config.use_resize_increments = false
 
 config.keys = {
   { key = 'L', mods = 'CTRL', action = act.SendString '\x0c' },
+  { key = 'O', mods = 'CTRL|SHIFT', action = act.EmitEvent 'open-selected-file-reference' },
   { key = 'PageUp', mods = 'SHIFT', action = act.ScrollByPage(-1) },
   { key = 'PageDown', mods = 'SHIFT', action = act.ScrollByPage(1) },
   { key = 'Home', mods = 'SHIFT', action = act.ScrollToTop },
@@ -196,7 +197,15 @@ config.mouse_bindings = {
   {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
-    action = act.OpenLinkAtMouseCursor,
+    action = wezterm.action_callback(function(window, pane)
+      local selection = window:get_selection_text_for_pane(pane)
+      if selection ~= nil and selection ~= '' then
+        window:perform_action(act.EmitEvent 'open-selected-file-reference', pane)
+        return
+      end
+
+      window:perform_action(act.OpenLinkAtMouseCursor, pane)
+    end),
   },
   {
     event = { Down = { streak = 1, button = 'Left' } },
@@ -264,15 +273,39 @@ local function file_exists(path)
   return true
 end
 
-wezterm.on('open-uri', function(window, pane, uri)
-  local path, line = uri:match '^https://wezterm%-file%-link/(.-):(%d+)$'
-  if path == nil then
-    path = uri:match '^https://wezterm%-file%-link/(.+)$'
-    line = '1'
+local function extract_file_reference(text)
+  if text == nil or text == '' then
+    return nil
   end
 
+  local path_pattern = '([/~%w_.@%%+=,-]+/[~%w_.@%%+=,-][/~%w_.@%%+=,-]*)'
+  local path, line = text:match(path_pattern .. ':(%d+)')
+  if path ~= nil then
+    return path, line
+  end
+
+  local squashed = text:gsub('%s+', '')
+  path, line = squashed:match(path_pattern .. ':(%d+)')
+  if path ~= nil then
+    return path, line
+  end
+
+  path = squashed:match(path_pattern)
+  if path ~= nil then
+    return path, '1'
+  end
+
+  path = text:match(path_pattern)
+  if path ~= nil then
+    return path, '1'
+  end
+
+  return nil
+end
+
+local function open_file_reference(window, pane, path, line, target)
   if path == nil then
-    return
+    return false
   end
 
   local resolved_path = resolve_path(pane, path)
@@ -281,10 +314,14 @@ wezterm.on('open-uri', function(window, pane, uri)
     return false
   end
 
-  local mods = window:keyboard_modifiers()
   local spawn_action = act.SpawnCommandInNewTab
-  if mods:find 'CTRL' then
+  if target == 'window' then
     spawn_action = act.SpawnCommandInNewWindow
+  elseif target == nil then
+    local mods = window:keyboard_modifiers()
+    if mods:find 'CTRL' then
+      spawn_action = act.SpawnCommandInNewWindow
+    end
   end
 
   window:perform_action(
@@ -295,6 +332,27 @@ wezterm.on('open-uri', function(window, pane, uri)
   )
 
   return false
+end
+
+wezterm.on('open-selected-file-reference', function(window, pane)
+  local selection = window:get_selection_text_for_pane(pane)
+  local path, line = extract_file_reference(selection)
+  if path == nil then
+    return
+  end
+
+  window:perform_action(act.ClearSelection, pane)
+  return open_file_reference(window, pane, path, line, 'tab')
+end)
+
+wezterm.on('open-uri', function(window, pane, uri)
+  local path, line = uri:match '^https://wezterm%-file%-link/(.-):(%d+)$'
+  if path == nil then
+    path = uri:match '^https://wezterm%-file%-link/(.+)$'
+    line = '1'
+  end
+
+  return open_file_reference(window, pane, path, line)
 end)
 
 return config

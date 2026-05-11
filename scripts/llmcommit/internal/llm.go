@@ -26,7 +26,7 @@ var baseSystemPrompt = template.Must(
 )
 
 const (
-	defaultOpenCodeModel           = "openai/gpt-5.5"
+	defaultOpenCodeModel           = "openai/gpt-5.4"
 	defaultOpenCodeReasoningEffort = "low"
 	defaultOpenCodeTextVerbosity   = "medium"
 	opencodePromptName             = "commit-prompt.md"
