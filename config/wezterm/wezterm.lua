@@ -88,11 +88,40 @@ config.colors = {
 config.scrollback_lines = 20000
 config.alternate_buffer_wheel_scroll_speed = 6
 
-config.hyperlink_rules = wezterm.default_hyperlink_rules()
-table.insert(config.hyperlink_rules, {
-  regex = [[[/~A-Za-z0-9_.@%+=,-]+/[/~A-Za-z0-9_.@%+=,-]+(?::\d+)?]],
-  format = 'https://wezterm-file-link/$0',
-})
+config.hyperlink_rules = {
+  {
+    regex = [[\((\w+://[^\s)]+)\)]],
+    format = '$1',
+    highlight = 1,
+  },
+  {
+    regex = [=[\[(\w+://[^\s\]]+)\]]=],
+    format = '$1',
+    highlight = 1,
+  },
+  {
+    regex = [[\{(\w+://[^\s}]+)\}]],
+    format = '$1',
+    highlight = 1,
+  },
+  {
+    regex = [[<(\w+://[^\s>]+)>]],
+    format = '$1',
+    highlight = 1,
+  },
+  {
+    regex = [=[\b\w+://[^\s<>()\[\]{}"'`]*[^\s<>()\[\]{}"'`,.;:!?]]=],
+    format = '$0',
+  },
+  {
+    regex = [[\b\w+@[\w-]+(\.[\w-]+)+\b]],
+    format = 'mailto:$0',
+  },
+  {
+    regex = [[[/~A-Za-z0-9_.@%+=,-]+/[/~A-Za-z0-9_.@%+=,-]+(?::\d+)?]],
+    format = 'https://wezterm-file-link/$0',
+  },
+}
 
 config.window_decorations = 'TITLE | RESIZE'
 config.hide_tab_bar_if_only_one_tab = true
@@ -273,6 +302,10 @@ local function file_exists(path)
   return true
 end
 
+local function trim_trailing_path_punctuation(path)
+  return path:gsub('[,.;:!?%)%]%}]+$', '')
+end
+
 local function extract_file_reference(text)
   if text == nil or text == '' then
     return nil
@@ -309,6 +342,17 @@ local function open_file_reference(window, pane, path, line, target)
   end
 
   local resolved_path = resolve_path(pane, path)
+  if not file_exists(resolved_path) then
+    local trimmed_path = trim_trailing_path_punctuation(path)
+    if trimmed_path ~= path then
+      local trimmed_resolved_path = resolve_path(pane, trimmed_path)
+      if file_exists(trimmed_resolved_path) then
+        path = trimmed_path
+        resolved_path = trimmed_resolved_path
+      end
+    end
+  end
+
   if not file_exists(resolved_path) then
     wezterm.log_warn('File link does not exist: ' .. resolved_path)
     return false
@@ -350,6 +394,10 @@ wezterm.on('open-uri', function(window, pane, uri)
   if path == nil then
     path = uri:match '^https://wezterm%-file%-link/(.+)$'
     line = '1'
+  end
+
+  if path == nil then
+    return
   end
 
   return open_file_reference(window, pane, path, line)

@@ -9,6 +9,10 @@ model_reasoning_summary = "none"
 model_verbosity = "low"
 tool_output_token_limit = 2500
 web_search = "cached"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = ["/home/mh/.serena"]
 
 [features]
 hooks = true
