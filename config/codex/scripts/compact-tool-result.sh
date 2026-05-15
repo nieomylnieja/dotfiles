@@ -7,31 +7,29 @@ readonly DEFAULT_THRESHOLD_CHARS=6000
 readonly DEFAULT_HEAD_LINES=5
 readonly DEFAULT_TAIL_LINES=3
 readonly DEFAULT_NOTABLE_LINES=8
-readonly DEFAULT_MAX_CONTEXT_CHARS=1200
 readonly DEFAULT_COMPACTION_MODE="deterministic"
 readonly DEFAULT_COMPACTOR_MODEL="gpt-5.4-mini"
 readonly DEFAULT_COMPACTOR_REASONING_EFFORT="low"
 readonly DEFAULT_AGENT_INPUT_MAX_CHARS=120000
 readonly DEFAULT_AGENT_TIMEOUT_SEC=75
+readonly STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/codex/hooks"
+readonly LOG_FILE="${STATE_DIR}/compact-tool-result.jsonl"
 
 usage() {
   cat << EOF
 Usage: ${PROG} [OPTION]...
-Emit compact model context for large Codex PostToolUse results.
+Log compact summaries for large Codex PostToolUse results.
 
 Reads a Codex PostToolUse hook JSON payload from stdin. When the tool response
-is larger than CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS, emits bounded
-model-visible hook context. Agent mode can optionally ask a bare Codex worker
-to compact the result before applying the output cap.
+is larger than CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS, writes a compact
+summary record to ${LOG_FILE} and emits a short in-session status message.
+Agent mode can optionally ask a bare Codex worker to produce the summary
+before it is logged.
 
 Environment:
   CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS  minimum extracted result size
-                                             before compaction context is emitted
+                                             before a summary is logged
                                              (default: ${DEFAULT_THRESHOLD_CHARS})
-  CODEX_TOOL_RESULT_COMPACT_MAX_CONTEXT_CHARS
-                                             max model-visible hook context bytes
-                                             emitted by this script
-                                             (default: ${DEFAULT_MAX_CONTEXT_CHARS})
   CODEX_TOOL_RESULT_COMPACT_MODE             agent or deterministic
                                              (default: ${DEFAULT_COMPACTION_MODE})
   CODEX_TOOL_RESULT_COMPACTOR_MODEL          bare worker model
@@ -94,26 +92,6 @@ positive_integer_or_default() {
   fi
 
   printf '%s\n' "${default_value}"
-}
-
-truncate_text() {
-  local input_text="$1"
-  local max_chars="$2"
-  local marker
-  marker=$'\n[compact-tool-result: truncated hook context]'
-
-  if ((${#input_text} <= max_chars)); then
-    printf '%s\n' "${input_text}"
-    return 0
-  fi
-
-  if ((${#marker} >= max_chars)); then
-    printf '%s\n' "${input_text:0:max_chars}"
-    return 0
-  fi
-
-  local retained_chars="$((max_chars - ${#marker}))"
-  printf '%s\n' "${input_text:0:retained_chars}${marker}"
 }
 
 extract_tool_response_text() {
@@ -237,54 +215,100 @@ slice_boundary_lines() {
   sed -n "${tail_start},${line_count}p" "${input_file}" >> "${output_file}"
 }
 
-emit_context_json() {
-  local summary_text="$1"
-  local max_context_chars="$2"
-  local truncated_summary
-
-  truncated_summary="$(truncate_text "${summary_text}" "${max_context_chars}")"
-
-  jq -n \
-    --arg summary_text "${truncated_summary}" \
-    '{
-      hookSpecificOutput: {
-        hookEventName: "PostToolUse",
-        additionalContext: $summary_text
-      }
-    }'
-}
-
-emit_deterministic_compaction_context() {
+build_deterministic_summary() {
   local tool_name="$1"
   local char_count="$2"
   local line_count="$3"
   local notable_file="$4"
   local boundary_file="$5"
-  local max_context_chars="$6"
-  local notable_text
-  local boundary_text
 
-  notable_text="$(sed -n '1,40p' "${notable_file}")"
-  boundary_text="$(sed -n '1,40p' "${boundary_file}")"
+  printf 'The previous %s result was large (%s lines, %s bytes extracted).\n' \
+    "${tool_name}" \
+    "${line_count}" \
+    "${char_count}"
+  printf '%s ' 'Retain only durable findings, decisions, paths, errors, and commands needed later.'
+  printf '%s\n\n' 'Do not carry forward the full raw output. Re-run or re-read exact content only when exact text is needed.'
 
-  local summary_text
-  summary_text="$(jq -n -r \
+  if [[ -s "${notable_file}" ]]; then
+    printf 'Notable lines:\n'
+    sed -n '1,40p' "${notable_file}"
+    printf '\n\n'
+  fi
+
+  printf 'Boundary sample:\n'
+  sed -n '1,40p' "${boundary_file}"
+}
+
+count_bytes_in_file() {
+  local input_file="$1"
+
+  wc -c < "${input_file}"
+}
+
+append_log_entry() {
+  local input_file="$1"
+  local tool_name="$2"
+  local compaction_mode="$3"
+  local char_count="$4"
+  local line_count="$5"
+  local summary_file="$6"
+  local stored_byte_count="$7"
+  local retained_byte_count="$8"
+  local trimmed_byte_count="$9"
+  local timestamp
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+
+  if ! mkdir -p "${STATE_DIR}" 2> /dev/null; then
+    return 1
+  fi
+
+  jq -c -n \
+    --arg timestamp "${timestamp}" \
+    --arg session_id "$(jq -r '.session_id // ""' "${input_file}")" \
+    --arg turn_id "$(jq -r '.turn_id // ""' "${input_file}")" \
     --arg tool_name "${tool_name}" \
-    --arg char_count "${char_count}" \
-    --arg line_count "${line_count}" \
-    --arg notable_text "${notable_text}" \
-    --arg boundary_text "${boundary_text}" \
-    '"<tool_result_compaction>\n"
-      + "The previous " + $tool_name + " result was large ("
-      + $line_count + " lines, " + $char_count + " bytes extracted).\n"
-      + "After processing it, retain only durable findings, decisions, paths, errors, and commands needed later. "
-      + "Do not carry forward the full raw output. Re-run or re-read exact content only when exact text is needed.\n\n"
-      + (if ($notable_text | length) > 0 then "Notable lines:\n" + $notable_text + "\n\n" else "" end)
-      + "Boundary sample:\n"
-      + $boundary_text
-      + "\n</tool_result_compaction>"')"
+    --arg compaction_mode "${compaction_mode}" \
+    --argjson extracted_bytes "${char_count}" \
+    --argjson extracted_lines "${line_count}" \
+    --argjson stored_bytes "${stored_byte_count}" \
+    --argjson retained_bytes "${retained_byte_count}" \
+    --argjson trimmed_bytes "${trimmed_byte_count}" \
+    --rawfile summary "${summary_file}" \
+    '{
+      timestamp: $timestamp,
+      session_id: (if $session_id == "" then null else $session_id end),
+      turn_id: (if $turn_id == "" then null else $turn_id end),
+      tool_name: $tool_name,
+      compaction_mode: $compaction_mode,
+      extracted: {
+        bytes: $extracted_bytes,
+        lines: $extracted_lines
+      },
+      summary: {
+        stored_bytes: $stored_bytes,
+        retained_bytes: $retained_bytes,
+        trimmed_bytes: $trimmed_bytes,
+        text: ($summary | sub("\n$"; ""))
+      }
+    }' >> "${LOG_FILE}" 2> /dev/null
+}
 
-  emit_context_json "${summary_text}" "${max_context_chars}"
+emit_system_message() {
+  local tool_name="$1"
+  local char_count="$2"
+  local retained_byte_count="$3"
+  local trimmed_byte_count="$4"
+  local line_count="$5"
+  local log_status="$6"
+  local message="Compacted ${tool_name}: ${char_count}B -> ${retained_byte_count}B (-${trimmed_byte_count}B, ${line_count}l)"
+
+  if [[ "${log_status}" != "logged" ]]; then
+    message="${message}; state log unavailable"
+  fi
+
+  jq -n \
+    --arg system_message "${message}" \
+    '{systemMessage: $system_message}'
 }
 
 run_agent_compaction() {
@@ -358,10 +382,6 @@ main() {
   threshold_chars="$(positive_integer_or_default \
     "${CODEX_TOOL_RESULT_COMPACT_THRESHOLD_CHARS:-}" \
     "${DEFAULT_THRESHOLD_CHARS}")"
-  local max_context_chars
-  max_context_chars="$(positive_integer_or_default \
-    "${CODEX_TOOL_RESULT_COMPACT_MAX_CONTEXT_CHARS:-}" \
-    "${DEFAULT_MAX_CONTEXT_CHARS}")"
   local agent_max_chars
   agent_max_chars="$(positive_integer_or_default \
     "${CODEX_TOOL_RESULT_COMPACT_AGENT_MAX_CHARS:-}" \
@@ -375,6 +395,7 @@ main() {
   local response_text_file
   local notable_file
   local boundary_file
+  local summary_file
   local prompt_file
   local agent_output_file
   local agent_stdout_file
@@ -384,6 +405,7 @@ main() {
   response_text_file="$(make_tmp_file "response.txt")"
   notable_file="$(make_tmp_file "notable.txt")"
   boundary_file="$(make_tmp_file "boundary.txt")"
+  summary_file="$(make_tmp_file "summary.txt")"
   prompt_file="$(make_tmp_file "agent-prompt.txt")"
   agent_output_file="$(make_tmp_file "agent-output.txt")"
   agent_stdout_file="$(make_tmp_file "agent-stdout.txt")"
@@ -394,6 +416,7 @@ main() {
     "${response_text_file}"
     "${notable_file}"
     "${boundary_file}"
+    "${summary_file}"
     "${prompt_file}"
     "${agent_output_file}"
     "${agent_stdout_file}"
@@ -421,6 +444,10 @@ main() {
   local tool_name
   tool_name="$(jq -r '.tool_name // "unknown-tool"' "${input_file}")"
 
+  local stored_byte_count=0
+  local retained_byte_count=0
+  local trimmed_byte_count=0
+  local log_status="unavailable"
   local compaction_mode="${CODEX_TOOL_RESULT_COMPACT_MODE:-${DEFAULT_COMPACTION_MODE}}"
   if [[ "${compaction_mode}" == "agent" ]] && command -v codex > /dev/null 2>&1; then
     if run_agent_compaction \
@@ -438,11 +465,38 @@ main() {
       local agent_summary
       agent_summary="$(sed -n '1,220p' "${agent_output_file}")"
       if [[ -n "${agent_summary//[[:space:]]/}" ]]; then
-        emit_context_json "<tool_result_compaction>
-The previous ${tool_name} result was compacted by a bare Codex worker.
-
-${agent_summary}
-</tool_result_compaction>" "${max_context_chars}"
+        {
+          printf 'The previous %s result was compacted by a bare Codex worker.\n\n' "${tool_name}"
+          printf '%s\n' "${agent_summary}"
+        } > "${summary_file}"
+        stored_byte_count="$(count_bytes_in_file "${summary_file}")"
+        retained_byte_count="${stored_byte_count}"
+        if ((retained_byte_count > char_count)); then
+          retained_byte_count="${char_count}"
+        fi
+        trimmed_byte_count="$((char_count - retained_byte_count))"
+        if ((trimmed_byte_count < 0)); then
+          trimmed_byte_count=0
+        fi
+        if append_log_entry \
+          "${input_file}" \
+          "${tool_name}" \
+          "agent" \
+          "${char_count}" \
+          "${line_count}" \
+          "${summary_file}" \
+          "${stored_byte_count}" \
+          "${retained_byte_count}" \
+          "${trimmed_byte_count}"; then
+          log_status="logged"
+        fi
+        emit_system_message \
+          "${tool_name}" \
+          "${char_count}" \
+          "${retained_byte_count}" \
+          "${trimmed_byte_count}" \
+          "${line_count}" \
+          "${log_status}"
         exit 0
       fi
     fi
@@ -450,13 +504,40 @@ ${agent_summary}
 
   select_notable_lines "${response_text_file}" "${DEFAULT_NOTABLE_LINES}" "${notable_file}"
   slice_boundary_lines "${response_text_file}" "${line_count}" "${boundary_file}"
-  emit_deterministic_compaction_context \
+  build_deterministic_summary \
     "${tool_name}" \
     "${char_count}" \
     "${line_count}" \
     "${notable_file}" \
-    "${boundary_file}" \
-    "${max_context_chars}"
+    "${boundary_file}" > "${summary_file}"
+  stored_byte_count="$(count_bytes_in_file "${summary_file}")"
+  retained_byte_count="${stored_byte_count}"
+  if ((retained_byte_count > char_count)); then
+    retained_byte_count="${char_count}"
+  fi
+  trimmed_byte_count="$((char_count - retained_byte_count))"
+  if ((trimmed_byte_count < 0)); then
+    trimmed_byte_count=0
+  fi
+  if append_log_entry \
+    "${input_file}" \
+    "${tool_name}" \
+    "deterministic" \
+    "${char_count}" \
+    "${line_count}" \
+    "${summary_file}" \
+    "${stored_byte_count}" \
+    "${retained_byte_count}" \
+    "${trimmed_byte_count}"; then
+    log_status="logged"
+  fi
+  emit_system_message \
+    "${tool_name}" \
+    "${char_count}" \
+    "${retained_byte_count}" \
+    "${trimmed_byte_count}" \
+    "${line_count}" \
+    "${log_status}"
 }
 
 main "$@"

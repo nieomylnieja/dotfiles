@@ -12,7 +12,10 @@ web_search = "cached"
 sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
-writable_roots = ["/home/mh/.serena"]
+writable_roots = [
+  "/home/mh/.serena",
+  "/home/mh/.local/state/codex/hooks"
+]
 
 [features]
 hooks = true

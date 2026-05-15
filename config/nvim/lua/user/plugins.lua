@@ -199,7 +199,6 @@ return {
         "templ",
         "html-lsp",
         "css-lsp",
-        "tailwindcss-language-server",
         "postgres-language-server",
         "ansible-language-server",
         "clangd",

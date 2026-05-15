@@ -13,7 +13,7 @@ local search_dir = function(opts)
 		.new(themes.get_dropdown(opts), {
 			prompt_title = "Search directory",
 			finder = finders.new_table({
-				results = scan.scan_dir(".", { only_dirs = true, respect_gitignore = true }),
+				results = scan.scan_dir(".", { only_dirs = true, hidden = true, respect_gitignore = true }),
 			}),
 			sorter = conf.generic_sorter(opts),
 			attach_mappings = function(prompt_bufnr)

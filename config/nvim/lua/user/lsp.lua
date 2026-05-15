@@ -65,44 +65,6 @@ local function marksman_root_dir(bufnr, on_dir)
   end
 end
 
-local function tailwind_root_dir(bufnr, on_dir)
-  local filename = vim.api.nvim_buf_get_name(bufnr)
-
-  if is_temporary_path(filename) then
-    return
-  end
-
-  local root_files = {
-    "tailwind.config.js",
-    "tailwind.config.cjs",
-    "tailwind.config.mjs",
-    "tailwind.config.ts",
-    "postcss.config.js",
-    "postcss.config.cjs",
-    "postcss.config.mjs",
-    "postcss.config.ts",
-    "theme/static_src/tailwind.config.js",
-    "theme/static_src/tailwind.config.cjs",
-    "theme/static_src/tailwind.config.mjs",
-    "theme/static_src/tailwind.config.ts",
-    "theme/static_src/postcss.config.js",
-    ".git",
-  }
-
-  root_files = lspconfig_util.insert_package_json(root_files, "tailwindcss", filename)
-  root_files = lspconfig_util.root_markers_with_field(
-    root_files,
-    { "mix.lock", "Gemfile.lock" },
-    "tailwind",
-    filename
-  )
-
-  local root_file = vim.fs.find(root_files, { path = filename, upward = true })[1]
-  if root_file then
-    on_dir(vim.fs.dirname(root_file))
-  end
-end
-
 local servers = {
   lua_ls = {}, -- configured via lazydev.nvim
   gopls = {
@@ -232,9 +194,6 @@ local servers = {
   templ = {},
   html = {},
   cssls = {},
-  tailwindcss = {
-    root_dir = tailwind_root_dir,
-  },
   postgres_lsp = {},
   ansiblels = {},
   clangd = {},
