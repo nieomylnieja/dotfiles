@@ -44,7 +44,16 @@ in
     googleworkspaceCliPkg
     anki
     alacritty
-    agent-browser
+    (pkgs.symlinkJoin {
+      name = "agent-browser";
+      paths = [ pkgs.agent-browser ];
+      buildInputs = [ pkgs.makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/bin/agent-browser \
+          --set-default AGENT_BROWSER_SKILLS_DIR "${pkgs.agent-browser}/share/agent-browser/skills" \
+          --set-default AGENT_BROWSER_EXECUTABLE_PATH "${pkgs.chromium}/bin/chromium"
+      '';
+    })
     awscli2
     apg
     alejandra
