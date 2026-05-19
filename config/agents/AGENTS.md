@@ -144,3 +144,9 @@ not:
 
 rg -n "BasicAuth|Bearer" .
 ```
+
+## Git
+
+When working with `git` take special care of the changes introduced by the user.
+For instance, when reverting your work, make sure you are only reverting changes
+introduced by yourself.

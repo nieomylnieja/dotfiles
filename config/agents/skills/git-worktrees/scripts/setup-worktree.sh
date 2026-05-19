@@ -78,9 +78,9 @@ list_available_branches() {
   occupied="$(occupied_worktree_branches)"
 
   {
-    git for-each-ref --sort=refname --format='%(refname:short)%09local' refs/heads
-    git for-each-ref --sort=refname --format='%(refname:short)%09remote' refs/remotes/origin
-  } | awk -F '\t' -v occupied="${occupied}" '
+    git for-each-ref --sort=refname --format='%(refname:short)' refs/heads
+    git for-each-ref --sort=refname --format='%(refname:short)' refs/remotes/origin
+  } | awk -v occupied="${occupied}" '
     BEGIN {
       split(occupied, occupied_lines, "\n")
       for (i in occupied_lines) {
@@ -94,28 +94,26 @@ list_available_branches() {
       next
     }
 
-    $2 == "remote" {
-      sub(/^origin\//, "", $1)
+    /^origin\// {
+      sub(/^origin\//, "")
     }
 
-    $1 == "" || occupied_branch[$1] {
+    $0 == "" || occupied_branch[$0] {
       next
     }
 
-    seen[$1] {
-      source[$1] = source[$1] "," $2
+    seen[$0] {
       next
     }
 
     {
-      seen[$1] = 1
-      source[$1] = $2
-      branch[++count] = $1
+      seen[$0] = 1
+      branch[++count] = $0
     }
 
     END {
       for (i = 1; i <= count; i++) {
-        print branch[i] "\t" source[branch[i]]
+        print branch[i]
       }
     }
   '
@@ -130,18 +128,18 @@ select_branch() {
 
   entries="$(
     {
-      printf '<new>\ttype a new worktree branch name\n'
+      printf '<new>\n'
       list_available_branches
-    } | awk -F '\t' '{ printf "%s\t%s\n", $1, $2 }'
+    }
   )"
 
   selected="$(
     printf '%s\n' "${entries}" | fzf \
       --ansi \
-      --delimiter=$'\t' \
-      --with-nth=1,2 \
       --prompt='Worktree branch > ' \
       --header='Select an unoccupied branch, or choose "new" to type a branch name.' \
+      --preview="branch={}; format='%C(yellow)%h%Creset %C(cyan)%an%Creset %C(green)(%ar)%Creset %C(auto)%d%Creset %s'; if [ \"\${branch}\" = \"<new>\" ]; then printf \"%s\\n\" \"Type the new branch name after selecting <new>.\"; elif git rev-parse --verify \"refs/remotes/origin/\${branch}\" > /dev/null 2>&1; then git log --color=always --pretty=format:\"\${format}\" -n 20 \"origin/\${branch}\"; else git log --color=always --pretty=format:\"\${format}\" -n 20 \"\${branch}\"; fi" \
+      --preview-window='right:70%' \
       --select-1 \
       --exit-0
   )"
