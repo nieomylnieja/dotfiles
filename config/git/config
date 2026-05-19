@@ -57,6 +57,7 @@
 	stashlost = !recover-lost-stash.bash
 	c = !llmcommit
 	test = "!echo \"^$(pwd)$\""
+	worktree-setup = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-setup\" \"$@\"; }; f \"$@\""
 	worktree-switch = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-switch\" \"$@\"; }; f \"$@\""
 
 [interactive]

@@ -45,12 +45,18 @@ list_other_worktrees() {
       if (path == "" || path == current) {
         path = ""
         branch = ""
+        head = ""
         detached = 0
         return
       }
 
       if (detached) {
-        branch = "(detached)"
+        short_head = substr(head, 1, 12)
+        if (short_head == "") {
+          branch = "detached"
+        } else {
+          branch = "detached@" short_head
+        }
       } else if (branch == "") {
         branch = "(no branch)"
       } else {
@@ -61,6 +67,7 @@ list_other_worktrees() {
 
       path = ""
       branch = ""
+      head = ""
       detached = 0
     }
 
@@ -72,6 +79,11 @@ list_other_worktrees() {
 
     /^branch / {
       branch = substr($0, 8)
+      next
+    }
+
+    /^HEAD / {
+      head = substr($0, 6)
       next
     }
 
@@ -108,9 +120,9 @@ select_worktree() {
   fzf_args=(
     --ansi
     --delimiter=$'\t'
-    "--with-nth=2,1"
+    "--with-nth=2"
     --prompt='Worktree > '
-    --preview='git -C {1} status --short --branch; printf "\n"; git -C {1} log --oneline --decorate --color=always -n 20'
+    --preview='printf "Path: %s\n\n" {1}; git -C {1} status --short --branch; printf "\n"; git -C {1} log --oneline --decorate --color=always -n 20'
     --preview-window='right:70%'
     --select-1
     --exit-0

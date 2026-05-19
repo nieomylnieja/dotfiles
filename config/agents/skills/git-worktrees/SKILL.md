@@ -5,7 +5,7 @@ description: |
   before executing implementation plans, or when reviewing an existing branch
   (e.g. a PR) without switching away from the current branch.
   It creates isolated git worktrees under `.worktrees/`.
-allowed-tools: Bash(*scripts/setup-worktree.sh*) Bash(git worktree *)
+allowed-tools: Bash(*scripts/worktree-setup*) Bash(git worktree *)
 ---
 
 # Git Worktrees
@@ -29,7 +29,7 @@ It should be comprehensive and concise description of the implementation scope.
 ### 1. Create Worktree
 
 ```bash
-$DOTFILES/config/agents/skills/git-worktrees/scripts/setup-worktree.sh BRANCH_NAME
+$DOTFILES/config/agents/skills/git-worktrees/scripts/worktree-setup BRANCH_NAME
 ```
 
 The script auto-detects whether the branch exists (locally or on origin):
@@ -40,7 +40,7 @@ The script auto-detects whether the branch exists (locally or on origin):
 To branch off a specific base instead of the default branch:
 
 ```bash
-$DOTFILES/config/agents/skills/git-worktrees/scripts/setup-worktree.sh --base develop BRANCH_NAME
+$DOTFILES/config/agents/skills/git-worktrees/scripts/worktree-setup --base develop BRANCH_NAME
 ```
 
 The script outputs the absolute worktree path on stdout.
@@ -112,7 +112,7 @@ Ready to implement <feature-name>
 ```text
 You: I'm using the git-worktrees skill to set up an isolated workspace.
 
-[Create worktree: setup-worktree.sh feature/auth]
+[Create worktree: worktree-setup feature/auth]
 [Run npm install]
 [Run npm test - 47 passing]
 
