@@ -8,6 +8,28 @@ local function trim_prefix(s, prefix)
   end
 end
 
+local function github_https_remote(remote)
+  remote = vim.trim(remote):gsub("%.git$", "")
+
+  local host, path = remote:match("^git@([^:]+):(.+)$")
+  if host and path then
+    return "https://" .. host .. "/" .. path
+  end
+
+  host, path = remote:match("^ssh://git@([^/]+)/(.+)$")
+  if host and path then
+    host = host:gsub(":%d+$", "")
+    return "https://" .. host .. "/" .. path
+  end
+
+  local http_path = remote:match("^http://(.+)$")
+  if http_path then
+    return "https://" .. http_path
+  end
+
+  return remote
+end
+
 -- Send the link to your clipboard and print a message saying it was done.
 local send_to_clipboard = function(permalink)
   print("Copied permalink to github")
@@ -34,7 +56,7 @@ end
 -- @param mode either '.' or 'v'. Used by vim.fn.line
 M.create_link = function(mode)
   local origin = vim.trim(vim.fn.system("git remote get-url --push origin"))
-  local origin_url, _ = string.gsub(origin, "git@(.+):(.+)%.git", "https://%1/%2")
+  local origin_url = github_https_remote(origin)
 
   local sha = vim.trim(vim.fn.system("git rev-parse HEAD"))
   local repo = trim_prefix(vim.api.nvim_buf_get_name(0), vim.fn.getcwd())
@@ -97,7 +119,7 @@ M.open_line_commit = function()
 
   -- Get remote URL
   local origin = vim.trim(vim.fn.system("git remote get-url --push origin"))
-  local origin_url, _ = string.gsub(origin, "git@(.+):(.+)%.git", "https://%1/%2")
+  local origin_url = github_https_remote(origin)
 
   -- Construct commit URL
   local commit_url = origin_url .. "/commit/" .. commit_hash

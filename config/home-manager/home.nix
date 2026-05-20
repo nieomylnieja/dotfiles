@@ -70,6 +70,7 @@ in
     cargo
     cliphist
     csvkit
+    codex-acp
     delta
     diffnav
     direnv
@@ -128,6 +129,7 @@ in
     libreoffice
     lua
     luajitPackages.luarocks
+    ltspice
     pkgs.stable.lutris
     man
     man-pages

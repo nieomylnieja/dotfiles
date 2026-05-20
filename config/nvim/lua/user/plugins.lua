@@ -715,14 +715,92 @@ return {
     },
   },
   {
-    "supermaven-inc/supermaven-nvim",
+    "olimorris/codecompanion.nvim",
+    version = "^19.0.0",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "nvim-treesitter/nvim-treesitter",
+    },
     config = function()
-      require("supermaven-nvim").setup({
-        keymaps = {
-          accept_suggestion = "<S-Tab>",
-          clear_suggestion = "<C-]>",
-          accept_word = "<C-j>",
+      require("codecompanion").setup({
+        adapters = {
+          acp = {
+            codex = function()
+              return require("codecompanion.adapters").extend("codex", {
+                defaults = {
+                  auth_method = "openai-api-key",
+                },
+                env = {
+                  OPENAI_API_KEY = "OPENAI_API_KEY",
+                },
+              })
+            end,
+          },
         },
+        interactions = {
+          chat = {
+            adapter = "codex",
+          },
+        },
+      })
+
+      local function visual_range()
+        local mode = vim.fn.mode()
+        local visual_modes = {
+          v = true,
+          V = true,
+          ["\22"] = true,
+        }
+
+        local start_pos = visual_modes[mode] and vim.fn.getpos("v") or vim.fn.getpos("'<")
+        local end_pos = visual_modes[mode] and vim.fn.getpos(".") or vim.fn.getpos("'>")
+        local start_line, start_col = start_pos[2], start_pos[3]
+        local end_line, end_col = end_pos[2], end_pos[3]
+
+        if start_line > end_line or (start_line == end_line and start_col > end_col) then
+          start_line, end_line = end_line, start_line
+          start_col, end_col = end_col, start_col
+        end
+
+        return {
+          start_line = start_line,
+          start_col = start_col,
+          end_line = end_line,
+          end_col = end_col,
+        }
+      end
+
+      local function explain_selection()
+        local range = visual_range()
+        vim.cmd("normal! \27")
+
+        if range.start_line == 0 or range.end_line == 0 then
+          vim.notify("No code selected", vim.log.levels.WARN)
+          return
+        end
+
+        local file = vim.fn.expand("%:~:.")
+        local prompt = table.concat({
+          ("Explain the selected code in `%s` at lines %d-%d."):format(file, range.start_line, range.end_line),
+          "",
+          "Use the repository context and inspect the file directly. Focus on what it does, how control and data flow through it, and any assumptions, edge cases, or side effects that matter.",
+        }, "\n")
+
+        require("codecompanion").chat({
+          user_prompt = prompt,
+          auto_submit = false,
+        })
+      end
+
+      vim.keymap.set({ "n", "v" }, "<leader>aa", "<cmd>CodeCompanionActions<cr>", {
+        desc = "CodeCompanion actions",
+      })
+      vim.keymap.set("n", "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", {
+        desc = "Toggle CodeCompanion chat",
+      })
+      vim.keymap.set("v", "<leader>ae", explain_selection, {
+        desc = "Explain selected code",
+        silent = true,
       })
     end,
   },

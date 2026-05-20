@@ -125,6 +125,29 @@ extract_tool_response_text() {
   ' "${input_file}" > "${output_file}"
 }
 
+is_markdown_read() {
+  local input_file="$1"
+
+  jq -e '
+    def input_strings:
+      if type == "string" then
+        .
+      elif type == "array" then
+        .[] | input_strings
+      elif type == "object" then
+        .[] | input_strings
+      else
+        empty
+      end;
+
+    (.tool_name // "") as $tool_name
+    | select($tool_name == "Read" or ($tool_name | test("(^|__)read($|_)"; "i")))
+    | (.tool_input? // empty)
+    | input_strings
+    | select(test("[^[:space:][:cntrl:]][.](md|markdown)([^[:alnum:]_]|$)"; "i"))
+  ' "${input_file}" > /dev/null
+}
+
 select_notable_lines() {
   local input_file="$1"
   local max_lines="$2"
@@ -429,6 +452,8 @@ main() {
 
   jq -e '.hook_event_name == "PostToolUse"' "${input_file}" > /dev/null \
     || exit 0
+
+  is_markdown_read "${input_file}" && exit 0
 
   extract_tool_response_text "${input_file}" "${response_text_file}"
 

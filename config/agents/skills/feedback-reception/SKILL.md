@@ -74,6 +74,7 @@ Push back when:
 
 **How to push back:**
 
+- utilize `grill-with-docs` skill
 - Use technical reasoning, not defensiveness
 - Ask specific questions
 - Reference working tests/code
