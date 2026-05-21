@@ -116,7 +116,16 @@ func (g *GitClient) getRelatedFiles(files []string) []string {
 
 // CommitChanges commits the given files with the provided message.
 func (g *GitClient) CommitChanges(message string, files []string) error {
-	args := append([]string{"commit", "-m", message, "--"}, files...)
+	args := []string{"commit", "-m", message}
+	stagedFiles, err := g.GetStagedFiles()
+	if err != nil {
+		return fmt.Errorf("failed to inspect staged changes. %v", err)
+	}
+	if !sameFileSet(files, stagedFiles) {
+		args = append(args, "--")
+		args = append(args, files...)
+	}
+
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -126,4 +135,22 @@ func (g *GitClient) CommitChanges(message string, files []string) error {
 	}
 
 	return nil
+}
+
+func sameFileSet(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	files := make(map[string]struct{}, len(left))
+	for _, file := range left {
+		files[file] = struct{}{}
+	}
+	for _, file := range right {
+		if _, ok := files[file]; !ok {
+			return false
+		}
+	}
+
+	return true
 }

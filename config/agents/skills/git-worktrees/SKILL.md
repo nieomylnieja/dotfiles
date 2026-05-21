@@ -5,7 +5,7 @@ description: |
   before executing implementation plans, or when reviewing an existing branch
   (e.g. a PR) without switching away from the current branch.
   It creates isolated git worktrees under `.worktrees/`.
-allowed-tools: Bash(*scripts/worktree-setup.sh*) Bash(git worktree *)
+allowed-tools: Bash(*scripts/worktree-setup*) Bash(git worktree *)
 ---
 
 # Git Worktrees
