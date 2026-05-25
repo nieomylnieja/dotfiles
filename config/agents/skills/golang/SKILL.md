@@ -201,8 +201,9 @@ Only add inline comments for:
   (e.g. a workaround for an upstream bug, a performance trade-off decision)
 
 For functions, types, methods, consts, and vars:
-follow the doc comment conventions from the
-[golang-comments](../golang-comments/SKILL.md) skill.
+follow the general guidance from
+[code-comments](../code-comments/SKILL.md) and the Go-specific conventions from
+[golang-comments](../golang-comments/SKILL.md).
 
 ---
 

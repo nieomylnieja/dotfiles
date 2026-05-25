@@ -111,6 +111,9 @@ Do not modify files directly.
 If the scope includes documentation that needs rewrite suggestions,
 load the `writing-docs` skill before proposing wording.
 
+If the scope includes code comments, doc comments, or docstrings,
+load the `code-comments` skill.
+
 If the scope includes Markdown files,
 load the `markdown` skill.
 

@@ -2,8 +2,8 @@
 name: writing-docs
 description: |
   Use this skill whenever you need to write or rewrite technical documentation:
-  code comments, doc comments, docstrings, README sections, runbooks,
-  design notes, API docs, onboarding docs, or troubleshooting guides.
+  README sections, runbooks, design notes, API docs, onboarding docs,
+  troubleshooting guides, or other prose documentation outside source code.
   Use it when the documentation must be both technically correct and easy to read,
   especially if the draft is becoming vague, academic, or hard to scan.
 ---
@@ -59,12 +59,6 @@ if the reader has to decode it like a paper.
 
 ## By Document Type
 
-### Comments and Docstrings
-
-- Document the external contract, not the line-by-line implementation.
-- Explain meaning, expectations, and edge cases.
-- Remove comments that merely narrate obvious code.
-
 ### READMEs and Guides
 
 - Optimize for task completion.
@@ -94,5 +88,7 @@ if the reader has to decode it like a paper.
 
 ## Coordinate With Other Skills
 
+- For code comments, doc comments, and docstrings, use the
+  [code-comments](../code-comments/SKILL.md) skill.
 - For Markdown formatting and link conventions, also load the `markdown` skill.
 - For Go doc comments, also load the `golang-comments` skill.
