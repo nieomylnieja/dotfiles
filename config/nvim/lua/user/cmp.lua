@@ -4,6 +4,33 @@ require("luasnip.loaders.from_vscode").lazy_load()
 require("luasnip.loaders.from_lua").load({ paths = { vim.fn.stdpath("config") .. "/lua/user/snippets" } })
 luasnip.config.setup({})
 
+local go_doc_link_keyword_pattern = [[\%(\k\|\.\|/\)\+]]
+
+local function in_go_doc_link_context(ctx)
+  if vim.bo.filetype ~= "go" then
+    return false
+  end
+
+  local before = ctx.cursor_before_line
+  local comment_start = before:find("//", 1, true)
+  if not comment_start then
+    return false
+  end
+
+  local comment = before:sub(comment_start + 2)
+  local open_link = comment:match("^.*()%[")
+  if not open_link then
+    return false
+  end
+
+  local close_link = comment:match("^.*()%]")
+  if close_link and close_link > open_link then
+    return false
+  end
+
+  return comment:sub(open_link):match("^%[[%w_./]*$") ~= nil
+end
+
 cmp.setup({
   snippet = {
     expand = function(args)
@@ -65,6 +92,24 @@ cmp.setup({
       return vim_item
     end,
   },
+})
+
+cmp.setup.filetype("go", {
+  sources = cmp.config.sources({
+    { name = "nvim_lsp" },
+    { name = "luasnip" },
+    {
+      name = "buffer",
+      keyword_pattern = go_doc_link_keyword_pattern,
+      option = {
+        keyword_pattern = go_doc_link_keyword_pattern,
+      },
+      entry_filter = function(_, ctx)
+        return in_go_doc_link_context(ctx)
+      end,
+    },
+    { name = "path" },
+  }),
 })
 
 -- `/` cmdline setup.
