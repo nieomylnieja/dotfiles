@@ -156,6 +156,7 @@ in
     pkgs.stable.pdm
     python3
     pinentry-qt
+    protonvpn-gui
     r2modman # for Valheim mods
     kubectl
     kubecolor
