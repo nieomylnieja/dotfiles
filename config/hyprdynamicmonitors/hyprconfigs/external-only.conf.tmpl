@@ -1,0 +1,5 @@
+{{- $external := index .MonitorsByTag "external" -}}
+monitor={{ $external.Name }},preferred,auto,1
+{{ range .ExtraMonitors -}}
+monitor={{ .Name }},disable
+{{ end -}}

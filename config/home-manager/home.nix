@@ -111,6 +111,7 @@ in
     gnupg
     gdk
     httpie
+    hyprdynamicmonitors
     hypridle
     hyprlock
     hyprpaper
@@ -237,6 +238,8 @@ in
       run mkdir -p ${config.xdg.stateHome}/skills
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/wezterm/wezterm.lua ${config.xdg.configHome}/wezterm/wezterm.lua
+      run mkdir -p ${config.xdg.stateHome}/hyprdynamicmonitors
+      run [ -e ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.conf ] || ${pkgs.coreutils}/bin/install -m 0644 ${dotfilesDir}/config/hyprdynamicmonitors/hyprconfigs/laptop-only.conf ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.conf
     '';
     syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p ${homeDir}/.codex
@@ -283,6 +286,9 @@ in
     "swayimg".source = ../swayimg;
     "dunst".source = ../dunst;
     "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
+    "hyprdynamicmonitors/config.toml".source = ../hyprdynamicmonitors/config.toml;
+    "hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl".source = ../hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl;
+    "hyprdynamicmonitors/hyprconfigs/laptop-only.conf".source = ../hyprdynamicmonitors/hyprconfigs/laptop-only.conf;
     "glow".source = ../glow;
     "blesh/init.sh".source = ../blesh/blerc;
     # "gh-dash/config.yml".source = ../gh-dash/config.yml;
@@ -320,18 +326,53 @@ in
   # PATH is set in hyprland.conf instead.
   systemd.user.sessionVariables = sessionVariables;
 
-  systemd.user.services.hypr-monitor-policy = {
+  systemd.user.services."hyprdynamicmonitors-prepare" = {
     Unit = {
-      Description = "Fail-safe Hyprland monitor policy";
+      Description = "HyprDynamicMonitors boot-time cleanup";
+      Before = [ "graphical-session-pre.target" ];
+    };
+
+    Service = {
+      Type = "oneshot";
+      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p %h/.local/state/hyprdynamicmonitors";
+      ExecStart = "${pkgs.hyprdynamicmonitors}/bin/hyprdynamicmonitors prepare";
+      TimeoutStartSec = 3;
+      RemainAfterExit = true;
+    };
+
+    Install.WantedBy = [ "default.target" "graphical-session-pre.target" ];
+  };
+
+  systemd.user.services.hyprdynamicmonitors = {
+    Unit = {
+      Description = "HyprDynamicMonitors";
       PartOf = [ "graphical-session.target" ];
       After = [ "graphical-session.target" ];
     };
 
     Service = {
-      ExecStart = "${dotfilesDir}/scripts/hypr-monitor-policy --watch";
+      ExecStartPre = "${pkgs.hyprdynamicmonitors}/bin/hyprdynamicmonitors prepare";
+      ExecStart = "${pkgs.hyprdynamicmonitors}/bin/hyprdynamicmonitors run --disable-power-events";
+      Restart = "on-failure";
+      RestartSec = 5;
+      Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.hyprland pkgs.systemd ]}";
+    };
+
+    Install.WantedBy = [ "graphical-session.target" ];
+  };
+
+  systemd.user.services.waybar = {
+    Unit = {
+      Description = "Waybar status bar";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+    };
+
+    Service = {
+      ExecStart = "${pkgs.waybar}/bin/waybar";
       Restart = "always";
       RestartSec = 2;
-      Environment = "PATH=${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.hyprland pkgs.jq ]}";
+      Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.procps pkgs.gnused ]}";
     };
 
     Install.WantedBy = [ "graphical-session.target" ];

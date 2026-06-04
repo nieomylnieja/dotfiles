@@ -41,8 +41,6 @@ nickname_candidates = ["Scout", "Probe"]
 [mcp_servers.Context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]
-[mcp_servers.atlassian]
-url = "https://mcp.atlassian.com/v1/mcp"
 [mcp_servers.deepwiki]
 url = "https://mcp.deepwiki.com/mcp"
 [mcp_servers.exa]
@@ -50,9 +48,6 @@ url = "https://mcp.exa.ai/mcp"
 [mcp_servers.grep-mcp]
 command = "uvx"
 args = ["grep-mcp"]
-[mcp_servers.nobl9]
-command = "sloctl"
-args = ["mcp"]
 [mcp_servers.pg-aiguide]
 url = "https://mcp.tigerdata.com/docs"
 [mcp_servers.sequential-thinking]

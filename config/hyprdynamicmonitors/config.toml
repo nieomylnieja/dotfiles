@@ -1,0 +1,20 @@
+[general]
+destination = "$HOME/.local/state/hyprdynamicmonitors/monitors.conf"
+debounce_time_ms = 1500
+
+[profiles.laptop_only]
+config_file = "hyprconfigs/laptop-only.conf"
+config_file_type = "static"
+
+[[profiles.laptop_only.conditions.required_monitors]]
+name = "eDP-1"
+
+[profiles.external_only]
+config_file = "hyprconfigs/external-only.conf.tmpl"
+config_file_type = "template"
+
+[[profiles.external_only.conditions.required_monitors]]
+name = "^(DP|HDMI-A)-.*"
+match_name_using_regex = true
+monitor_tag = "external"
+
