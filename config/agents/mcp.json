@@ -40,6 +40,12 @@
         "grep-mcp"
       ]
     },
+    "nobl9": {
+      "command": "sloctl",
+      "args": [
+        "mcp"
+      ]
+    },
     "exa": {
       "type": "http",
       "url": "https://mcp.exa.ai/mcp"

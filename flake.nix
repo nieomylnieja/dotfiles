@@ -7,7 +7,6 @@
     home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
     nur.url = "github:nix-community/NUR";
-    hyprdynamicmonitors.url = "github:fiffeek/hyprdynamicmonitors";
     googleworkspace-cli.url = "github:googleworkspace/cli";
   };
 
@@ -16,7 +15,6 @@
     , nixpkgs-stable
     , home-manager
     , nur
-    , hyprdynamicmonitors
     , googleworkspace-cli
     , ...
     }:
@@ -44,11 +42,7 @@
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.backupFileExtension = "backup";
-              home-manager.sharedModules = [
-                hyprdynamicmonitors.homeManagerModules.default
-              ];
               home-manager.extraSpecialArgs = {
-                hyprdynamicmonitorsPkg = hyprdynamicmonitors.packages.${system}.default;
                 googleworkspaceCliPkg = googleworkspace-cli.packages.${system}.default;
               };
               home-manager.users.mh = import ./config/home-manager/home.nix;
@@ -69,11 +63,7 @@
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.backupFileExtension = "backup";
-              home-manager.sharedModules = [
-                hyprdynamicmonitors.homeManagerModules.default
-              ];
               home-manager.extraSpecialArgs = {
-                hyprdynamicmonitorsPkg = hyprdynamicmonitors.packages.${system}.default;
                 googleworkspaceCliPkg = googleworkspace-cli.packages.${system}.default;
               };
               home-manager.users.mh = import ./config/home-manager/home.nix;

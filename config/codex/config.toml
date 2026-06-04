@@ -8,6 +8,7 @@ plan_mode_reasoning_effort = "medium"
 model_reasoning_summary = "none"
 model_verbosity = "low"
 web_search = "cached"
+suppress_unstable_features_warning = true
 
 [features]
 hooks = true
@@ -18,14 +19,14 @@ mentions_v2 = true
 [tools.web_search]
 context_size = "low"
 
-[hooks]
-[[hooks.PostToolUse]]
-matcher = "*"
-[[hooks.PostToolUse.hooks]]
-type = "command"
-command = "$HOME/.dotfiles/config/codex/scripts/compact-tool-result.sh"
-timeout = 90
-statusMessage = "Compacting large tool result"
+# [hooks]
+# [[hooks.PostToolUse]]
+# matcher = "*"
+# [[hooks.PostToolUse.hooks]]
+# type = "command"
+# command = "$HOME/.dotfiles/config/codex/scripts/compact-tool-result.sh"
+# timeout = 90
+# statusMessage = "Compacting large tool result"
 
 [agents]
 max_depth = 1

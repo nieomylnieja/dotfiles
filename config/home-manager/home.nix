@@ -1,7 +1,6 @@
 { config
 , pkgs
 , lib
-, hyprdynamicmonitorsPkg
 , googleworkspaceCliPkg
 , ...
 }:
@@ -40,7 +39,6 @@ in
   };
 
   home.packages = with pkgs; [
-    hyprdynamicmonitorsPkg
     googleworkspaceCliPkg
     anki
     alacritty
@@ -322,21 +320,21 @@ in
   # PATH is set in hyprland.conf instead.
   systemd.user.sessionVariables = sessionVariables;
 
-  systemd.user.services.hyprdynamicmonitors-prepare = {
+  systemd.user.services.hypr-monitor-policy = {
     Unit = {
-      Description = "HyprDynamicMonitors boot-time monitor cleanup";
-      Before = [ "graphical-session-pre.target" ];
+      Description = "Fail-safe Hyprland monitor policy";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
     };
+
     Service = {
-      Type = "oneshot";
-      ExecStart = "${hyprdynamicmonitorsPkg}/bin/hyprdynamicmonitors prepare --config ${config.xdg.configHome}/hyprdynamicmonitors/config.toml";
-      TimeoutStartSec = 3;
-      RemainAfterExit = true;
+      ExecStart = "${dotfilesDir}/scripts/hypr-monitor-policy --watch";
+      Restart = "always";
+      RestartSec = 2;
+      Environment = "PATH=${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.hyprland pkgs.jq ]}";
     };
-    Install.WantedBy = [
-      "default.target"
-      "graphical-session-pre.target"
-    ];
+
+    Install.WantedBy = [ "graphical-session.target" ];
   };
 
   programs.direnv = {
@@ -465,12 +463,6 @@ in
   services.dunst = {
     enable = true;
   };
-
-  # The monitor-management daemon is launched by Hyprland so it also runs in plain sessions.
-  # The prepare service above only cleans stale disable entries before the session starts.
-  # Symlink entire config dir so TUI finds themes and configs
-  xdg.configFile."hyprdynamicmonitors".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/hyprdynamicmonitors";
 
   # LLMs
   services.ollama = {
