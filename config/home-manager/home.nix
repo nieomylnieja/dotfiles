@@ -372,7 +372,10 @@ in
       ExecStart = "${pkgs.waybar}/bin/waybar";
       Restart = "always";
       RestartSec = 2;
-      Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.procps pkgs.gnused ]}";
+      Environment = [
+        "PATH=${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gawk pkgs.jq pkgs.procps ]}"
+        "XDG_DATA_DIRS=${pkgs.flameshot}/share:${pkgs.hicolor-icon-theme}/share:${homeDir}/.nix-profile/share:/etc/profiles/per-user/mh/share:/run/current-system/sw/share"
+      ];
     };
 
     Install.WantedBy = [ "graphical-session.target" ];

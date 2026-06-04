@@ -77,6 +77,9 @@ When changing NixOS or Home Manager configuration:
 - Keep `flake.nix` focused on wiring inputs, overlays, hosts, and Home Manager.
 - Do not manually edit generated hardware configuration files unless the task
   explicitly requires hardware configuration changes.
+- Do not hardcode realized `/nix/store/...` paths in tracked configuration.
+  Use Nix interpolation, profile paths, package-provided environment variables,
+  or repository-managed assets instead.
 
 When changing Go helper modules:
 

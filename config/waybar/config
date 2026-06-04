@@ -20,7 +20,11 @@
     },
 
     "tray": {
-        "spacing": 8
+        "icon-size": 16,
+        "spacing": 8,
+        "icons": {
+            "flameshot": "/etc/profiles/per-user/mh/share/icons/hicolor/48x48/apps/flameshot.png"
+        }
     },
 
     "cpu": {
@@ -28,7 +32,7 @@
     },
 
     "custom/memory": {
-        "exec": "~/.dotfiles/config/waybar/scripts/memory-info.sh",
+        "exec": "/run/current-system/sw/bin/bash /home/mh/.dotfiles/config/waybar/scripts/memory-info.sh",
         "return-type": "json",
         "interval": 5
     },

@@ -2,15 +2,18 @@
 name: pr-description
 description: |
   Use when writing, rewriting, or updating a pull request description.
-  Follow the repository's PR template when one exists, keep the result concise
-  and human-readable, explain why the change exists, and ask clarifying
-  questions before updating the PR if the rationale or context is unclear.
+  Use this skill's explicit PR template unless the user provides a different
+  template for the current task, keep the result concise and human-readable,
+  explain why the change exists, and ask clarifying questions before updating
+  the PR if the rationale or context is unclear.
 ---
 
 # PR Description
 
 Write pull request descriptions for reviewers,
 not for diff viewers.
+PR descriptions are for humans:
+make them as short as possible while still readable.
 
 The diff already shows which files changed.
 The description should explain the reason for the change,
@@ -20,7 +23,7 @@ and any important caveats.
 ## Workflow
 
 1. Verify the source of truth.
-2. Check whether a PR template exists.
+2. Check whether the user provided a task-specific PR template.
 3. Extract the why before drafting the description.
 4. Write the shortest description that gives reviewers useful context.
 
@@ -30,14 +33,15 @@ and any important caveats.
 - Reuse concrete context that already exists.
 - Do not invent product rationale, incident context, or follow-up work.
 
-## Follow the Repository Template
+## Follow the Template
 
-- If the repository provides a PR template, use its structure.
-- Keep the existing sections and headings.
-- Fill only the sections that are relevant.
-- If a section would be empty and the template does not require it,
-  omit its contents rather than adding filler.
-- Do not add extra sections unless the template clearly expects them.
+- Use the explicit PR template in this skill unless the user provides a different
+  template for the current task.
+- Keep only sections with useful content.
+- If any section is empty, remove the section header and body entirely.
+- Never keep empty headers.
+- Never write filler such as `none`, `N/A`, `not applicable`, or `no changes`.
+- Do not add extra sections except `## Breaking Changes` when needed.
 
 ## What to Write
 
@@ -48,48 +52,40 @@ and any important caveats.
 - Keep it concise.
   A short paragraph or a few bullets is usually enough.
 
-## Preferred Structure
+## PR Template
 
-When there is no stronger repository-specific template,
-use this structure:
+Use this exact template structure for PR descriptions.
+Delete sections that would be empty before returning or updating the PR:
 
 ```md
 ## Motivation
 
-Explain why this change is needed now.
-
-Describe the current problem, limitation, or risk in the existing behavior.
-Reference the current solution or state of affairs when that helps reviewers
-understand the change.
+Describe what is the motivation behind the proposed changes.
+If possible reference the current solution/state of affairs.
+This should be always provided by the user, not you.
 
 ## Summary
 
-- State the main outcome of the change.
-- Call out the reviewer-relevant behavior change or decision.
-- Note an important caveat, rollout concern, or follow-up only if it matters.
+Recap of the most important code changes.
+If the solution is more complex and requires explanation do it here.
+Unexpected things or side quests should be documented here.
+
+## Related Changes
+
+List related changes from other PRs (if any).
 
 ## Testing
 
-Describe only the meaningful verification performed beyond routine project checks.
+How was this change covered? Only units? Integration? End-to-end? Manual?
 
-Do not report standard test commands, lint runs, or CI-equivalent checks.
-Focus on concrete evidence that gives reviewers confidence the change works in
-practice.
+## Release Notes
 
-If no such verification was performed, say that explicitly.
-If verification is partial or incomplete, state the gap clearly.
+If this change should be part of the Release Notes,
+**replace this entire paragraph** with 1-3 sentences about the changes.
+
+Does this PR contain any breaking changes?
+If so, add `## Breaking Changes` header and list the introduced changes there.
 ```
-
-### Testing Section Rules
-
-- `Testing` must describe evidence, not baseline automation.
-- Do not list routine project checks such as `make test`, `go test`,
-  `npm test`, lint commands, or other expected CI checks.
-- Include reviewer-useful verification such as reproduced bug scenarios,
-  exercised user flows, integration behavior, manual validation,
-  edge cases, failure modes, or before/after observations.
-- If only routine checks were performed, say that no meaningful verification
-  beyond baseline automation was done.
 
 ## What Not to Write
 
@@ -98,6 +94,7 @@ If verification is partial or incomplete, state the gap clearly.
 - Do not pad the description with implementation trivia.
 - Do not use generic filler like "This PR updates several files".
 - Do not add AI-generation disclaimers.
+- Do not preserve template instructions in the final PR description.
 
 ## If the Why Is Unclear
 
@@ -119,8 +116,10 @@ write the description from them.
 
 - Does the first line tell the reviewer why this PR exists?
 - Did you avoid file inventories and diff narration?
-- Is the result short enough to scan quickly?
-- Does `Testing` avoid routine project checks and report only meaningful evidence?
+- Is the result as short as possible while still readable?
+- Did you remove every empty section instead of writing filler?
+- Did `Motivation` come from the user or verified existing context?
+- Does `Testing` describe the type of coverage or verification when included?
 - If the rationale was unclear, did you ask before updating?
 
 ## Coordinate With Other Skills
