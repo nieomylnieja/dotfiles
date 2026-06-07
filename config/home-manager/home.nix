@@ -167,7 +167,6 @@ in
     pamixer
     pass
     pavucontrol
-    peek
     playerctl
     pulseaudio # For pactl.
     pkgs.stable.pdm
@@ -541,7 +540,7 @@ in
     context = builtins.readFile ../agents/AGENTS.md;
   };
 
-  programs.gemini-cli = {
+  programs.antigravity-cli = {
     enable = true;
     settings = builtins.fromJSON (builtins.readFile ../gemini/settings.json);
   };
