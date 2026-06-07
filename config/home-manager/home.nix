@@ -27,6 +27,24 @@ let
     SKILLS_AGENTS = "opencode";
     OPENCODE_TUI_CONFIG = "${dotfilesDir}/config/opencode/tui.json";
   };
+  rpiImagerRootLauncher = pkgs.writeShellScriptBin "rpi-imager-wayland" ''
+    set -euo pipefail
+
+    original_uid="''${PKEXEC_UID:-1000}"
+    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$original_uid}"
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+    export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
+    export QT_QPA_PLATFORM=wayland
+    unset DISPLAY
+    ulimit -c 0
+
+    ${pkgs.rpi-imager}/bin/rpi-imager "$@"
+  '';
+  rpiImagerLauncher = pkgs.writeShellScriptBin "rpi-imager-pkexec" ''
+    set -euo pipefail
+
+    /run/wrappers/bin/pkexec --disable-internal-agent ${rpiImagerRootLauncher}/bin/rpi-imager-wayland "$@"
+  '';
 in
 {
   programs.home-manager.enable = true;
@@ -163,7 +181,8 @@ in
     kubelogin-oidc
     ripgrep
     repomix
-    # rpi-imager
+    rpi-imager
+    rpiImagerLauncher
     rustc
     kubernetes-helm
     shfmt
@@ -274,6 +293,19 @@ in
     };
   };
 
+  xdg.desktopEntries."com.raspberrypi.rpi-imager" = {
+    name = "Raspberry Pi Imager";
+    exec = "${rpiImagerLauncher}/bin/rpi-imager-pkexec";
+    icon = "${pkgs.rpi-imager}/share/icons/hicolor/scalable/apps/rpi-imager.svg";
+    comment = "Tool for writing images to SD cards for Raspberry Pi";
+    categories = [ "Utility" ];
+    mimeType = [
+      "x-scheme-handler/rpi-imager"
+      "application/vnd.raspberrypi.imager-manifest+json"
+    ];
+    startupNotify = false;
+  };
+
   xdg.configFile = {
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
@@ -325,6 +357,22 @@ in
   # User session variables for login shells and systemd/UWSM-launched programs.
   # PATH is set in hyprland.conf instead.
   systemd.user.sessionVariables = sessionVariables;
+
+  systemd.user.services.polkit-gnome-authentication-agent-1 = {
+    Unit = {
+      Description = "Polkit GNOME authentication agent";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+    };
+
+    Service = {
+      ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+
+    Install.WantedBy = [ "graphical-session.target" ];
+  };
 
   systemd.user.services."hyprdynamicmonitors-prepare" = {
     Unit = {

@@ -77,6 +77,14 @@ List related changes from other PRs (if any).
 ## Testing
 
 How was this change covered? Only units? Integration? End-to-end? Manual?
+Mention only reviewer-useful validation for this change:
+new or changed test coverage, reproduced bug scenarios, exercised user flows,
+manual checks, edge cases, or failure modes.
+Do not list mandatory project checks that CI runs anyway,
+such as formatting, linting, type checks, `just check`, `just test`,
+`go test ./...`, `npm test`, or equivalent baseline commands.
+If there is no validation beyond those mandatory checks,
+remove this section.
 
 ## Release Notes
 
@@ -95,6 +103,7 @@ If so, add `## Breaking Changes` header and list the introduced changes there.
 - Do not use generic filler like "This PR updates several files".
 - Do not add AI-generation disclaimers.
 - Do not preserve template instructions in the final PR description.
+- Do not fill `Testing` with mandatory CI-equivalent commands.
 
 ## If the Why Is Unclear
 
@@ -119,7 +128,8 @@ write the description from them.
 - Is the result as short as possible while still readable?
 - Did you remove every empty section instead of writing filler?
 - Did `Motivation` come from the user or verified existing context?
-- Does `Testing` describe the type of coverage or verification when included?
+- Does `Testing` omit mandatory CI-equivalent checks and mention only
+  reviewer-useful validation when included?
 - If the rationale was unclear, did you ask before updating?
 
 ## Coordinate With Other Skills

@@ -222,7 +222,13 @@ local function lsp_format()
     local bufnr = vim.api.nvim_get_current_buf()
     local was_modified = vim.bo[bufnr].modified
     local before = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
     vim.lsp.buf.format({ async = false })
+
+    if vim.bo[bufnr].filetype == "markdown" and vim.fn.exists(":TableTidyAll") == 2 then
+      vim.cmd("silent TableTidyAll")
+    end
+
     local after = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
     if before == after and not was_modified then
       vim.bo[bufnr].modified = false
@@ -304,15 +310,15 @@ M.setup = function()
     on_attach = get_on_attach(),
   })
 
-  servers["nobl9_language_server"] = {
-    cmd = {
-      "nobl9-language-server",
-      "-logFilePath=~/.local/state/nobl9-language-server/n9.log",
-      "-logLevel=trace",
-    },
-    filetypes = { "yaml" },
-    root_markers = { ".git" },
-  }
+  -- servers["nobl9_language_server"] = {
+  --   cmd = {
+  --     "nobl9-language-server",
+  --     "-logFilePath=~/.local/state/nobl9-language-server/n9.log",
+  --     "-logLevel=trace",
+  --   },
+  --   filetypes = { "yaml" },
+  --   root_markers = { ".git" },
+  -- }
 
   for server, config in pairs(servers) do
     vim.lsp.config(
