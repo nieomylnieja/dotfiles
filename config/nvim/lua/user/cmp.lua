@@ -5,6 +5,66 @@ require("luasnip.loaders.from_lua").load({ paths = { vim.fn.stdpath("config") ..
 luasnip.config.setup({})
 
 local go_doc_link_keyword_pattern = [[\%(\k\|\.\|/\)\+]]
+local gomod_module_keyword_pattern = [[\%(\k\|[./-]\)\+]]
+
+local gomod_module_source = {}
+
+local function gomod_module_path_from_line(line)
+  return line:match("^%s*require%s+([%w._~/-]+)%s+v")
+    or line:match("^%s*replace%s+([%w._~/-]+)%s")
+    or line:match("^%s*exclude%s+([%w._~/-]+)%s+v")
+    or line:match("^%s*([%w._~/-]+)%s+v[%w.+-]+")
+end
+
+local function gomod_read_module_paths(dir)
+  local paths = {}
+
+  for _, filename in ipairs({ "go.mod", "go.sum" }) do
+    local path = vim.fs.joinpath(dir, filename)
+    if vim.fn.filereadable(path) == 1 then
+      for _, line in ipairs(vim.fn.readfile(path)) do
+        local module_path = gomod_module_path_from_line(line)
+        if module_path and module_path:find(".", 1, true) then
+          paths[module_path] = true
+        end
+      end
+    end
+  end
+
+  return paths
+end
+
+function gomod_module_source:is_available()
+  return vim.bo.filetype == "gomod" or vim.bo.filetype == "gowork"
+end
+
+function gomod_module_source:get_keyword_pattern()
+  return gomod_module_keyword_pattern
+end
+
+function gomod_module_source:complete(_, callback)
+  local filename = vim.api.nvim_buf_get_name(0)
+  local dir = filename ~= "" and vim.fs.dirname(filename) or vim.fn.getcwd()
+  local items = {}
+
+  for module_path in pairs(gomod_read_module_paths(dir)) do
+    table.insert(items, {
+      label = module_path,
+      kind = cmp.lsp.CompletionItemKind.Module,
+    })
+  end
+
+  table.sort(items, function(a, b)
+    return a.label < b.label
+  end)
+
+  callback({
+    items = items,
+    isIncomplete = false,
+  })
+end
+
+cmp.register_source("gomod_modules", gomod_module_source)
 
 local function in_go_doc_link_context(ctx)
   if vim.bo.filetype ~= "go" then
@@ -109,6 +169,22 @@ cmp.setup.filetype("go", {
       end,
     },
     { name = "path" },
+  }),
+})
+
+cmp.setup.filetype({ "gomod", "gowork" }, {
+  sources = cmp.config.sources({
+    { name = "luasnip" },
+    { name = "gomod_modules" },
+    { name = "nvim_lsp" },
+    { name = "path" },
+    {
+      name = "buffer",
+      keyword_pattern = gomod_module_keyword_pattern,
+      option = {
+        keyword_pattern = gomod_module_keyword_pattern,
+      },
+    },
   }),
 })
 

@@ -78,8 +78,25 @@ Based on ALL the commits and changes,
 generate a concise title here
 and use the `pr-description` skill to draft the body.
 
+#### Project title policy
+
+Before applying the default title format,
+check whether the repository enforces PR title rules.
+Look for title validation in project docs and automation,
+especially `.github/workflows/`, `.github/actions/`, `Dangerfile`,
+commitlint configuration, merge queue/merge rules,
+or actions such as `semantic-pull-request`, `validate-pr-title`,
+and `pull-request-title`.
+
+If a project-specific PR title policy exists,
+follow that policy exactly and mention it in the preview.
+The local policy overrides the default format below.
+If a title check exists but the expected format is not clear,
+stop and ask for clarification instead of guessing.
+
 #### Title format
 
+Use this default only when no project-specific PR title policy exists.
 Follow this format: `<type>: <description>`
 
 - Keep under 70 characters
@@ -118,8 +135,11 @@ The `pr-description` skill owns:
 - keeping the description concise and human-readable
 - focusing on why and reviewer-relevant outcome
 - asking the user clarifying questions before updating the PR if the rationale is unclear
+- stopping before PR creation or PR body updates when user-provided motivation is missing
 
 Do not bypass that skill by inventing a body here.
+If `pr-description` requires user motivation,
+ask the user and stop until they provide it.
 
 ### Step 4: Interactive Confirmation
 
@@ -197,6 +217,8 @@ gh pr create --draft --title "..." --body "..."
 - ALWAYS wait for confirmation before creating PR
 - Check for existing PRs for the current branch before creating
 - If the rationale for the PR body is unclear, stop and ask before updating it
+- If the user has not explicitly provided motivation for the PR body,
+  stop and ask before creating or updating the PR
 
 ## Error Handling
 

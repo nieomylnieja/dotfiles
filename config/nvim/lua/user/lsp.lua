@@ -68,6 +68,7 @@ end
 local servers = {
   lua_ls = {}, -- configured via lazydev.nvim
   gopls = {
+    filetypes = { "go", "gomod", "gowork", "gotmpl" },
     init_options = {
       usePlaceholders = true,
     },

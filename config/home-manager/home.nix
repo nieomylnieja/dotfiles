@@ -199,6 +199,7 @@ in
     sops
     spotify
     starship
+    ssm-session-manager-plugin # for awscli2
     swayimg
     statix
     terraform

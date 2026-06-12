@@ -3,6 +3,7 @@
 set -euo pipefail
 
 readonly SELF_NAME="${BASH_SOURCE[0]##*/}"
+readonly STATE_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/worktree-switch"
 
 usage() {
   cat << EOF
@@ -37,7 +38,86 @@ current_worktree_root() {
   git rev-parse --show-toplevel
 }
 
-list_other_worktrees() {
+state_key_for_path() {
+  local path="$1"
+
+  printf '%s' "${path}" | sha256sum | awk '{ print $1 }'
+}
+
+last_used_marker_path() {
+  local path="$1"
+  local key
+
+  key="$(state_key_for_path "${path}")"
+  printf '%s/%s\n' "${STATE_DIR}" "${key}"
+}
+
+record_worktree_use() {
+  local path="$1"
+  local marker
+
+  marker="$(last_used_marker_path "${path}")"
+  mkdir -p "${STATE_DIR}"
+  touch -- "${marker}"
+}
+
+file_mtime_or_zero() {
+  local path="$1"
+
+  if [[ -e "${path}" || -L "${path}" ]]; then
+    stat -c '%Y' -- "${path}"
+    return
+  fi
+
+  printf '0\n'
+}
+
+max_timestamp() {
+  local current="$1"
+  local candidate="$2"
+
+  if [[ "${candidate}" =~ ^[0-9]+$ ]] && ((candidate > current)); then
+    printf '%s\n' "${candidate}"
+    return
+  fi
+
+  printf '%s\n' "${current}"
+}
+
+worktree_activity_sort_key() {
+  local path="$1"
+  local timestamp=0
+  local used=0
+  local candidate
+  local git_dir
+  local marker
+
+  marker="$(last_used_marker_path "${path}")"
+  candidate="$(file_mtime_or_zero "${marker}")"
+  timestamp="$(max_timestamp "${timestamp}" "${candidate}")"
+  if [[ "${candidate}" != "0" ]]; then
+    used=1
+  fi
+
+  candidate="$(file_mtime_or_zero "${path}")"
+  timestamp="$(max_timestamp "${timestamp}" "${candidate}")"
+
+  if candidate="$(git -C "${path}" log -1 --format='%ct' HEAD 2> /dev/null)"; then
+    timestamp="$(max_timestamp "${timestamp}" "${candidate}")"
+  fi
+
+  if git_dir="$(git -C "${path}" rev-parse --absolute-git-dir 2> /dev/null)"; then
+    candidate="$(file_mtime_or_zero "${git_dir}/HEAD")"
+    timestamp="$(max_timestamp "${timestamp}" "${candidate}")"
+
+    candidate="$(file_mtime_or_zero "${git_dir}/index")"
+    timestamp="$(max_timestamp "${timestamp}" "${candidate}")"
+  fi
+
+  printf '%s\t%s\n' "${timestamp}" "${used}"
+}
+
+list_worktree_entries() {
   local current_root="$1"
 
   git worktree list --porcelain | awk -v current="${current_root}" '
@@ -102,6 +182,24 @@ list_other_worktrees() {
   '
 }
 
+list_other_worktrees() {
+  local current_root="$1"
+  local entries
+  local path
+  local branch
+  local sort_key
+
+  entries="$(list_worktree_entries "${current_root}")"
+  [[ -n "${entries}" ]] || return 0
+
+  while IFS=$'\t' read -r path branch; do
+    [[ -n "${path}" ]] || continue
+
+    sort_key="$(worktree_activity_sort_key "${path}")"
+    printf '%s\t%s\t%s\n' "${sort_key}" "${path}" "${branch}"
+  done <<< "${entries}" | sort -t $'\t' -k1,1nr -k2,2nr -k4,4 | cut -f3-
+}
+
 select_worktree() {
   local filter="${1:-}"
   local current_root
@@ -121,8 +219,9 @@ select_worktree() {
     --ansi
     --delimiter=$'\t'
     "--with-nth=2"
+    --no-sort
     --prompt='Worktree > '
-    --preview='printf "Path: %s\n\n" {1}; git -C {1} status --short --branch; printf "\n"; git -C {1} log --oneline --decorate --color=always -n 20'
+    --preview="path={1}; printf \"Path: %s\\n\\n\" \"\$path\"; git -C \"\$path\" diff --no-color HEAD -- | bat --language=diff --color=always --style=plain --paging=never; printf \"\\n\"; git -C \"\$path\" log --oneline --decorate --color=always -n 20"
     --preview-window='right:70%'
     --select-1
     --exit-0
@@ -180,7 +279,14 @@ main() {
 
   require_command git || return 1
   require_command fzf || return 1
+  require_command bat || return 1
   require_command awk || return 1
+  require_command sha256sum || return 1
+  require_command stat || return 1
+  require_command sort || return 1
+  require_command cut || return 1
+  require_command mkdir || return 1
+  require_command touch || return 1
 
   if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
     log_error "Not inside a Git worktree"
@@ -191,6 +297,7 @@ main() {
     return 1
   fi
 
+  record_worktree_use "${selected_worktree}"
   printf '%s\n' "${selected_worktree}"
   return 0
 }

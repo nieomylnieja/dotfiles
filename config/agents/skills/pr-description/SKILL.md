@@ -4,8 +4,8 @@ description: |
   Use when writing, rewriting, or updating a pull request description.
   Use this skill's explicit PR template unless the user provides a different
   template for the current task, keep the result concise and human-readable,
-  explain why the change exists, and ask clarifying questions before updating
-  the PR if the rationale or context is unclear.
+  explain why the change exists, and ask the user for motivation before updating
+  the PR when the user has not explicitly provided it.
 ---
 
 # PR Description
@@ -24,7 +24,7 @@ and any important caveats.
 
 1. Verify the source of truth.
 2. Check whether the user provided a task-specific PR template.
-3. Extract the why before drafting the description.
+3. Extract the user-provided why before drafting the description.
 4. Write the shortest description that gives reviewers useful context.
 
 ## Verify the Source of Truth
@@ -32,6 +32,28 @@ and any important caveats.
 - Review the branch diff, commits, linked issue, and existing PR metadata first.
 - Reuse concrete context that already exists.
 - Do not invent product rationale, incident context, or follow-up work.
+- Do not treat implementation details, commit messages, branch names,
+  or inferred benefits as PR motivation.
+
+## Motivation Gate
+
+`## Motivation` must be based on motivation explicitly supplied by the user,
+an issue or ticket referenced by the user,
+or an existing PR description written before your current edit.
+
+If the user only described what to build,
+what changed,
+or which files to edit,
+that is not enough motivation.
+Stop and ask for the missing motivation before writing or updating the PR body.
+
+Ask one concise question, for example:
+
+```text
+What motivation should I put in the PR?
+The diff shows what changed, but I need the user-facing or reviewer-facing reason
+before I update `## Motivation`.
+```
 
 ## Follow the Template
 
@@ -48,6 +70,10 @@ and any important caveats.
 - Lead with why this change exists.
 - State the reviewer-relevant outcome:
   behavior change, bug fix, risk reduction, or operational impact.
+- Use completed tense for PR body descriptions:
+  write `Added`, `Updated`, `Removed`, `Fixed`, or similar past-tense verbs.
+  Do not use imperative verbs like `Add`, `Update`, `Remove`, or `Fix`
+  in `Summary`, `Testing`, or `Release Notes`.
 - Mention constraints, rollout notes, or follow-up only if they matter to review.
 - Keep it concise.
   A short paragraph or a few bullets is usually enough.
@@ -62,13 +88,15 @@ Delete sections that would be empty before returning or updating the PR:
 
 Describe what is the motivation behind the proposed changes.
 If possible reference the current solution/state of affairs.
-This should be always provided by the user, not you.
+This must be explicitly provided by the user or by a user-referenced issue/ticket.
+Do not infer it from the diff.
 
 ## Summary
 
 Recap of the most important code changes.
 If the solution is more complex and requires explanation do it here.
 Unexpected things or side quests should be documented here.
+Use completed tense, for example `Added ...`, not `Add ...`.
 
 ## Related Changes
 
@@ -85,11 +113,13 @@ such as formatting, linting, type checks, `just check`, `just test`,
 `go test ./...`, `npm test`, or equivalent baseline commands.
 If there is no validation beyond those mandatory checks,
 remove this section.
+Use completed tense for test coverage statements.
 
 ## Release Notes
 
 If this change should be part of the Release Notes,
 **replace this entire paragraph** with 1-3 sentences about the changes.
+Use completed tense.
 
 Does this PR contain any breaking changes?
 If so, add `## Breaking Changes` header and list the introduced changes there.
@@ -110,6 +140,10 @@ If so, add `## Breaking Changes` header and list the introduced changes there.
 Do not guess.
 Do not update the PR description yet.
 
+Treat motivation as unclear whenever it was not explicitly provided by the user
+or by a user-referenced issue/ticket,
+even if the diff makes the technical benefit obvious.
+
 Ask the user the minimum set of questions needed to recover the missing context.
 Focus on questions like:
 
@@ -127,7 +161,9 @@ write the description from them.
 - Did you avoid file inventories and diff narration?
 - Is the result as short as possible while still readable?
 - Did you remove every empty section instead of writing filler?
-- Did `Motivation` come from the user or verified existing context?
+- Does the PR body use completed tense consistently?
+- Did `Motivation` come from the user or a user-referenced issue/ticket?
+- If not, did you stop before updating the PR and ask the user?
 - Does `Testing` omit mandatory CI-equivalent checks and mention only
   reviewer-useful validation when included?
 - If the rationale was unclear, did you ask before updating?
