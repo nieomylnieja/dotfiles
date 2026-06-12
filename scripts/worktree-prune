@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly PROG="${0##*/}"
+
+usage() {
+  cat << EOF
+Usage: ${PROG} [OPTION]...
+Remove Git worktrees whose local branch has already been merged.
+
+Options:
+  -b, --base REF       compare worktree branches against REF
+                       (default: origin/HEAD, or current branch)
+  -n, --dry-run        print stale worktrees without removing them
+  -f, --force          remove dirty worktrees
+  -h, --help           display this help and exit
+
+Exit status:
+  0  success
+  1  general error
+  2  usage error (invalid arguments)
+EOF
+}
+
+log() {
+  printf '%s: %s\n' "${PROG}" "$*" >&2
+}
+
+fatal() {
+  log "ERROR: $1"
+  exit "${2:-1}"
+}
+
+require_command() {
+  local cmd="$1"
+
+  if ! command -v "${cmd}" > /dev/null 2>&1; then
+    fatal "Missing required command: ${cmd}"
+  fi
+}
+
+repository_root() {
+  git rev-parse --show-toplevel
+}
+
+default_base_ref() {
+  local current_branch
+  local remote_head
+
+  if remote_head="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD)"; then
+    printf '%s\n' "${remote_head}"
+    return 0
+  fi
+
+  current_branch="$(git branch --show-current)"
+  if [[ -z "${current_branch}" ]]; then
+    fatal "Cannot determine default base ref from detached HEAD; pass --base REF"
+  fi
+
+  printf '%s\n' "${current_branch}"
+}
+
+verify_base_ref() {
+  local base_ref="$1"
+
+  if ! git rev-parse --verify --quiet "${base_ref}^{commit}" > /dev/null; then
+    fatal "Base ref does not resolve to a commit: ${base_ref}"
+  fi
+}
+
+list_worktrees() {
+  local current_root="$1"
+
+  git worktree list --porcelain | awk -v current="${current_root}" '
+    function reset_entry() {
+      path = ""
+      branch = ""
+      detached = 0
+      bare = 0
+      locked = 0
+    }
+
+    function flush_entry() {
+      if (path == "" || path == current || detached || bare || locked) {
+        reset_entry()
+        return
+      }
+
+      if (branch ~ /^refs\/heads\//) {
+        sub(/^refs\/heads\//, "", branch)
+        printf "%s\t%s\n", path, branch
+      }
+
+      reset_entry()
+    }
+
+    /^worktree / {
+      flush_entry()
+      path = substr($0, 10)
+      next
+    }
+
+    /^branch / {
+      branch = substr($0, 8)
+      next
+    }
+
+    /^detached$/ {
+      detached = 1
+      next
+    }
+
+    /^bare$/ {
+      bare = 1
+      next
+    }
+
+    /^locked/ {
+      locked = 1
+      next
+    }
+
+    /^$/ {
+      flush_entry()
+    }
+
+    END {
+      flush_entry()
+    }
+  '
+}
+
+branch_is_merged() {
+  local branch="$1"
+  local base_ref="$2"
+
+  git merge-base --is-ancestor "${branch}" "${base_ref}"
+}
+
+worktree_is_clean() {
+  local path="$1"
+
+  [[ -z "$(git -C "${path}" status --porcelain)" ]]
+}
+
+remove_worktree() {
+  local path="$1"
+  local branch="$2"
+  local dry_run="$3"
+  local force="$4"
+  local -a remove_args=(worktree remove)
+
+  if [[ "${force}" == "1" ]]; then
+    remove_args+=(--force)
+  fi
+
+  if [[ "${dry_run}" == "1" ]]; then
+    printf 'stale\t%s\t%s\n' "${branch}" "${path}"
+    return 0
+  fi
+
+  git "${remove_args[@]}" -- "${path}"
+  log "Removed stale worktree for ${branch}: ${path}"
+}
+
+prune_worktrees() {
+  local base_ref="$1"
+  local dry_run="$2"
+  local force="$3"
+  local current_root
+  local entries
+  local path
+  local branch
+  local removed=0
+  local skipped_dirty=0
+
+  current_root="$(repository_root)"
+  entries="$(list_worktrees "${current_root}")"
+
+  if [[ -z "${entries}" ]]; then
+    log "No removable worktrees found"
+    return 0
+  fi
+
+  while IFS=$'\t' read -r path branch; do
+    [[ -z "${path}" || -z "${branch}" ]] && continue
+
+    if ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+      log "Skipping ${path}; local branch no longer exists: ${branch}"
+      continue
+    fi
+
+    if ! branch_is_merged "${branch}" "${base_ref}"; then
+      continue
+    fi
+
+    if [[ "${force}" != "1" ]] && ! worktree_is_clean "${path}"; then
+      log "Skipping dirty stale worktree for ${branch}: ${path}"
+      skipped_dirty=$((skipped_dirty + 1))
+      continue
+    fi
+
+    remove_worktree "${path}" "${branch}" "${dry_run}" "${force}"
+    removed=$((removed + 1))
+  done <<< "${entries}"
+
+  if [[ "${dry_run}" == "1" ]]; then
+    log "Stale worktrees found: ${removed}; dirty skipped: ${skipped_dirty}"
+  else
+    log "Stale worktrees removed: ${removed}; dirty skipped: ${skipped_dirty}"
+  fi
+}
+
+main() {
+  local base_ref=""
+  local dry_run=0
+  local force=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -b | --base)
+        [[ $# -lt 2 ]] && fatal "--base requires an argument" 2
+        base_ref="$2"
+        shift 2
+        ;;
+      --base=*)
+        base_ref="${1#*=}"
+        shift
+        ;;
+      -n | --dry-run)
+        dry_run=1
+        shift
+        ;;
+      -f | --force)
+        force=1
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        fatal "Unknown option: $1" 2
+        ;;
+      *)
+        fatal "Unexpected argument: $1" 2
+        ;;
+    esac
+  done
+
+  [[ $# -gt 0 ]] && fatal "Unexpected argument: $1" 2
+
+  require_command awk
+  require_command git
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    fatal "Not inside a Git worktree"
+  fi
+
+  if [[ -z "${base_ref}" ]]; then
+    base_ref="$(default_base_ref)"
+  fi
+
+  verify_base_ref "${base_ref}"
+  prune_worktrees "${base_ref}" "${dry_run}" "${force}"
+}
+
+main "$@"

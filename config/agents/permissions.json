@@ -117,7 +117,7 @@
     },
     "git-worktrees": {
       "bash": {
-        "*scripts/worktree-setup*": "allow",
+        "*scripts/worktree-create*": "allow",
         "git worktree *": "allow"
       }
     },

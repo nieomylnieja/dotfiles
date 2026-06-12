@@ -58,7 +58,7 @@
 	c = !llmcommit
 	cp = !llmcommit && git push
 	test = "!echo \"^$(pwd)$\""
-	worktree-setup = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-setup\" \"$@\"; }; f"
+	worktree-create = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-create\" \"$@\"; }; f"
 	worktree-switch = "!f() { script_root=\"${DOTFILES:-$(git rev-parse --show-toplevel)}\"; \"$script_root/scripts/worktree-switch\" \"$@\"; }; f"
 
 [interactive]

@@ -75,6 +75,11 @@ alias cp="cp -i"
 alias mv='mv -i'
 alias rm='rm -I'
 
+# worktree mamangement
+alias wc="worktree-create"
+alias wp="worktree-prune"
+alias ws="worktree-switch"
+
 # Functions
 source "${DOTFILES}/config/bash/functions"
 
