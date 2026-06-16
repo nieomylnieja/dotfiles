@@ -59,6 +59,7 @@ in
   home.packages = with pkgs; [
     googleworkspaceCliPkg
     anki
+    antigravity
     alacritty
     (pkgs.symlinkJoin {
       name = "agent-browser";
@@ -361,17 +362,21 @@ in
   systemd.user.services.polkit-gnome-authentication-agent-1 = {
     Unit = {
       Description = "Polkit GNOME authentication agent";
-      PartOf = [ "graphical-session.target" ];
-      After = [ "graphical-session.target" ];
     };
 
     Service = {
       ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
       Restart = "on-failure";
       RestartSec = 5;
+      Environment = [
+        "XDG_CURRENT_DESKTOP=Hyprland"
+        "XDG_RUNTIME_DIR=%t"
+        "XDG_SESSION_TYPE=wayland"
+        "WAYLAND_DISPLAY=wayland-1"
+      ];
     };
 
-    Install.WantedBy = [ "graphical-session.target" ];
+    Install.WantedBy = [ "default.target" ];
   };
 
   systemd.user.services."hyprdynamicmonitors-prepare" = {
