@@ -59,7 +59,6 @@ in
   home.packages = with pkgs; [
     googleworkspaceCliPkg
     anki
-    antigravity
     alacritty
     (pkgs.symlinkJoin {
       name = "agent-browser";
@@ -88,6 +87,7 @@ in
     cliphist
     csvkit
     codex-acp
+    ddcutil
     delta
     diffnav
     direnv
@@ -278,6 +278,13 @@ in
 
   programs.prismlauncher = {
     enable = true;
+  };
+
+  programs.cursor = {
+    enable = true;
+    argvSettings = {
+      password-store = "gnome-libsecret";
+    };
   };
 
   xdg.desktopEntries.slack = {
@@ -518,6 +525,8 @@ in
     };
   };
 
+  services.gnome-keyring.enable = true;
+
   programs.mcp = {
     enable = true;
     servers = (builtins.fromJSON (builtins.readFile ../agents/mcp.json)).mcpServers;
@@ -533,9 +542,6 @@ in
 
   programs.opencode = {
     enable = true;
-    package = pkgs.writeShellScriptBin "opencode" ''
-      exec /home/mh/projects/opencode/packages/opencode/dist/opencode-linux-x64/bin/opencode "$@"
-    '';
     enableMcpIntegration = true;
     settings = builtins.fromJSON (builtins.readFile ../opencode/opencode.json);
     context = ../agents/AGENTS.md;
@@ -544,11 +550,6 @@ in
   programs.codex = {
     enable = true;
     context = builtins.readFile ../agents/AGENTS.md;
-  };
-
-  programs.antigravity-cli = {
-    enable = true;
-    settings = builtins.fromJSON (builtins.readFile ../gemini/settings.json);
   };
 
   programs.go = {

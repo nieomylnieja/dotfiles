@@ -1,43 +1,298 @@
 #!/usr/bin/env bash
 
-if [ "$#" -ne 2 ]; then
-  echo >&2 "invalid number of arguments, provide exactly 2 --> <DIRECTION> <STEP>"
-  echo >&2 "Usage: brightness-wayland <up|down|set> <percentage>"
-  exit 1
-fi
+set -euo pipefail
 
-DIRECTION="$1"
-STEP="$2"
+readonly PROG="${0##*/}"
+readonly DDC_BRIGHTNESS_CODE=10
 
-if ! command -v brightnessctl &> /dev/null; then
-  echo >&2 "brightnessctl not found. Install with: nix-shell -p brightnessctl"
-  exit 1
-fi
+usage() {
+  cat << EOF
+Usage: ${PROG} <up|down|set> <percentage>
+       ${PROG} get
+Control laptop backlight and external monitor brightness.
 
-case $DIRECTION in
-  up)
-    brightnessctl set "${STEP}%+"
-    ;;
-  down)
-    brightnessctl set "${STEP}%-"
-    ;;
-  set)
-    brightnessctl set "${STEP}%"
-    ;;
-  *)
-    echo >&2 "$DIRECTION is invalid value for DIRECTION, should be one of {up, down, set}"
-    exit 1
-    ;;
-esac
+Commands:
+  up PERCENTAGE    increase brightness
+  down PERCENTAGE  decrease brightness
+  set PERCENTAGE   set brightness
+  get              print current average brightness percentage
+  -h, --help       display this help and exit
 
-current_brightness=$(brightnessctl get)
-max_brightness=$(brightnessctl max)
-percentage=$((current_brightness * 100 / max_brightness))
+Exit status:
+  0  success
+  1  operational error
+  2  usage error
+EOF
+}
 
-if command -v notify-send &> /dev/null; then
-  notify-send -t 2000 -h string:x-dunst-stack-tag:brightness -h int:value:$percentage "Brightness" "${percentage}%"
-fi
+log() { echo "${PROG}: $*" >&2; }
+warn() { log "WARNING: $*"; }
+fatal() {
+  log "ERROR: $1"
+  exit "${2:-1}"
+}
 
-echo "Brightness: ${percentage}%"
+lock_file() {
+  local lock_dir="${XDG_RUNTIME_DIR:-/tmp}"
 
-exit 0
+  if [[ ! -d "${lock_dir}" || ! -w "${lock_dir}" ]]; then
+    lock_dir="/tmp"
+  fi
+
+  echo "${lock_dir}/${PROG}-${UID}.lock"
+}
+
+acquire_change_lock() {
+  local path
+
+  command -v flock > /dev/null 2>&1 || return 0
+
+  path="$(lock_file)"
+  exec 9> "${path}" || fatal "cannot open lock file: ${path}"
+
+  if ! flock -n 9; then
+    warn "brightness change already in progress; skipping"
+    exit 0
+  fi
+}
+
+is_percentage() {
+  local value="$1"
+
+  [[ "${value}" =~ ^[0-9]+$ ]] || return 1
+  value="$((10#${value}))"
+  ((value >= 0 && value <= 100))
+}
+
+has_backlight() {
+  command -v brightnessctl > /dev/null 2>&1 || return 1
+  brightnessctl --class=backlight info > /dev/null 2>&1
+}
+
+set_backlight() {
+  local direction="$1"
+  local step="$2"
+
+  case "${direction}" in
+    up)
+      brightnessctl --class=backlight set "${step}%+" > /dev/null
+      ;;
+    down)
+      brightnessctl --class=backlight set "${step}%-" > /dev/null
+      ;;
+    set)
+      brightnessctl --class=backlight set "${step}%" > /dev/null
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+backlight_percentage() {
+  local current_brightness
+  local max_brightness
+
+  current_brightness="$(brightnessctl --class=backlight get)"
+  max_brightness="$(brightnessctl --class=backlight max)"
+
+  ((max_brightness > 0)) || return 1
+  echo $((current_brightness * 100 / max_brightness))
+}
+
+ddc_display_ids() {
+  command -v ddcutil > /dev/null 2>&1 || return 0
+  ddcutil detect --brief 2> /dev/null | sed -nE 's/^[[:space:]]*Display[[:space:]]+([0-9]+)$/\1/p'
+}
+
+ddc_values() {
+  local display_id="$1"
+  local output
+
+  output="$(ddcutil --display "${display_id}" getvcp "${DDC_BRIGHTNESS_CODE}" 2> /dev/null)" || return 1
+
+  if [[ "${output}" =~ current[[:space:]]+value[[:space:]]*=[[:space:]]*([0-9]+),[[:space:]]+max[[:space:]]+value[[:space:]]*=[[:space:]]*([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    return 0
+  fi
+
+  return 1
+}
+
+clamp() {
+  local value="$1"
+  local min="$2"
+  local max="$3"
+
+  if ((value < min)); then
+    echo "${min}"
+  elif ((value > max)); then
+    echo "${max}"
+  else
+    echo "${value}"
+  fi
+}
+
+set_ddc_display() {
+  local display_id="$1"
+  local direction="$2"
+  local step="$3"
+  local current_value
+  local max_value
+  local next_value
+
+  read -r current_value max_value < <(ddc_values "${display_id}") || return 1
+  ((max_value > 0)) || return 1
+
+  case "${direction}" in
+    up)
+      next_value="$((current_value + (step * max_value / 100)))"
+      ;;
+    down)
+      next_value="$((current_value - (step * max_value / 100)))"
+      ;;
+    set)
+      next_value="$((step * max_value / 100))"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+
+  next_value="$(clamp "${next_value}" 0 "${max_value}")"
+  ddcutil --display "${display_id}" setvcp "${DDC_BRIGHTNESS_CODE}" "${next_value}" > /dev/null
+}
+
+set_ddc_displays() {
+  local direction="$1"
+  local step="$2"
+  local display_id
+  local changed=0
+  local failed=0
+
+  command -v ddcutil > /dev/null 2>&1 || return 1
+
+  while IFS= read -r display_id; do
+    if set_ddc_display "${display_id}" "${direction}" "${step}"; then
+      ((changed += 1))
+    else
+      ((failed += 1))
+    fi
+  done < <(ddc_display_ids)
+
+  ((failed == 0)) || warn "failed to control ${failed} DDC display(s)"
+  ((changed > 0))
+}
+
+ddc_percentage() {
+  local display_id="$1"
+  local current_value
+  local max_value
+
+  read -r current_value max_value < <(ddc_values "${display_id}") || return 1
+  ((max_value > 0)) || return 1
+  echo $((current_value * 100 / max_value))
+}
+
+brightness_percentages() {
+  local display_id
+  local percentage
+
+  if has_backlight; then
+    backlight_percentage
+  fi
+
+  while IFS= read -r display_id; do
+    percentage="$(ddc_percentage "${display_id}")" || continue
+    echo "${percentage}"
+  done < <(ddc_display_ids)
+}
+
+average_brightness() {
+  local percentage
+  local total=0
+  local count=0
+
+  while IFS= read -r percentage; do
+    total="$((total + percentage))"
+    ((count += 1))
+  done < <(brightness_percentages)
+
+  ((count > 0)) || return 1
+  echo $((total / count))
+}
+
+notify_brightness() {
+  local percentage="$1"
+
+  command -v notify-send > /dev/null 2>&1 || return 0
+  notify-send -t 2000 \
+    -h string:x-dunst-stack-tag:brightness \
+    -h int:value:"${percentage}" \
+    "Brightness" \
+    "${percentage}%"
+}
+
+main() {
+  local direction="${1:-}"
+  local step="${2:-}"
+  local backlight_changed=0
+  local changed=0
+  local percentage=""
+
+  case "${direction}" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    get)
+      (($# == 1)) || fatal "get does not accept a percentage argument" 2
+      average_brightness || fatal "no controllable brightness devices found"
+      exit 0
+      ;;
+    up | down | set)
+      (($# == 2)) || fatal "${direction} requires a percentage argument" 2
+      is_percentage "${step}" || fatal "percentage must be an integer between 0 and 100" 2
+      ;;
+    "")
+      usage >&2
+      exit 2
+      ;;
+    *)
+      fatal "${direction} is invalid; expected one of: up, down, set, get" 2
+      ;;
+  esac
+
+  acquire_change_lock
+
+  if has_backlight; then
+    set_backlight "${direction}" "${step}"
+    backlight_changed=1
+    changed=1
+  elif ! command -v brightnessctl > /dev/null 2>&1; then
+    warn "brightnessctl not found; laptop backlight will be skipped"
+  fi
+
+  if set_ddc_displays "${direction}" "${step}"; then
+    changed=1
+  elif ! command -v ddcutil > /dev/null 2>&1; then
+    warn "ddcutil not found; external monitors will be skipped"
+  fi
+
+  ((changed == 1)) || fatal "no controllable brightness devices found"
+
+  if ((backlight_changed == 1)); then
+    percentage="$(backlight_percentage || echo "${step}")"
+  elif [[ "${direction}" == "set" ]]; then
+    percentage="${step}"
+  fi
+
+  if [[ -n "${percentage}" ]]; then
+    notify_brightness "${percentage}"
+    echo "Brightness: ${percentage}%"
+  else
+    echo "Brightness changed"
+  fi
+}
+
+main "$@"

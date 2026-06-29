@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,22 +26,9 @@ var baseSystemPrompt = template.Must(
 const (
 	defaultOpenCodeModel           = "openai/gpt-5.4"
 	defaultOpenCodeReasoningEffort = "low"
-	defaultOpenCodeTextVerbosity   = "medium"
 	opencodePromptName             = "commit-prompt.md"
 	opencodeRunMessage             = "Read the attached file and respond with only the commit message text."
 )
-
-var isolatedOpenCodeFlags = []string{
-	"OPENCODE_DISABLE_AUTOUPDATE=1",
-	"OPENCODE_DISABLE_AUTOCOMPACT=1",
-	"OPENCODE_DISABLE_CLAUDE_CODE=1",
-	"OPENCODE_DISABLE_DEFAULT_PLUGINS=1",
-	"OPENCODE_DISABLE_EXTERNAL_SKILLS=1",
-	"OPENCODE_DISABLE_LSP_DOWNLOAD=1",
-	"OPENCODE_DISABLE_PROJECT_CONFIG=1",
-	"OPENCODE_DISABLE_PRUNE=1",
-	"OPENCODE_PURE=1",
-}
 
 // promptData holds all template variables for the system prompt.
 type promptData struct {
@@ -59,7 +44,7 @@ type LLMClient interface {
 	ModelName() string
 }
 
-// OpenCodeClient implements LLMClient through an isolated opencode CLI invocation.
+// OpenCodeClient implements LLMClient through the opencode CLI.
 type OpenCodeClient struct {
 	model    string
 	overview string
@@ -68,7 +53,7 @@ type OpenCodeClient struct {
 // NewOpenCodeClient creates an OpenCodeClient.
 func NewOpenCodeClient() *OpenCodeClient {
 	return &OpenCodeClient{
-		model:    resolveOpenCodeModel(),
+		model:    defaultOpenCodeModel,
 		overview: loadSkillOverview(),
 	}
 }
@@ -145,28 +130,7 @@ func (c *OpenCodeClient) callOpenCode(ctx context.Context, prompt string) (strin
 		_ = os.Remove(promptPath)
 	}()
 
-	sandboxPath, err := createOpenCodeSandbox()
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = os.RemoveAll(sandboxPath)
-	}()
-
-	baseEnv := os.Environ()
-	env := isolatedOpenCodeEnv(baseEnv, sandboxPath)
-	if err := writeOpenCodeConfig(env, c.model); err != nil {
-		return "", err
-	}
-	if err := copyOpenCodeAuth(baseEnv, env); err != nil {
-		return "", err
-	}
-	if err := validateOpenCodeCredentials(c.model, env); err != nil {
-		return "", err
-	}
-
 	cmd := exec.CommandContext(ctx, "opencode", opencodeArgs(c.model, promptPath)...)
-	cmd.Env = env
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -208,13 +172,6 @@ func (c *OpenCodeClient) cleanResponse(response string) string {
 	return strings.TrimSpace(strings.Join(cleanedLines, "\n"))
 }
 
-func resolveOpenCodeModel() string {
-	if model := strings.TrimSpace(os.Getenv("LLMCOMMIT_OPENCODE_MODEL")); model != "" {
-		return model
-	}
-	return defaultOpenCodeModel
-}
-
 func writePromptFile(prompt string) (string, error) {
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
 	pattern := fmt.Sprintf("llmcommit-%s-*-%s", timestamp, opencodePromptName)
@@ -236,203 +193,13 @@ func writePromptFile(prompt string) (string, error) {
 	return path, nil
 }
 
-func writeOpenCodeConfig(env []string, model string) error {
-	provider, modelID, ok := openCodeModelOptions(model)
-	if !ok {
-		return nil
-	}
-
-	configPath := filepath.Join(envValue(env, "XDG_CONFIG_HOME"), "opencode", "opencode.json")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		return fmt.Errorf("creating isolated opencode config directory: %w", err)
-	}
-
-	config := map[string]any{
-		"$schema": "https://opencode.ai/config.json",
-		"provider": map[string]any{
-			provider: map[string]any{
-				"models": map[string]any{
-					modelID: map[string]any{
-						"options": map[string]any{
-							"textVerbosity": defaultOpenCodeTextVerbosity,
-						},
-						"variants": map[string]any{
-							defaultOpenCodeReasoningEffort: map[string]any{
-								"reasoningEffort": defaultOpenCodeReasoningEffort,
-								"textVerbosity":   defaultOpenCodeTextVerbosity,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	content, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encoding isolated opencode config: %w", err)
-	}
-	content = append(content, '\n')
-
-	if err := os.WriteFile(configPath, content, 0o600); err != nil {
-		return fmt.Errorf("writing isolated opencode config: %w", err)
-	}
-
-	return nil
-}
-
-func createOpenCodeSandbox() (string, error) {
-	path, err := os.MkdirTemp("", "llmcommit-opencode-*")
-	if err != nil {
-		return "", fmt.Errorf("creating temporary opencode sandbox: %w", err)
-	}
-	return path, nil
-}
-
-func isolatedOpenCodeEnv(base []string, sandboxPath string) []string {
-	env := make([]string, 0, len(base)+len(isolatedOpenCodeFlags)+5)
-
-	for _, item := range base {
-		key, _, _ := strings.Cut(item, "=")
-		switch {
-		case strings.HasPrefix(key, "OPENCODE_"):
-			continue
-		case key == "XDG_CONFIG_HOME":
-			continue
-		case key == "XDG_DATA_HOME":
-			continue
-		case key == "XDG_STATE_HOME":
-			continue
-		}
-		env = append(env, item)
-	}
-
-	env = append(env,
-		"XDG_CONFIG_HOME="+filepath.Join(sandboxPath, "config"),
-		"XDG_DATA_HOME="+filepath.Join(sandboxPath, "data"),
-		"XDG_STATE_HOME="+filepath.Join(sandboxPath, "state"),
-		"OPENCODE_MODELS_PATH="+filepath.Join(openCodeCacheDir(base), "opencode", "models.json"),
-		"OPENCODE_TEST_HOME="+filepath.Join(sandboxPath, "home"),
-	)
-	env = append(env, isolatedOpenCodeFlags...)
-
-	return env
-}
-
-func copyOpenCodeAuth(base []string, isolated []string) error {
-	sourcePath := filepath.Join(openCodeDataDir(base), "opencode", "auth.json")
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("opening opencode auth file: %w", err)
-	}
-	defer func() {
-		_ = source.Close()
-	}()
-
-	targetPath := filepath.Join(envValue(isolated, "XDG_DATA_HOME"), "opencode", "auth.json")
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
-		return fmt.Errorf("creating isolated opencode auth directory: %w", err)
-	}
-
-	target, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("creating isolated opencode auth file: %w", err)
-	}
-	defer func() {
-		_ = target.Close()
-	}()
-
-	if _, err := io.Copy(target, source); err != nil {
-		return fmt.Errorf("copying opencode auth file: %w", err)
-	}
-
-	return nil
-}
-
-func validateOpenCodeCredentials(model string, env []string) error {
-	provider, _, ok := strings.Cut(model, "/")
-	if !ok {
-		return nil
-	}
-
-	switch provider {
-	case "openai":
-		if envValue(env, "OPENAI_API_KEY") == "" && !hasOpenCodeAuthProvider(env, provider) {
-			return fmt.Errorf(
-				"running opencode in isolated mode with %s requires OPENAI_API_KEY or saved opencode auth",
-				model,
-			)
-		}
-	}
-
-	return nil
-}
-
-func hasOpenCodeAuthProvider(env []string, provider string) bool {
-	authPath := filepath.Join(envValue(env, "XDG_DATA_HOME"), "opencode", "auth.json")
-	content, err := os.ReadFile(authPath)
-	if err != nil {
-		return false
-	}
-
-	var auth map[string]json.RawMessage
-	if err := json.Unmarshal(content, &auth); err != nil {
-		return false
-	}
-
-	_, ok := auth[provider]
-	return ok
-}
-
-func openCodeDataDir(env []string) string {
-	if dataDir := envValue(env, "XDG_DATA_HOME"); dataDir != "" {
-		return dataDir
-	}
-	if home := envValue(env, "HOME"); home != "" {
-		return filepath.Join(home, ".local", "share")
-	}
-	return filepath.Join(os.TempDir(), "share")
-}
-
-func openCodeCacheDir(env []string) string {
-	if cacheDir := envValue(env, "XDG_CACHE_HOME"); cacheDir != "" {
-		return cacheDir
-	}
-	if home := envValue(env, "HOME"); home != "" {
-		return filepath.Join(home, ".cache")
-	}
-	if cacheDir, err := os.UserCacheDir(); err == nil {
-		return cacheDir
-	}
-	return filepath.Join(os.TempDir(), "cache")
-}
-
-func envValue(env []string, key string) string {
-	prefix := key + "="
-	for _, item := range env {
-		if strings.HasPrefix(item, prefix) {
-			return strings.TrimPrefix(item, prefix)
-		}
-	}
-	return ""
-}
-
-func openCodeModelOptions(model string) (string, string, bool) {
+func isOpenAIGPT5Model(model string) bool {
 	provider, modelID, ok := strings.Cut(model, "/")
 	if !ok {
-		return "", "", false
-	}
-	if provider != "openai" {
-		return "", "", false
-	}
-	if !strings.HasPrefix(modelID, "gpt-5") {
-		return "", "", false
+		return strings.HasPrefix(model, "gpt-5")
 	}
 
-	return provider, modelID, true
+	return provider == "openai" && strings.HasPrefix(modelID, "gpt-5")
 }
 
 func opencodeArgs(model string, promptPath string) []string {
@@ -442,7 +209,7 @@ func opencodeArgs(model string, promptPath string) []string {
 		"--model",
 		model,
 	}
-	if _, _, ok := openCodeModelOptions(model); ok {
+	if isOpenAIGPT5Model(model) {
 		args = append(args, "--variant", defaultOpenCodeReasoningEffort)
 	}
 

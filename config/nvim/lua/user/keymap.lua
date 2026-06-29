@@ -96,6 +96,18 @@ map("n", "<leader>glb", "", {
     require("user.git-permalink").open_line_commit()
   end,
 })
+map("n", "<leader>gll", function()
+  local file = vim.fn.expand("%:.")
+  if file == "" then
+    vim.notify("No file name for current buffer", vim.log.levels.WARN)
+    return
+  end
+
+  local reference = ("%s:%d"):format(file, vim.fn.line("."))
+  vim.fn.setreg("*", reference)
+  vim.fn.setreg("+", reference)
+  vim.notify("Copied " .. reference)
+end, { desc = "Copy relative file path and line" })
 
 -- spelling
 map("n", "z=", "<cmd>:lua require'telescope.builtin'.spell_suggest{}<cr>", { desc = "Spelling suggestions" })

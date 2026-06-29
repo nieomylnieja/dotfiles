@@ -118,6 +118,8 @@
 
   # PAM for hyprlock
   security.pam.services.hyprlock = { };
+  security.pam.services.sddm.enableGnomeKeyring = true;
+  services.gnome.gnome-keyring.enable = true;
 
   # XDG portal for screen sharing, file dialogs, etc.
   # Side note: without this explicit configuration (although hyprland provides it),
@@ -210,6 +212,8 @@
   # Bluetooth
   hardware.bluetooth.enable = true;
 
+  hardware.i2c.enable = true;
+
   # Intel GPU graphics drivers and OpenGL/Vulkan support
   hardware.graphics = {
     enable = true;
@@ -228,7 +232,7 @@
   users.users.mh = {
     isNormalUser = true;
     description = "Mateusz";
-    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" "vboxusers" "input" ];
+    extraGroups = [ "networkmanager" "wheel" "storage" "video" "audio" "lp" "scanner" "docker" "vboxusers" "input" "i2c" ];
   };
 
   # Support unpatched binaries out of the box.

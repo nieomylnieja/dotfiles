@@ -18,9 +18,9 @@ Related skills:
 ## Go Version Detection
 
 <!-- markdownlint-disable-next-line MD013 -->
-!`grep -rh "^go " --include="go.mod" . 2>/dev/null | cut -d' ' -f2 | sort | uniq -c | sort -nr | head -1 | xargs | cut -d' ' -f2 | grep . || echo unknown`
+!`gomod=$(go env GOMOD 2>/dev/null); if [ -n "$gomod" ] && [ "$gomod" != "/dev/null" ]; then awk '$1 == "go" { print $2; found=1; exit } END { if (!found) print "unknown" }' "$gomod"; else echo unknown; fi`
 
-DO NOT search for go.mod files or try to detect the version yourself.
+DO NOT search for go.mod files or try to infer the version from unrelated modules.
 Use ONLY the version shown above.
 
 **If version detected (not "unknown"):**

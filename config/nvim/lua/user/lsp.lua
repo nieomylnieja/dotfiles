@@ -271,6 +271,12 @@ local function keymap(bufnr, server)
         symbol_width = 60,
       })
     end, "Type [D]efinition")
+    nmap("gm", function()
+      require("telescope").extensions.gomethods.gomethods({
+        path_display = { "hidden" },
+        symbol_width = 60,
+      })
+    end, "[G]oto [M]ethods")
   end
 end
 

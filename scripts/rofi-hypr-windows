@@ -249,9 +249,6 @@ harness_name_from_token() {
     opencode | opencode-ai)
       printf 'OpenCode'
       ;;
-    gemini | gemini-cli)
-      printf 'Gemini'
-      ;;
     *)
       return 1
       ;;
@@ -271,9 +268,6 @@ harness_name_from_text() {
     *opencode*)
       printf 'OpenCode'
       ;;
-    *gemini*)
-      printf 'Gemini'
-      ;;
     *)
       return 1
       ;;
@@ -292,9 +286,6 @@ harness_name_from_pane_text() {
       ;;
     *opencode*)
       printf 'OpenCode'
-      ;;
-    *gemini\ cli* | *google\ gemini*)
-      printf 'Gemini'
       ;;
     *)
       return 1
@@ -963,7 +954,7 @@ terminal_context_is_strong() {
   local context="$1"
 
   case "${context}" in
-    Codex* | Claude* | Gemini* | OpenCode*)
+    Codex* | Claude* | OpenCode*)
       return 0
       ;;
     nvim\ \ * | vim\ \ * | vi\ \ * | hx\ \ * | helix\ \ * | emacs\ \ * | emacsclient\ \ *)

@@ -110,12 +110,6 @@ if [[ ! -f ~/.dir_colors ]]; then
   ln "${DOTFILES}/config/dircolors/dir_colors" "${HOME}/.dir_colors"
 fi
 
-# Gemini API Key
-if [[ -f ~/.password-store/gemini_api_key ]]; then
-  GEMINI_API_KEY="$(cat ~/.password-store/gemini_api_key)"
-  export GEMINI_API_KEY
-fi
-
 # bat colors
 export BAT_THEME="Nord"
 

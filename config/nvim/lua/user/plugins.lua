@@ -269,6 +269,7 @@ return {
       local ts = require("telescope")
       ts.load_extension("fzf")
       require("telescope._extensions.goimpl")
+      require("telescope._extensions.gomethods")
       require("telescope._extensions.env")
       require("telescope._extensions.live_grep_dir")
       ts.load_extension("env")

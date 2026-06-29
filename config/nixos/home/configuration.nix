@@ -101,6 +101,7 @@ in
 
   # Bluetooth
   hardware.bluetooth.enable = true;
+  hardware.i2c.enable = true;
   services.pipewire.wireplumber.configPackages = [
     (pkgs.writeTextDir "share/wireplumber/bluetooth.lua.d/51-bluez-config.lua" ''
       bluez_monitor.properties = {
@@ -130,6 +131,7 @@ in
       "lp"
       "scanner"
       "docker"
+      "i2c"
     ];
   };
 
