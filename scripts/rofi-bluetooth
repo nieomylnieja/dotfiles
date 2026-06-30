@@ -22,24 +22,17 @@
 divider="---------"
 goback="Back"
 
-# Runs bluetoothctl through an interactive session.
-# One-shot invocations like `bluetoothctl show`, `devices`, and `info`
-# can return before the daemon reports controller and device state.
-btctl() {
-  printf '%s\n' "$@"
-  printf 'quit\n'
-}
-
 btctl_output() {
-  btctl "$@" | bluetoothctl
+  bluetoothctl "$@"
 }
 
 controller_info() {
-  btctl_output list show
+  btctl_output list
+  btctl_output show
 }
 
 device_info() {
-  btctl_output "info $1"
+  btctl_output info "$1"
 }
 
 list_devices() {
@@ -47,7 +40,19 @@ list_devices() {
 }
 
 list_paired_devices() {
-  btctl_output "devices Paired"
+  btctl_output devices Paired
+}
+
+device_by_name() {
+  list_devices | awk -v selected="$1" '
+    $1 == "Device" {
+      name = substr($0, index($0, $3))
+      if (name == selected) {
+        print
+        exit
+      }
+    }
+  '
 }
 
 # Checks if bluetooth controller is powered on
@@ -359,7 +364,7 @@ show_menu() {
       toggle_pairable
       ;;
     *)
-      device=$(list_devices | grep "${chosen}")
+      device=$(device_by_name "${chosen}")
       # Open a submenu if a device is selected
       if [[ ${device} ]]; then device_menu "${device}"; fi
       ;;

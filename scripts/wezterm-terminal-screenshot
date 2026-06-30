@@ -1,0 +1,99 @@
+#!/usr/bin/env nix-shell
+#!nix-shell -i python3 -p "python3.withPackages (ps: [ ps.rich ])"
+import argparse
+import io
+import json
+from pathlib import Path
+
+from rich.ansi import AnsiDecoder
+from rich.console import Console
+from rich.terminal_theme import TerminalTheme
+
+DEFAULT_NORMAL = [
+    (59, 66, 82),
+    (191, 97, 106),
+    (163, 190, 140),
+    (235, 203, 139),
+    (129, 161, 193),
+    (180, 142, 173),
+    (136, 192, 208),
+    (229, 233, 240),
+]
+DEFAULT_BRIGHT = [
+    (76, 86, 106),
+    (191, 97, 106),
+    (163, 190, 140),
+    (235, 203, 139),
+    (129, 161, 193),
+    (180, 142, 173),
+    (143, 188, 187),
+    (236, 239, 244),
+]
+
+
+def parse_color(value):
+    value = value.removeprefix("#")
+    if len(value) != 6:
+        raise ValueError(f"expected #rrggbb color, got {value!r}")
+    return tuple(int(value[index : index + 2], 16) for index in range(0, 6, 2))
+
+
+def parse_theme(header):
+    theme = header.get("theme", {})
+    palette = [parse_color(color) for color in theme.get("palette", "").split(":") if color]
+    normal = palette[:8] if len(palette) >= 8 else DEFAULT_NORMAL
+    bright = palette[8:16] if len(palette) >= 16 else DEFAULT_BRIGHT
+    return TerminalTheme(
+        background=parse_color(theme.get("bg", "#2e3440")),
+        foreground=parse_color(theme.get("fg", "#d8dee9")),
+        normal=normal,
+        bright=bright,
+    )
+
+
+def read_cast(path):
+    lines = Path(path).read_text().splitlines()
+    if not lines:
+        raise ValueError(f"{path} is empty")
+
+    header = json.loads(lines[0])
+    output = []
+    for line in lines[1:]:
+        event = json.loads(line)
+        if len(event) >= 3 and event[1] == "o":
+            output.append(event[2])
+    return header, "".join(output)
+
+
+def render(cast_path, output_path):
+    header, text = read_cast(cast_path)
+    console = Console(
+        color_system="truecolor",
+        file=io.StringIO(),
+        force_terminal=True,
+        record=True,
+        width=int(header.get("width", 120)),
+    )
+
+    decoder = AnsiDecoder()
+    for line in decoder.decode(text):
+        console.print(line, crop=False, overflow="ignore")
+
+    console.save_svg(
+        str(output_path),
+        title=Path(output_path).name,
+        theme=parse_theme(header),
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Render a WezTerm terminal capture as SVG.")
+    parser.add_argument("cast_path")
+    parser.add_argument("output_path")
+    args = parser.parse_args()
+
+    render(args.cast_path, args.output_path)
+
+
+if __name__ == "__main__":
+    main()

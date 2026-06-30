@@ -39,6 +39,8 @@ config.colors = {
   cursor_bg = nord.nord4,
   cursor_fg = nord.nord0,
   cursor_border = nord.nord4,
+  selection_fg = nord.nord6,
+  selection_bg = nord.nord3,
   ansi = {
     nord.nord1,
     nord.nord11,
@@ -84,6 +86,9 @@ config.colors = {
     inactive_tab_edge = nord.nord0,
   },
 }
+
+config.command_palette_fg_color = nord.nord4
+config.command_palette_bg_color = nord.nord1
 
 config.scrollback_lines = 20000
 config.alternate_buffer_wheel_scroll_speed = 6
@@ -292,6 +297,126 @@ local function resolve_path(pane, path)
   return path
 end
 
+local function append_tables(...)
+  local result = {}
+  for _, tbl in ipairs { ... } do
+    for i = 1, #tbl do
+      result[#result + 1] = tbl[i]
+    end
+  end
+  return result
+end
+
+local function terminal_screenshot_path(pane, name)
+  if name == nil or name == '' then
+    return nil
+  end
+
+  local path = name
+  if not path:match '%.svg$' then
+    path = path .. '.svg'
+  end
+
+  return resolve_path(pane, path)
+end
+
+local function terminal_screenshot_capture_path(pane)
+  return string.format('/tmp/wezterm-terminal-screenshot-%s-%s.cast', pane:pane_id(), os.time())
+end
+
+local function terminal_screenshot_theme(window)
+  local effective_config = window:effective_config()
+  local colors = effective_config.colors or config.colors
+  if colors ~= nil and colors.foreground ~= nil and colors.background ~= nil and colors.ansi ~= nil and colors.brights ~= nil then
+    return {
+      fg = colors.foreground,
+      bg = colors.background,
+      palette = table.concat(append_tables(colors.ansi, colors.brights), ':'),
+    }
+  end
+
+  if effective_config.color_scheme ~= nil and wezterm.color ~= nil and wezterm.color.get_builtin_schemes ~= nil then
+    local scheme = wezterm.color.get_builtin_schemes()[effective_config.color_scheme]
+    if scheme ~= nil then
+      return {
+        fg = scheme.foreground,
+        bg = scheme.background,
+        palette = table.concat(append_tables(scheme.ansi, scheme.brights), ':'),
+      }
+    end
+  end
+
+  return {
+    fg = nord.nord4,
+    bg = nord.nord0,
+    palette = table.concat(append_tables(config.colors.ansi, config.colors.brights), ':'),
+  }
+end
+
+local function write_terminal_screenshot_capture(window, pane, path)
+  local dimensions = pane:get_dimensions()
+  local body = { 0, 'o', pane:get_lines_as_escapes() }
+  local header = {
+    version = 2,
+    width = dimensions.cols,
+    height = dimensions.viewport_rows,
+    theme = terminal_screenshot_theme(window),
+  }
+
+  local file, err = io.open(path, 'w+')
+  if file == nil then
+    wezterm.log_error('Failed to write terminal screenshot capture to ' .. path .. ': ' .. tostring(err))
+    return false
+  end
+
+  file:write(wezterm.json_encode(header) .. '\n')
+  file:write(wezterm.json_encode(body) .. '\n')
+  file:flush()
+  file:close()
+  return true
+end
+
+local function render_terminal_screenshot(capture_path, output_path)
+  local success, stdout, stderr = wezterm.run_child_process {
+    wezterm.home_dir .. '/.dotfiles/scripts/wezterm-terminal-screenshot',
+    capture_path,
+    output_path,
+  }
+  if success then
+    return true
+  end
+
+  local details = stderr
+  if details == nil or details == '' then
+    details = stdout
+  end
+  if details ~= nil and details ~= '' then
+    details = ': ' .. details:gsub('%s+$', '')
+  else
+    details = ''
+  end
+
+  wezterm.log_error('Failed to render terminal screenshot to ' .. output_path .. details)
+  return false
+end
+
+local function write_terminal_screenshot(window, pane, name)
+  local output_path = terminal_screenshot_path(pane, name)
+  if output_path == nil then
+    return
+  end
+
+  local capture_path = terminal_screenshot_capture_path(pane)
+  if not write_terminal_screenshot_capture(window, pane, capture_path) then
+    return
+  end
+
+  if render_terminal_screenshot(capture_path, output_path) then
+    wezterm.log_info('Saved terminal screenshot to ' .. output_path)
+  end
+  os.remove(capture_path)
+end
+
 local function file_exists(path)
   local file = io.open(path, 'r')
   if file == nil then
@@ -401,6 +526,22 @@ wezterm.on('open-uri', function(window, pane, uri)
   end
 
   return open_file_reference(window, pane, path, line)
+end)
+
+wezterm.on('augment-command-palette', function()
+  return {
+    {
+      brief = 'Take terminal screenshot',
+      icon = 'cod_device_camera',
+
+      action = act.PromptInputLine {
+        description = 'Screenshot name',
+        action = wezterm.action_callback(function(window, pane, line)
+          write_terminal_screenshot(window, pane, line)
+        end),
+      },
+    },
+  }
 end)
 
 return config
