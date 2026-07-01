@@ -42,37 +42,36 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel-labs/agent-browser.git",
       "skillPath": "skills/agent-browser/SKILL.md",
-      "skillFolderHash": "c1470a475a0472fceda2401ea6763708a91680a8",
+      "skillFolderHash": "9b31e495b887e4ca123960415eca69fc7e1bba28",
       "installedAt": "2026-05-01T16:55:09.856Z",
-      "updatedAt": "2026-06-01T13:12:13.431Z"
+      "updatedAt": "2026-07-01T11:46:35.903Z"
     },
     "grill-with-docs": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "sourceUrl": "https://github.com/mattpocock/skills.git",
       "skillPath": "skills/engineering/grill-with-docs/SKILL.md",
-      "skillFolderHash": "2c3a4e48571bfe42203ed7b49cae85f31ef4b6f2",
+      "skillFolderHash": "21adba95de7d93065d9fec725ddf37f871e01d05",
       "installedAt": "2026-05-14T16:29:55.372Z",
-      "updatedAt": "2026-06-01T13:12:15.758Z"
+      "updatedAt": "2026-07-01T11:46:38.444Z"
     },
     "improve-codebase-architecture": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "sourceUrl": "https://github.com/mattpocock/skills.git",
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
-      "skillFolderHash": "688c17ec27fe9309d84987716aca37b5ce7f3a88",
+      "skillFolderHash": "e5beae48471adf87c513b5cbcb0ca347467546da",
       "installedAt": "2026-05-14T20:29:51.308Z",
-      "updatedAt": "2026-06-01T13:12:18.058Z"
+      "updatedAt": "2026-07-01T11:46:41.105Z"
     },
     "teach": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "sourceUrl": "https://github.com/mattpocock/skills.git",
       "skillPath": "skills/productivity/teach/SKILL.md",
-      "skillFolderHash": "fdc61615b4d56a04d88a69a135337f0cad9df235",
-      "pluginName": "mattpocock-skills",
+      "skillFolderHash": "3b6a4245e2aaeacb308ba6175ab3e7f2e43b0c47",
       "installedAt": "2026-06-09T15:47:25.613Z",
-      "updatedAt": "2026-06-09T15:47:25.613Z"
+      "updatedAt": "2026-07-01T11:46:43.630Z"
     },
     "excalidraw-diagram-generator": {
       "source": "github/awesome-copilot",
