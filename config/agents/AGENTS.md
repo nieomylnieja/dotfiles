@@ -150,3 +150,5 @@ rg -n "BasicAuth|Bearer" .
 When working with `git` take special care of the changes introduced by the user.
 For instance, when reverting your work, make sure you are only reverting changes
 introduced by yourself.
+
+**NEVER** force push, unless specifically instructed to.

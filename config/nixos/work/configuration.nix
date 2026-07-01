@@ -116,6 +116,11 @@
     xwayland.enable = true;
   };
 
+  services.logind.settings.Login = {
+    HandleLidSwitchExternalPower = "ignore";
+    HandleLidSwitchDocked = "ignore";
+  };
+
   # PAM for hyprlock
   security.pam.services.hyprlock = { };
   security.pam.services.sddm.enableGnomeKeyring = true;
