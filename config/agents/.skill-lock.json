@@ -81,6 +81,15 @@
       "skillFolderHash": "508522bb5a9950bbbac3c3a680bdc2fed717a5d8",
       "installedAt": "2026-06-22T11:58:48.704Z",
       "updatedAt": "2026-06-22T11:58:48.704Z"
+    },
+    "grafana-dashboards": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/wshobson/agents.git",
+      "skillPath": "plugins/observability-monitoring/skills/grafana-dashboards/SKILL.md",
+      "skillFolderHash": "2d667b90e0be300db3dd576ffe40451b8c2e810e",
+      "installedAt": "2026-07-03T09:27:46.279Z",
+      "updatedAt": "2026-07-03T09:27:46.279Z"
     }
   },
   "dismissed": {}
