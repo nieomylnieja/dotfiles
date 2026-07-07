@@ -21,10 +21,7 @@
 
     "tray": {
         "icon-size": 16,
-        "spacing": 8,
-        "icons": {
-            "flameshot": "/etc/profiles/per-user/mh/share/icons/hicolor/48x48/apps/flameshot.png"
-        }
+        "spacing": 8
     },
 
     "cpu": {

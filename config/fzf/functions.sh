@@ -579,23 +579,59 @@ fkill() {
 # kubernetes
 # -----------------------------------------------------------------------------
 
+_kpod_rows() {
+  local pod_rows
+  local reason_rows
+
+  pod_rows="$(kubectl get pod 2>/dev/null)" || return
+  reason_rows="$(kubectl get pod -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.containerStatuses[*]}{.lastState.terminated.reason}{" "}{end}{"\n"}{end}' 2>/dev/null)" || return
+
+  awk '
+    NR == FNR {
+      name = $1
+      $1 = ""
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+      gsub(/[[:space:]]+/, ",")
+      reason[name] = $0
+      next
+    }
+    FNR == 1 {
+      print $0 " LAST_REASON"
+      next
+    }
+    {
+      print $0 " " reason[$1]
+    }
+  ' <(printf '%s\n' "${reason_rows}") <(printf '%s\n' "${pod_rows}") |
+    column -t
+}
+
+_kpod_fzf() {
+  _kpod_rows |
+    fzf --header='Select pod to copy' --header-lines=1 |
+    awk '{print $1}'
+}
+
+function kpod {
+  local pod
+
+  pod="$(_kpod_fzf)" || return
+
+  if [[ -n "${pod}" ]]; then
+    printf '%s' "${pod}" | wl-copy
+    echo "Pod name copied to clipboard: ${pod}"
+  fi
+}
+
 # fzf-kpod-widget - Select and copy kubernetes pod name
 fzf-kpod-widget() {
   local pod
 
-  pod="$(
-    kubectl get pod 2>/dev/null |
-      sed 1d |
-      fzf \
-        --header='Select pod to copy' \
-        --preview='kubectl describe pod {1}' \
-        --preview-window='right:60%:wrap' |
-      awk '{print $1}'
-  )" || return
+  pod="$(_kpod_fzf)" || return
 
-  if [[ -n "$pod" ]]; then
-    echo -n "$pod" | wl-copy
-    echo "Pod name copied to clipboard: $pod"
+  if [[ -n "${pod}" ]]; then
+    printf '%s' "${pod}" | wl-copy
+    echo "Pod name copied to clipboard: ${pod}"
   fi
 }
 

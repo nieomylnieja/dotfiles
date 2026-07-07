@@ -108,7 +108,6 @@ in
     fastfetch
     fd
     file
-    flameshot
     flatpak
     fnm
     fzf
@@ -121,7 +120,8 @@ in
     glow
     gotestsum
     gopls
-    grim # Required by flameshot to work on wayland.
+    grim
+    satty
     simple-scan
     simplescreenrecorder
     sushi
@@ -198,6 +198,7 @@ in
       '';
     })
     sops
+    slurp
     spotify
     starship
     ssm-session-manager-plugin # for awscli2
@@ -325,7 +326,7 @@ in
     "zathura".source = ../zathura;
     "swayimg".source = ../swayimg;
     "dunst".source = ../dunst;
-    "flameshot/flameshot.ini".source = ../flameshot/flameshot.ini;
+    "satty".source = ../satty;
     "hyprdynamicmonitors/config.toml".source = ../hyprdynamicmonitors/config.toml;
     "hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl".source = ../hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl;
     "hyprdynamicmonitors/hyprconfigs/laptop-only.conf".source = ../hyprdynamicmonitors/hyprconfigs/laptop-only.conf;
@@ -434,7 +435,7 @@ in
       RestartSec = 2;
       Environment = [
         "PATH=${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gawk pkgs.jq pkgs.procps ]}"
-        "XDG_DATA_DIRS=${pkgs.flameshot}/share:${pkgs.hicolor-icon-theme}/share:${homeDir}/.nix-profile/share:/etc/profiles/per-user/mh/share:/run/current-system/sw/share"
+        "XDG_DATA_DIRS=${pkgs.hicolor-icon-theme}/share:${homeDir}/.nix-profile/share:/etc/profiles/per-user/mh/share:/run/current-system/sw/share"
       ];
     };
 
@@ -521,7 +522,7 @@ in
     enable = true;
     enableSshSupport = true;
     pinentry = {
-      package = pkgs.pinentry-qt;
+      package = pkgs.pinentry-curses;
     };
   };
 
@@ -592,7 +593,7 @@ in
   };
   qt = {
     enable = true;
-    platformTheme.name = "gtk";
+    platformTheme.name = "gtk3";
     style.name = "gtk2";
   };
 

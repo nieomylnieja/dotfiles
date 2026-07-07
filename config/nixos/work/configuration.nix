@@ -35,6 +35,9 @@
     # force_probe for PCI ID a7a0. Without it the system falls back to simpledrm,
     # leaving the laptop panel without a usable backlight device.
     "xe.force_probe=a7a0"
+    # The Dell dock resume path trips xe's DisplayPort MST topology handling
+    # during hibernate restore, which aborts Hyprland while outputs reconnect.
+    "xe.enable_dp_mst=0"
     "i915.force_probe=!a7a0"
   ];
 

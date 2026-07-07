@@ -1,0 +1,53 @@
+[general]
+fullscreen = true
+resize = { mode = "smart" }
+floating-hack = true
+early-exit = ["all"]
+corner-roundness = 12
+initial-tool = "brush"
+copy-command = "wl-copy"
+annotation-size-factor = 2
+output-filename = "~/screenshots/satty-%Y%m%d-%H%M%S.png"
+save-after-copy = true
+default-hide-toolbars = false
+focus-toggles-toolbars = false
+default-fill-shapes = false
+primary-highlighter = "block"
+disable-notifications = true
+actions-on-right-click = ["save-to-clipboard"]
+actions-on-enter = ["save-to-clipboard"]
+actions-on-escape = ["exit"]
+no-window-decoration = true
+brush-smooth-history-size = 5
+pan-step-size = 35.0
+zoom-factor = 1.05
+title = "Satty"
+app-id = "org.satty.satty"
+
+[keybinds]
+pointer = "p"
+crop = "c"
+brush = "b"
+line = "i"
+arrow = "z"
+rectangle = "r"
+ellipse = "e"
+text = "t"
+marker = "m"
+blur = "u"
+highlight = "g"
+
+[color-palette]
+palette = [
+  "#bf616aff",
+  "#d08770ff",
+  "#ebcb8bff",
+  "#a3be8cff",
+  "#8fbcbbff",
+  "#88c0d0ff",
+  "#81a1c1ff",
+  "#5e81acff",
+  "#b48eadff",
+  "#eceff4ff",
+]
+custom = []
