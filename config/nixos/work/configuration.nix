@@ -178,8 +178,13 @@
   services.xserver.autoRepeatDelay = 200;
   services.xserver.autoRepeatInterval = 26;
 
-  # Enable CUPS to print documents.
+  # Enable CUPS and DNS-SD discovery for driverless/network printers.
   services.printing.enable = true;
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    openFirewall = true;
+  };
 
   # Enable sound with pipewire.
   security.rtkit.enable = true;
@@ -248,6 +253,9 @@
   programs.nix-ld.libraries = with pkgs; [
     # Required for marksman Markdown LSP.
     icu
+    # Required by Proton Drive CLI for Linux secret storage.
+    glib.out
+    libsecret
   ];
 
   # Execute shebangs which assume hard coded locations.
