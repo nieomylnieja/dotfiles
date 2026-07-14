@@ -14,7 +14,7 @@ Auto-detects whether BRANCH exists (locally or on origin).
   - No BRANCH: select from available local/origin branches, or create a new one.
 
 Options:
-  -b, --base BRANCH  base branch to create from (default: auto-detect main/master)
+  -b, --base BRANCH  base branch to create from (default: remote default branch)
   -h, --help         display this help and exit
 
 Exit status:
@@ -39,18 +39,22 @@ require_command() {
 }
 
 detect_default_branch() {
-  local remote_head
-  remote_head="$(git symbolic-ref refs/remotes/origin/HEAD 2> /dev/null || true)"
-  if [[ -n "${remote_head}" ]]; then
-    echo "${remote_head#refs/remotes/origin/}"
+  local advertised_head
+  local cached_head
+
+  advertised_head="$(git ls-remote --symref origin HEAD 2> /dev/null || true)"
+  advertised_head="$(awk '$1 == "ref:" && $3 == "HEAD" { print $2; exit }' <<< "${advertised_head}")"
+  if [[ "${advertised_head}" == refs/heads/* ]]; then
+    echo "${advertised_head#refs/heads/}"
     return
   fi
-  for candidate in main master; do
-    if git rev-parse --verify "origin/${candidate}" &> /dev/null; then
-      echo "${candidate}"
-      return
-    fi
-  done
+
+  cached_head="$(git symbolic-ref refs/remotes/origin/HEAD 2> /dev/null || true)"
+  if [[ -n "${cached_head}" ]]; then
+    echo "${cached_head#refs/remotes/origin/}"
+    return
+  fi
+
   fatal "cannot detect default branch; use --base to specify"
 }
 

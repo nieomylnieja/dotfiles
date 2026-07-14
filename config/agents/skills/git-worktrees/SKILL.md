@@ -35,7 +35,7 @@ $DOTFILES/config/agents/skills/git-worktrees/scripts/worktree-create.sh BRANCH_N
 The script auto-detects whether the branch exists (locally or on origin):
 
 - **Existing branch:** fetches latest from origin, creates worktree, resets to remote state.
-- **New branch:** fetches the default branch (main/master), creates a new branch from it.
+- **New branch:** detects and fetches the remote's default branch, then creates a new branch from it.
 
 To branch off a specific base instead of the default branch:
 
