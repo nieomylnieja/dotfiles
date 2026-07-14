@@ -254,7 +254,7 @@ if wezterm.gui then
   table.insert(copy_mode, {
     key = 'Space',
     mods = 'CTRL',
-    action = act.CopyMode 'MoveToScrollbackBottom',
+    action = act.CopyMode { SetSelectionMode = 'Cell' },
   })
 end
 
@@ -431,6 +431,31 @@ local function trim_trailing_path_punctuation(path)
   return path:gsub('[,.;:!?%)%]%}]+$', '')
 end
 
+local desktop_file_extensions = {
+  apng = true,
+  avif = true,
+  bmp = true,
+  gif = true,
+  heic = true,
+  heif = true,
+  ico = true,
+  jpeg = true,
+  jpg = true,
+  jxl = true,
+  pdf = true,
+  png = true,
+  pnm = true,
+  svg = true,
+  tif = true,
+  tiff = true,
+  webp = true,
+}
+
+local function opens_with_desktop_application(path)
+  local extension = path:match '%.([^./]+)$'
+  return extension ~= nil and desktop_file_extensions[extension:lower()] == true
+end
+
 local function extract_file_reference(text)
   if text == nil or text == '' then
     return nil
@@ -480,6 +505,11 @@ local function open_file_reference(window, pane, path, line, target)
 
   if not file_exists(resolved_path) then
     wezterm.log_warn('File link does not exist: ' .. resolved_path)
+    return false
+  end
+
+  if opens_with_desktop_application(resolved_path) then
+    wezterm.background_child_process { 'xdg-open', resolved_path }
     return false
   end
 

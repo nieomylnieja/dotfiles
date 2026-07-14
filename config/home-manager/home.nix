@@ -123,7 +123,7 @@ in
     grim
     satty
     simple-scan
-    simplescreenrecorder
+    kooha
     sushi
     gimp
     gnumake
@@ -151,6 +151,7 @@ in
     pkgs.stable.lutris
     man
     man-pages
+    manim
     mesa
     mirrord
     markdownlint-cli
@@ -171,7 +172,7 @@ in
     playerctl
     pulseaudio # For pactl.
     pkgs.stable.pdm
-    python3
+    (python3.withPackages (ps: [ ps.pillow ]))
     pinentry-qt
     proton-vpn
     r2modman # for Valheim mods

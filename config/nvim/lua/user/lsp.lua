@@ -71,6 +71,7 @@ local servers = {
     filetypes = { "go", "gomod", "gowork", "gotmpl" },
     init_options = {
       usePlaceholders = true,
+      semanticTokens = true,
     },
     settings = {
       gopls = {

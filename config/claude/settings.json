@@ -5,7 +5,7 @@
     "command": "npx -y @owloops/claude-powerline@latest --theme=nord --style=powerline",
     "padding": 0
   },
-  "model": "claude-opus-4-6",
+  "model": "claude-opus-4-8",
   "effortLevel": "high",
   "cleanupPeriodDays": 99999,
   "attribution": {
@@ -58,17 +58,6 @@
         ]
       }
     ],
-    "PermissionRequest": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "rapr"
-          }
-        ]
-      }
-    ],
     "PostToolUseFailure": [
       {
         "matcher": "*",
@@ -80,21 +69,10 @@
           }
         ]
       }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/check-gopls.sh",
-            "timeout": 30
-          }
-        ]
-      }
     ]
   },
   "permissions": {
-    "defaultMode": "default",
+    "defaultMode": "auto",
     "allow": [
       "Agent",
       "AskUserQuestion",
