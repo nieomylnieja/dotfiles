@@ -97,7 +97,7 @@ Wire tags through the project runner:
 test/bats/unit:
 	docker build -t cli-bats-unit -f test/docker/Dockerfile.unit .
 	docker run -e TERM=linux --rm \
-		cli-bats-unit -F pretty --filter-tags unit ./test/*
+		cli-bats-unit -F pretty --filter-tags unit,!platform ./test/*
 
 test/bats/e2e:
 	docker build -t cli-bats-e2e -f test/docker/Dockerfile.e2e .
@@ -107,6 +107,20 @@ test/bats/e2e:
 Use Docker when tests need a pinned Bats version, CLI binary, shell tools, or
 system dependencies.
 Set `TERM=linux` when the pretty formatter needs a terminal value.
+
+Use Bats tags as the only selector for test categories, execution modes, and
+platform suites.
+Do not introduce custom environment variables such as `PLATFORM_TESTS=1` or
+`E2E_TESTS=1` and branch on them in tests or lifecycle hooks.
+Select the intended cases with `--filter-tags`, including negative tags when a
+broader file tag would otherwise include a specialized test.
+Within a test or per-test hook, inspect `$BATS_TEST_TAGS` when setup or helpers
+must differ for that tagged case.
+
+Environment variables are still appropriate when they are actual inputs to the
+program or fixture, such as terminal width, editor selection, credentials, or a
+server URL.
+They must not duplicate Bats' test-selection mechanism.
 
 ## Suite Setup
 
@@ -460,6 +474,7 @@ For example, Python `yq` and Go `yq` are not interchangeable.
 ## Review Checklist
 
 - Use project-defined runners and tags instead of raw `bats` commands.
+- Use tags, not custom environment variables, to select test categories or modes.
 - Keep shared command wrappers and assertion helpers in `test/test_helper`.
 - Use `setup_suite`, `setup_file`, and `setup` for the right state lifetime.
 - Prefer Bats temporary directories over hand-rolled `mktemp` cleanup.

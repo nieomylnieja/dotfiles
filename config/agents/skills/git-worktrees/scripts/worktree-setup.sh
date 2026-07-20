@@ -13,6 +13,8 @@ Auto-detects whether BRANCH exists (locally or on origin).
   - New branch: fetches the base branch, then creates BRANCH from it.
   - No BRANCH: select from available local/origin branches, or create a new one.
 
+Copies local untracked and ignored hidden files into the worktree.
+
 Options:
   -b, --base BRANCH  base branch to create from (default: remote default branch)
   -h, --help         display this help and exit
@@ -164,6 +166,40 @@ select_branch() {
   printf '%s\n' "${branch}"
 }
 
+copy_hidden_file_set() {
+  local repo_root="$1"
+  local worktree_path="$2"
+  local relative_path
+  local destination_path
+  shift 2
+
+  git -C "${repo_root}" ls-files "$@" -z -- \
+    '.*' \
+    ':(exclude).git' \
+    ':(exclude).git/**' \
+    ':(exclude).worktrees' \
+    ':(exclude).worktrees/**' \
+    | while IFS= read -r -d '' relative_path; do
+      case "${relative_path}" in
+        .git | .git/* | .worktrees | .worktrees/*) continue ;;
+        *) ;;
+      esac
+
+      destination_path="${worktree_path}/${relative_path}"
+      mkdir -p -- "${destination_path%/*}"
+      cp -a -- "${repo_root}/${relative_path}" "${destination_path}"
+    done
+}
+
+copy_hidden_files() {
+  local repo_root="$1"
+  local worktree_path="$2"
+
+  log "Copying local hidden files into ${worktree_path}..."
+  copy_hidden_file_set "${repo_root}" "${worktree_path}" --others --exclude-standard
+  copy_hidden_file_set "${repo_root}" "${worktree_path}" --others --ignored --exclude-standard
+}
+
 main() {
   local base=""
   local branch=""
@@ -242,6 +278,7 @@ main() {
     git worktree add -b "${branch}" "${worktree_path}" "origin/${base}"
   fi
 
+  copy_hidden_files "${repo_root}" "${worktree_path}"
   echo "${worktree_path}"
 }
 
