@@ -69,8 +69,10 @@ test/
 └── command-e2e.bats
 ```
 
-Use `test/inputs/<test-file-name>/` for source fixtures and
-`test/outputs/<test-file-name>/` for expected output fixtures.
+Store source fixtures such as request payloads and release bodies under
+`test/inputs/<test-file-name>/`.
+Store complete expected stdout and stderr messages, along with structured
+command output, under `test/outputs/<test-file-name>/`.
 This keeps a large suite navigable and lets helpers derive fixture paths from
 `$BATS_TEST_FILENAME`.
 
@@ -157,6 +159,11 @@ teardown_file() {
 }
 ```
 
+When a test file needs narrower fixture roots, set `TEST_INPUTS` or
+`TEST_OUTPUTS` in `setup_file` rather than repeating paths in each test.
+Generated e2e fixtures can set those variables in `generate_inputs` and
+`generate_outputs` instead.
+
 Use `setup` for helpers required by each test:
 
 ```bash
@@ -229,6 +236,11 @@ $stderr" assert_success
 assert_stderr() {
   output="$stderr"
   assert_output "$@"
+}
+
+refute_stderr() {
+  output="$stderr"
+  refute_output "$@"
 }
 ```
 
@@ -303,38 +315,24 @@ generate_outputs() {
 
 ## Assertions
 
-Use `bats-assert` and `bats-support` helpers instead of ad hoc checks:
+Use `bats-assert` and `bats-support` helpers instead of ad hoc checks.
+Prefer file-backed, exact assertions for complete CLI messages, including short
+messages that would fit inline:
 
 ```bash
 @test "command rejects missing required flag" {
   run_cli command subcommand
 
   assert_failure
-  assert_stderr 'Error: required flag(s) "file" not set'
+  assert_stderr - < "$TEST_OUTPUTS/missing-file.stderr"
 }
 ```
 
-Assert exact output for stable messages:
-
-```bash
-@test "command prints configured context" {
-  run_cli config current-context
-
-  assert_success_joined_output
-  assert_output "minimal"
-}
-```
-
-Assert expected output files for large structured output:
-
-```bash
-@test "command emits verbose yaml" {
-  run_cli config current-context --verbose --output yaml
-
-  assert_success_joined_output
-  assert_output <"$TEST_OUTPUTS/current-context.yaml"
-}
-```
+Use `--partial` only as a last resort when exact output would be unstable for
+reasons unrelated to the behavior under test, such as nondeterministic fields
+that cannot be normalized.
+If `--partial` is necessary, keep the assertion narrow and leave nearby context
+explaining why a full output fixture would be brittle.
 
 For YAML or JSON, compare normalized structures rather than raw formatting:
 
@@ -349,13 +347,6 @@ assert_yaml_equal() {
 }
 ```
 
-Use partial or regexp assertions for variable values:
-
-```bash
-assert_stderr --partial "A copy of your changes has been stored to"
-assert_output --regexp "cli/v[0-9.]+-.+"
-```
-
 ## CLI Workflow Tests
 
 Write tests as user workflows, not implementation probes:
@@ -366,15 +357,11 @@ Write tests as user workflows, not implementation probes:
 
   run_cli apply -f "$input"
   assert_success_joined_output
-  assert_output - <<EOF
-The resources were successfully applied.
-EOF
+  assert_output - < "$TEST_OUTPUTS/apply.stdout"
 
   run_cli delete -f "$input"
   assert_success_joined_output
-  assert_output - <<EOF
-The resources were successfully deleted.
-EOF
+  assert_output - < "$TEST_OUTPUTS/delete.stdout"
 }
 ```
 
@@ -388,10 +375,23 @@ copy-paste drift:
   for alias in $aliases; do
     run_cli get "$alias" example-service -o yaml
     assert_success_joined_output
-    assert_output <"$TEST_OUTPUTS/service.yaml"
+    assert_output - < "$TEST_OUTPUTS/service.yaml"
   done
 }
 ```
+
+For interactive terminal tests, prefer the command's deterministic plain-text
+path: set `NO_COLOR=1` and use accessible form mode when available.
+Use a PTY only when TTY detection is itself under test; in that case, also pin
+`TERM`, terminal width, and color mode.
+Keep source data and complete expected messages in the file's existing fixture
+directories.
+
+For notification tests, serve release data from the project's local release
+fixture server instead of proxying GitHub.
+Keep release bodies with the other input fixtures, compare the complete stdout
+or stderr message with an output fixture, and use `refute_stderr` when stderr
+must be empty.
 
 For commands that open editors or external tools, create executable wrappers in
 `$BATS_TEST_TMPDIR` and pass their path through the environment:
@@ -418,13 +418,16 @@ EOF
   CLI_EDITOR="$editor_script" run_cli edit service example-service
 
   assert_success_joined_output
-  assert_output "The resources were successfully applied."
+  assert_output - < "$TEST_OUTPUTS/apply.stdout"
 }
 ```
 
 ## Error and Cleanup Patterns
 
-Test both validation errors and external-command failures:
+Test both validation errors and external-command failures.
+The editor failure below includes a Bats-managed temporary path that changes on
+each run and cannot be normalized by the command wrapper, so it checks only the
+two stable clauses:
 
 ```bash
 @test "editor failure preserves changed file" {
@@ -480,7 +483,12 @@ For example, Python `yq` and Go `yq` are not interchangeable.
 - Prefer Bats temporary directories over hand-rolled `mktemp` cleanup.
 - Separate stdout and stderr when testing CLI error behavior.
 - Join stderr into output for success assertions when failures need both streams.
-- Store large inputs and expected outputs under per-test-file fixture directories.
+- Store source fixtures and complete expected messages in per-test-file fixture
+  directories.
+- Prefer exact stdout and stderr fixtures; use partial assertions only for values
+  that cannot be normalized.
+- Disable color for plain-text terminal assertions; pin the color mode for PTY
+  tests.
 - Generate unique e2e resource names for mutable external systems.
 - Compare structured YAML/JSON after normalization.
 - Keep teardown explicit; use best-effort cleanup only for partial setup failures.
