@@ -291,6 +291,11 @@
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
+  services.tailscale = {
+    enable = true;
+    openFirewall = true;
+  };
+
   # Yubikey support.
   services.udev.packages = [ pkgs.yubikey-personalization pkgs.bazecor ];
   services.udev.extraRules = ''

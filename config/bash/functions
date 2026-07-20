@@ -61,3 +61,25 @@ worktree-switch() {
   selected_worktree="$("${DOTFILES}/scripts/worktree-switch" "$@")" || return
   cd "${selected_worktree}" || return
 }
+
+mux() {
+  if (($# > 1)); then
+    echo "usage: mux [SESSION]" >&2
+    return 2
+  fi
+
+  local session="${1:-${PWD##*/}}"
+  session="${session#.}"
+  session="${session//[:.]/-}"
+  session="${session:-shell}"
+
+  if [[ -n "${TMUX:-}" ]]; then
+    if ! tmux has-session -t "${session}" 2> /dev/null; then
+      tmux new-session -d -s "${session}" -c "${PWD}" || return
+    fi
+    tmux switch-client -t "${session}"
+    return
+  fi
+
+  tmux new-session -A -s "${session}" -c "${PWD}"
+}

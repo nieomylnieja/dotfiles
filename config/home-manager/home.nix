@@ -205,6 +205,7 @@ in
     swayimg
     statix
     terraform
+    tmux
     tree
     # Required for new verison of nvim-treesitter to work.
     tree-sitter
@@ -319,6 +320,7 @@ in
   xdg.configFile = {
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
+    "tmux/tmux.conf".source = ../tmux/tmux.conf;
     "rofi".source = ../rofi;
     # "wezterm".source = ../wezterm;
     "alacritty".source = ../alacritty;
