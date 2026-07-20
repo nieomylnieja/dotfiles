@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly state_file=".mytool-state"
+
+case "${1:-}" in
+  init)
+    printf '%s\n' "ready" > "${state_file}"
+    printf '%s\n' "initialized"
+    ;;
+  status)
+    if [[ ! -f "${state_file}" ]]; then
+      printf '%s\n' "not initialized" >&2
+      exit 1
+    fi
+    printf '%s\n' "$(< "${state_file}")"
+    ;;
+  setup)
+    if [[ $# -ne 2 || ! -f "${2}" ]]; then
+      printf '%s\n' "usage: mytool setup <fixture>" >&2
+      exit 2
+    fi
+    IFS= read -r fixture_value < "${2}"
+    printf '%s\n' "${fixture_value}" > "${state_file}"
+    printf '%s\n' "fixture loaded"
+    ;;
+  demo)
+    if [[ ! -f "${state_file}" ]]; then
+      printf '%s\n' "fixture not loaded" >&2
+      exit 1
+    fi
+    printf '%s\n' "service dashboard"
+    printf 'status: %s\n' "$(< "${state_file}")"
+    ;;
+  *)
+    printf '%s\n' "usage: mytool {init|status|setup|demo}" >&2
+    exit 2
+    ;;
+esac

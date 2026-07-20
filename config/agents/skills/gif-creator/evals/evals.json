@@ -1,0 +1,64 @@
+{
+  "skill_name": "gif-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a GIF that animates a unit circle turning into a sine wave for a math explainer. Correct geometry matters more than looks.",
+      "expected_output": "A dark-mode Manim scene using the Nord palette, rendered with --format=gif and directly inspected as a complete animation before completion is claimed.",
+      "files": [],
+      "expectations": [
+        "The deliverable is an animated GIF rendered from a Manim scene.",
+        "The scene defaults to a nord0 background, Snow Storm text, and restrained Frost or Aurora accents unless the prompt requires another palette.",
+        "The circle, radius, axes, and sine wave are geometrically consistent and legible in the rendered GIF.",
+        "The final response reports the Manim-selected resolution and frame rate, intended duration, loop behavior, and written file size.",
+        "The response states that the complete rendered animation was directly inspected."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Make a looping GIF showing items entering and leaving a FIFO queue, with each item labeled. It's for the README of my message-broker repo.",
+      "expected_output": "A dark-mode Manim diagram using the Nord palette and Text labels (no MathTex without LaTeX), with a clean loop, elements within frame bounds, and the full verification loop run on the output.",
+      "files": [],
+      "expectations": [
+        "The GIF shows labeled items entering at the tail and leaving at the head in FIFO order.",
+        "The scene uses nord0 as its background and readable Nord colors for text and accents unless the prompt explicitly asks for different styling.",
+        "All labels remain readable and no element is clipped in the rendered GIF.",
+        "The first and last frames either match for a seamless loop or show an explicitly described intentional reset.",
+        "The final response reports the Manim render settings, intended duration, written file size, and direct visual inspection."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The GIF looks good and I accept it.",
+      "expected_output": "A concise question asking whether the user wants the Manim source persisted to nieomylnieja/giffs, with no repository mutation before the user answers.",
+      "files": [],
+      "expectations": [
+        "The response asks whether to persist the Manim source in the nieomylnieja/giffs repository.",
+        "Acceptance alone is not treated as permission to clone, create a folder, commit, or push.",
+        "The question makes clear that persistence creates one new folder under giffs/ and commits and pushes it directly to main."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Create a GIF for our brand launch. It must use a light background and our supplied magenta and gold brand colors, not a dark theme.",
+      "expected_output": "A Manim-rendered GIF that honors the explicit light brand palette instead of applying the preferred dark Nord defaults, followed by the normal verification loop.",
+      "files": [],
+      "expectations": [
+        "The deliverable is rendered from a Manim scene.",
+        "The explicit light background and supplied brand colors override the Nord preference.",
+        "The result still satisfies readability, render-setting reporting, and direct animation inspection requirements."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Create a GIF for our README showing me typing `mytool init` and then `mytool status` in a terminal.",
+      "expected_output": "The request is routed to vhs-gif-creator because it is a terminal and CLI documentation demo; this Manim skill does not produce the GIF.",
+      "files": [],
+      "expectations": [
+        "The response identifies the request as a terminal recording rather than a programmatic animation.",
+        "The response routes the work to vhs-gif-creator.",
+        "The response does not propose recreating terminal interaction in Manim."
+      ]
+    }
+  ]
+}

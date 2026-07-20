@@ -172,7 +172,6 @@ in
     playerctl
     pulseaudio # For pactl.
     pkgs.stable.pdm
-    (python3.withPackages (ps: [ ps.pillow ]))
     pinentry-qt
     proton-vpn
     r2modman # for Valheim mods
@@ -211,6 +210,7 @@ in
     tree-sitter
     unzip
     uv
+    vhs
     waybar
     wezterm
     wl-clipboard
@@ -595,7 +595,6 @@ in
   qt = {
     enable = true;
     platformTheme.name = "gtk3";
-    style.name = "gtk2";
   };
 
   # Dark mode preference for Electron apps
