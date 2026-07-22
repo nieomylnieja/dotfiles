@@ -25,6 +25,6 @@ window#waybar {
     background-color: rgba(136, 192, 208, 0.3);
 }
 
-#window, #cpu, #custom-memory, #battery, #pulseaudio, #clock, #tray {
+#window, #custom-cpu, #custom-memory, #custom-swap, #battery, #pulseaudio, #clock, #tray {
     padding: 0 8px;
 }

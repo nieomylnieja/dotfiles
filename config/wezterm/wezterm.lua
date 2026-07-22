@@ -551,6 +551,7 @@ local function open_file_reference(window, pane, path, line, target)
   window:perform_action(
     spawn_action {
       args = { 'nvim', '+' .. line, resolved_path },
+      cwd = current_working_directory(pane),
     },
     pane
   )

@@ -5,7 +5,7 @@
 
     "modules-left": ["hyprland/workspaces"],
     "modules-center": ["hyprland/window"],
-    "modules-right": ["tray", "cpu", "custom/memory", "battery", "pulseaudio", "clock"],
+    "modules-right": ["tray", "custom/cpu", "custom/memory", "custom/swap", "battery", "pulseaudio", "clock"],
 
     "hyprland/workspaces": {
         "format": "{id}",
@@ -24,12 +24,20 @@
         "spacing": 8
     },
 
-    "cpu": {
-        "format": "CPU {usage}%"
+    "custom/cpu": {
+        "exec": "/run/current-system/sw/bin/bash /home/mh/.dotfiles/config/waybar/scripts/cpu-info.sh",
+        "return-type": "json",
+        "interval": 5
     },
 
     "custom/memory": {
         "exec": "/run/current-system/sw/bin/bash /home/mh/.dotfiles/config/waybar/scripts/memory-info.sh",
+        "return-type": "json",
+        "interval": 5
+    },
+
+    "custom/swap": {
+        "exec": "/run/current-system/sw/bin/bash /home/mh/.dotfiles/config/waybar/scripts/swap-info.sh",
         "return-type": "json",
         "interval": 5
     },
