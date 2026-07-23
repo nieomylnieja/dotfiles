@@ -33,27 +33,27 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/supabase/agent-skills.git",
       "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
-      "skillFolderHash": "6f1495c72c918e6f80c2f69df9005eacd5c57d7a",
+      "skillFolderHash": "d11b54a2ab36d33940504ca9ec3a57bfd6126f26",
       "installedAt": "2026-04-13T20:31:02.845Z",
-      "updatedAt": "2026-06-07T11:03:05.652Z"
+      "updatedAt": "2026-07-23T08:37:35.999Z"
     },
     "agent-browser": {
       "source": "vercel-labs/agent-browser",
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel-labs/agent-browser.git",
       "skillPath": "skills/agent-browser/SKILL.md",
-      "skillFolderHash": "9b31e495b887e4ca123960415eca69fc7e1bba28",
+      "skillFolderHash": "037e8078db4b20b4aa25c04f21c6de7d335ec449",
       "installedAt": "2026-05-01T16:55:09.856Z",
-      "updatedAt": "2026-07-01T11:46:35.903Z"
+      "updatedAt": "2026-07-23T08:37:36.813Z"
     },
     "improve-codebase-architecture": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "sourceUrl": "https://github.com/mattpocock/skills.git",
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
-      "skillFolderHash": "e5beae48471adf87c513b5cbcb0ca347467546da",
+      "skillFolderHash": "bce229692e60dff3462e49bc5e774e83bef348e6",
       "installedAt": "2026-05-14T20:29:51.308Z",
-      "updatedAt": "2026-07-01T11:46:41.105Z"
+      "updatedAt": "2026-07-23T08:37:39.773Z"
     },
     "excalidraw-diagram-generator": {
       "source": "github/awesome-copilot",
