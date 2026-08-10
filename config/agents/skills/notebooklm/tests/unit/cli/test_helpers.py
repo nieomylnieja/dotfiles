@@ -1,0 +1,1409 @@
+"""Tests for CLI helper functions."""
+
+import asyncio
+import json
+import warnings
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
+from filelock import Timeout
+
+import notebooklm.auth as auth_module
+import notebooklm.cli._encoding as encoding_module
+import notebooklm.cli.auth_runtime as auth_runtime_module
+import notebooklm.cli.context as context_module
+import notebooklm.cli.helpers as helpers_module
+import notebooklm.cli.rendering as rendering_module
+import notebooklm.cli.research_import as research_import_module
+import notebooklm.cli.runtime as runtime_module
+from notebooklm import Artifact
+from notebooklm.cli.helpers import (
+    clear_context,
+    cli_name_to_artifact_type,
+    display_report,
+    display_research_sources,
+    get_artifact_type_display,
+    get_auth_tokens,
+    get_client,
+    get_current_conversation,
+    get_current_notebook,
+    get_source_type_display,
+    handle_auth_error,
+    handle_error,
+    json_error_response,
+    json_output_response,
+    require_notebook,
+    run_async,
+    set_current_conversation,
+    set_current_notebook,
+    with_client,
+)
+from notebooklm.cli.research_import import import_with_retry
+from notebooklm.types import ArtifactType
+
+# =============================================================================
+# ARTIFACT TYPE DISPLAY TESTS
+# =============================================================================
+
+
+def _make_artifact(
+    artifact_type: int,
+    variant: int | None = None,
+    title: str = "Test Artifact",
+) -> Artifact:
+    """Helper to create Artifact for testing get_artifact_type_display.
+
+    For report subtypes, pass appropriate title:
+    - "Briefing Doc: ..." for briefing_doc
+    - "Study Guide: ..." for study_guide
+    - "Blog Post: ..." for blog_post
+    """
+    return Artifact(
+        id="test-id",
+        title=title,
+        _artifact_type=artifact_type,
+        _variant=variant,
+        status=3,  # Completed
+    )
+
+
+class TestGetArtifactTypeDisplay:
+    def test_audio_type(self):
+        art = _make_artifact(1)
+        assert get_artifact_type_display(art) == "🎧 Audio"
+
+    def test_report_type(self):
+        art = _make_artifact(2)
+        assert get_artifact_type_display(art) == "📄 Report"
+
+    def test_video_type(self):
+        art = _make_artifact(3)
+        assert get_artifact_type_display(art) == "🎬 Video"
+
+    def test_quiz_type_without_variant(self):
+        art = _make_artifact(4, variant=2)
+        assert get_artifact_type_display(art) == "📝 Quiz"
+
+    def test_quiz_type_with_variant_2(self):
+        art = _make_artifact(4, variant=2)
+        assert get_artifact_type_display(art) == "📝 Quiz"
+
+    def test_flashcards_type_with_variant_1(self):
+        art = _make_artifact(4, variant=1)
+        assert get_artifact_type_display(art) == "🃏 Flashcards"
+
+    def test_mind_map_type(self):
+        art = _make_artifact(5)
+        assert get_artifact_type_display(art) == "🧠 Mind Map"
+
+    def test_infographic_type(self):
+        art = _make_artifact(7)
+        assert get_artifact_type_display(art) == "🖼️ Infographic"
+
+    def test_slide_deck_type(self):
+        art = _make_artifact(8)
+        assert get_artifact_type_display(art) == "📊 Slide Deck"
+
+    def test_data_table_type(self):
+        art = _make_artifact(9)
+        assert get_artifact_type_display(art) == "📈 Data Table"
+
+    @pytest.mark.filterwarnings("ignore::notebooklm.types.UnknownTypeWarning")
+    def test_unknown_type(self):
+        art = _make_artifact(999)
+        # Unknown types return "Unknown (<kind>)" format
+        display = get_artifact_type_display(art)
+        assert "Unknown" in display
+        assert repr(art.kind) not in display
+
+    def test_report_subtype_briefing_doc(self):
+        # report_subtype is computed from title
+        art = _make_artifact(2, title="Briefing Doc: Test Topic")
+        assert get_artifact_type_display(art) == "📋 Briefing Doc"
+
+    def test_report_subtype_study_guide(self):
+        art = _make_artifact(2, title="Study Guide: Test Topic")
+        assert get_artifact_type_display(art) == "📚 Study Guide"
+
+    def test_report_subtype_blog_post(self):
+        art = _make_artifact(2, title="Blog Post: Test Topic")
+        assert get_artifact_type_display(art) == "✍️ Blog Post"
+
+    def test_report_subtype_generic(self):
+        art = _make_artifact(2, title="Report: Test Topic")
+        assert get_artifact_type_display(art) == "📄 Report"
+
+    def test_report_subtype_unknown(self):
+        """Unknown report subtype should return default Report"""
+        art = _make_artifact(2, title="Some Random Title")
+        assert get_artifact_type_display(art) == "📄 Report"
+
+
+class TestGetSourceTypeDisplay:
+    def test_youtube(self):
+        assert get_source_type_display("youtube") == "🎬 YouTube"
+
+    def test_web_page(self):
+        assert get_source_type_display("web_page") == "🌐 Web Page"
+
+    def test_pdf(self):
+        assert get_source_type_display("pdf") == "📄 PDF"
+
+    def test_markdown(self):
+        assert get_source_type_display("markdown") == "📝 Markdown"
+
+    def test_google_spreadsheet(self):
+        assert get_source_type_display("google_spreadsheet") == "📊 Google Sheets"
+
+    def test_csv(self):
+        assert get_source_type_display("csv") == "📊 CSV"
+
+    def test_google_drive_audio(self):
+        assert get_source_type_display("google_drive_audio") == "🎧 Drive Audio"
+
+    def test_google_drive_video(self):
+        assert get_source_type_display("google_drive_video") == "🎬 Drive Video"
+
+    def test_docx(self):
+        assert get_source_type_display("docx") == "📝 DOCX"
+
+    def test_pasted_text(self):
+        assert get_source_type_display("pasted_text") == "📝 Pasted Text"
+
+    def test_epub(self):
+        assert get_source_type_display("epub") == "📕 EPUB"
+
+    def test_unknown_type(self):
+        assert get_source_type_display("unknown") == "❓ Unknown"
+
+    def test_unrecognized_type_shows_name(self):
+        # Unrecognized types should show the type name
+        assert get_source_type_display("future_type") == "❓ future_type"
+
+
+class TestCliNameToArtifactType:
+    def test_audio(self):
+        assert cli_name_to_artifact_type("audio") == ArtifactType.AUDIO
+
+    def test_video(self):
+        assert cli_name_to_artifact_type("video") == ArtifactType.VIDEO
+
+    def test_slide_deck(self):
+        assert cli_name_to_artifact_type("slide-deck") == ArtifactType.SLIDE_DECK
+
+    def test_quiz(self):
+        assert cli_name_to_artifact_type("quiz") == ArtifactType.QUIZ
+
+    def test_flashcard_alias(self):
+        # CLI uses singular "flashcard", maps to ArtifactType.FLASHCARDS
+        assert cli_name_to_artifact_type("flashcard") == ArtifactType.FLASHCARDS
+
+    def test_mind_map(self):
+        assert cli_name_to_artifact_type("mind-map") == ArtifactType.MIND_MAP
+
+    def test_infographic(self):
+        assert cli_name_to_artifact_type("infographic") == ArtifactType.INFOGRAPHIC
+
+    def test_data_table(self):
+        assert cli_name_to_artifact_type("data-table") == ArtifactType.DATA_TABLE
+
+    def test_report(self):
+        assert cli_name_to_artifact_type("report") == ArtifactType.REPORT
+
+    def test_all_returns_none(self):
+        assert cli_name_to_artifact_type("all") is None
+
+    def test_invalid_type_returns_none(self):
+        assert cli_name_to_artifact_type("invalid-type") is None
+
+
+# =============================================================================
+# JSON OUTPUT TESTS
+# =============================================================================
+
+
+class TestJsonOutputResponse:
+    def test_outputs_valid_json(self, capsys):
+        json_output_response({"test": "value", "number": 42})
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["test"] == "value"
+        assert data["number"] == 42
+
+    def test_handles_nested_data(self, capsys):
+        json_output_response({"nested": {"key": "value"}, "list": [1, 2, 3]})
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["nested"]["key"] == "value"
+        assert data["list"] == [1, 2, 3]
+
+    def test_json_output_response_preserves_unicode(self, capsys):
+        """CJK / emoji characters should be emitted as real UTF-8, not \\uXXXX."""
+        json_output_response({"title": "中文笔记本", "emoji": "🚀"})
+
+        captured = capsys.readouterr()
+        # Round-trip must still parse.
+        data = json.loads(captured.out)
+        assert data["title"] == "中文笔记本"
+        assert data["emoji"] == "🚀"
+        # Raw output must contain real CJK chars, not escaped sequences.
+        assert "中文笔记本" in captured.out
+        assert "🚀" in captured.out
+        assert "\\u" not in captured.out
+
+    def test_rendering_module_outputs_valid_json(self, capsys):
+        rendering_module.json_output_response({"test": "value"})
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["test"] == "value"
+
+
+class TestJsonErrorResponse:
+    def test_outputs_error_json_and_exits(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            json_error_response("TEST_ERROR", "Test error message")
+
+        assert exc_info.value.code == 1
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["error"] is True
+        assert data["code"] == "TEST_ERROR"
+        assert data["message"] == "Test error message"
+
+    def test_json_error_response_preserves_unicode(self, capsys):
+        """Error messages with CJK / emoji should be emitted as real UTF-8."""
+        with pytest.raises(SystemExit):
+            json_error_response("ERROR", "笔记本不存在 🚫", extra={"title": "中文"})
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["message"] == "笔记本不存在 🚫"
+        assert data["title"] == "中文"
+        assert "笔记本不存在" in captured.out
+        assert "🚫" in captured.out
+        assert "中文" in captured.out
+        assert "\\u" not in captured.out
+
+    def test_json_error_response_serializes_path_in_extra(self, capsys):
+        """Non-primitive values like pathlib.Path must not crash the error reporter."""
+        with pytest.raises(SystemExit):
+            json_error_response("ERROR", "Bad path", extra={"path": Path("tmp_test_path")})
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["error"] is True
+        assert data["code"] == "ERROR"
+        assert data["message"] == "Bad path"
+        assert data["path"] == str(Path("tmp_test_path"))
+
+
+# =============================================================================
+# CONTEXT MANAGEMENT TESTS
+# =============================================================================
+
+
+class TestContextManagement:
+    def test_get_current_notebook_no_file(self, tmp_path):
+        with patch.object(
+            helpers_module, "get_context_path", return_value=tmp_path / "nonexistent.json"
+        ):
+            result = get_current_notebook()
+            assert result is None
+
+    def test_set_and_get_current_notebook(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_notebook("nb_test123", title="Test Notebook")
+            result = get_current_notebook()
+            assert result == "nb_test123"
+
+    def test_context_module_uses_own_get_context_path(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        with patch.object(context_module, "get_context_path", return_value=context_file):
+            context_module.set_current_notebook("nb_test123", title="Test Notebook")
+            result = context_module.get_current_notebook()
+            assert result == "nb_test123"
+
+    def test_set_notebook_with_all_fields(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_notebook(
+                "nb_test123", title="Test Notebook", is_owner=True, created_at="2024-01-01T00:00:00"
+            )
+            data = json.loads(context_file.read_text())
+            assert data["notebook_id"] == "nb_test123"
+            assert data["title"] == "Test Notebook"
+            assert data["is_owner"] is True
+            assert data["created_at"] == "2024-01-01T00:00:00"
+
+    def test_clear_context(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "test"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            clear_context()
+            assert not context_file.exists()
+
+    def test_clear_context_preserves_account_metadata(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text(
+            json.dumps(
+                {
+                    "notebook_id": "test",
+                    "conversation_id": "conv",
+                    "future_context_field": "clear me too",
+                    "account": {"authuser": 1, "email": "bob@example.com"},
+                }
+            )
+        )
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            assert clear_context() is True
+
+        assert json.loads(context_file.read_text()) == {
+            "account": {"authuser": 1, "email": "bob@example.com"}
+        }
+
+    def test_clear_context_can_remove_account_metadata(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text(
+            json.dumps({"account": {"authuser": 1, "email": "bob@example.com"}})
+        )
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            assert clear_context(clear_account=True) is True
+
+        assert not context_file.exists()
+
+    def test_clear_context_no_file(self, tmp_path):
+        """clear_context should not raise if file doesn't exist"""
+        context_file = tmp_path / "nonexistent.json"
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            clear_context()  # Should not raise
+
+    def test_get_current_conversation_no_file(self, tmp_path):
+        with patch.object(
+            helpers_module, "get_context_path", return_value=tmp_path / "nonexistent.json"
+        ):
+            result = get_current_conversation()
+            assert result is None
+
+    def test_set_and_get_current_conversation(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.parent.mkdir(parents=True, exist_ok=True)
+        context_file.write_text('{"notebook_id": "nb_123"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_conversation("conv_456")
+            result = get_current_conversation()
+            assert result == "conv_456"
+
+    def test_clear_conversation(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "nb_123", "conversation_id": "conv_456"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_conversation(None)
+            result = get_current_conversation()
+            assert result is None
+
+    def test_get_notebook_invalid_json(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text("invalid json")
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            result = get_current_notebook()
+            assert result is None
+
+    def test_get_notebook_non_object_json(self, tmp_path, caplog):
+        context_file = tmp_path / "context.json"
+        context_file.write_text("[]")
+        with (
+            patch.object(helpers_module, "get_context_path", return_value=context_file),
+            caplog.at_level("WARNING", logger="notebooklm.cli.context"),
+        ):
+            result = get_current_notebook()
+            assert result is None
+        assert "expected JSON object, got list []" in caplog.text
+
+    def test_clear_context_lock_timeout_returns_false(self, tmp_path, caplog):
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "test"}')
+        with (
+            patch.object(helpers_module, "get_context_path", return_value=context_file),
+            patch.object(
+                context_module,
+                "FileLock",
+                side_effect=Timeout(str(context_file.with_suffix(".json.lock"))),
+            ),
+            caplog.at_level("WARNING", logger="notebooklm.cli.context"),
+        ):
+            assert clear_context() is False
+
+        assert context_file.exists()
+        assert "lock is contended" in caplog.text
+
+    def test_set_current_notebook_recovers_non_object_json(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text("[]")
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_notebook("nb_new", title="New Notebook")
+
+        data = json.loads(context_file.read_text())
+        assert data["notebook_id"] == "nb_new"
+        assert data["title"] == "New Notebook"
+
+    def test_set_current_conversation_recovers_non_object_json(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text("[]")
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_conversation("conv_456")
+
+        assert json.loads(context_file.read_text()) == {"conversation_id": "conv_456"}
+
+    def test_set_current_notebook_clears_conversation_on_switch(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "nb_old", "conversation_id": "conv_1"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_notebook("nb_new", title="New Notebook")
+            data = json.loads(context_file.read_text())
+            assert data["notebook_id"] == "nb_new"
+            assert "conversation_id" not in data
+
+    def test_set_current_notebook_preserves_account_metadata(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text(
+            json.dumps({"account": {"authuser": 1, "email": "bob@example.com"}})
+        )
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            set_current_notebook("nb_new", title="New Notebook")
+
+        data = json.loads(context_file.read_text())
+        assert data["notebook_id"] == "nb_new"
+        assert data["account"] == {"authuser": 1, "email": "bob@example.com"}
+
+
+class TestRequireNotebook:
+    def test_returns_provided_notebook_id(self, tmp_path):
+        with patch.object(
+            helpers_module, "get_context_path", return_value=tmp_path / "context.json"
+        ):
+            result = require_notebook("nb_provided")
+            assert result == "nb_provided"
+
+    def test_returns_context_notebook_when_none_provided(self, tmp_path):
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "nb_context"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            result = require_notebook(None)
+            assert result == "nb_context"
+
+    def test_raises_system_exit_when_no_notebook(self, tmp_path):
+        with (
+            patch.object(
+                helpers_module,
+                "get_context_path",
+                return_value=tmp_path / "nonexistent.json",
+            ),
+            patch.object(helpers_module, "console"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                require_notebook(None)
+            assert exc_info.value.code == 1
+
+    def test_error_message_names_user_facing_flag_not_kwarg(self, tmp_path):
+        """When `require_notebook` raises with no notebook resolvable, the user-visible
+        error must name the actual CLI flag (`-n/--notebook`), not the internal
+        Python kwarg (`notebook_id`). Regression for the user-facing-flag-name bug.
+        """
+        with (
+            patch.object(
+                helpers_module,
+                "get_context_path",
+                return_value=tmp_path / "nonexistent.json",
+            ),
+            patch.object(helpers_module, "console") as mock_console,
+        ):
+            with pytest.raises(SystemExit):
+                require_notebook(None)
+
+            # The console must have been called once with the failure message.
+            mock_console.print.assert_called_once()
+            printed = mock_console.print.call_args[0][0]
+            # User-facing flag is named.
+            assert "-n/--notebook" in printed
+            # Internal kwarg name does NOT leak.
+            assert "notebook_id" not in printed
+            # Existing context-setup hint is preserved so the user has both options.
+            assert "notebooklm use" in printed
+            # Discoverability: the env-var fallback must be named
+            # so the user knows the third resolution path exists.
+            assert "NOTEBOOKLM_NOTEBOOK" in printed
+
+    def test_returns_env_var_when_no_arg_and_no_context(self, tmp_path, monkeypatch):
+        """`NOTEBOOKLM_NOTEBOOK` env var is honored when no `-n` flag is passed
+        AND no active context is set. Precedence:
+        ``-n`` flag > ``NOTEBOOKLM_NOTEBOOK`` env > active context > error.
+        """
+        monkeypatch.setenv("NOTEBOOKLM_NOTEBOOK", "nb_from_env")
+        with patch.object(
+            helpers_module,
+            "get_context_path",
+            return_value=tmp_path / "nonexistent.json",
+        ):
+            result = require_notebook(None)
+            assert result == "nb_from_env"
+
+    def test_arg_overrides_env_var(self, tmp_path, monkeypatch):
+        """`-n flag-id` overrides ``NOTEBOOKLM_NOTEBOOK=env-id`` (highest precedence)."""
+        monkeypatch.setenv("NOTEBOOKLM_NOTEBOOK", "nb_from_env")
+        with patch.object(
+            helpers_module,
+            "get_context_path",
+            return_value=tmp_path / "nonexistent.json",
+        ):
+            result = require_notebook("nb_from_flag")
+            assert result == "nb_from_flag"
+
+    def test_env_var_overrides_active_context(self, tmp_path, monkeypatch):
+        """``NOTEBOOKLM_NOTEBOOK`` overrides the persisted active-notebook
+        context: env > context per the documented precedence ladder. This makes
+        per-shell env-var overrides composable without clobbering the saved
+        ``notebooklm use`` selection.
+        """
+        monkeypatch.setenv("NOTEBOOKLM_NOTEBOOK", "nb_from_env")
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "nb_from_context"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            result = require_notebook(None)
+            assert result == "nb_from_env"
+
+    def test_blank_env_var_falls_through_to_context(self, tmp_path, monkeypatch):
+        """An empty / whitespace-only ``NOTEBOOKLM_NOTEBOOK`` is treated as unset,
+        not as an error. The active context still wins.
+        """
+        monkeypatch.setenv("NOTEBOOKLM_NOTEBOOK", "   ")
+        context_file = tmp_path / "context.json"
+        context_file.write_text('{"notebook_id": "nb_from_context"}')
+        with patch.object(helpers_module, "get_context_path", return_value=context_file):
+            result = require_notebook(None)
+            assert result == "nb_from_context"
+
+    def test_env_var_is_stripped(self, tmp_path, monkeypatch):
+        """``NOTEBOOKLM_NOTEBOOK`` value is trimmed of surrounding whitespace
+        before being returned (consistent with ``validate_id``'s behavior on
+        the flag/context paths).
+        """
+        monkeypatch.setenv("NOTEBOOKLM_NOTEBOOK", "  nb_padded  ")
+        with patch.object(
+            helpers_module,
+            "get_context_path",
+            return_value=tmp_path / "nonexistent.json",
+        ):
+            result = require_notebook(None)
+            assert result == "nb_padded"
+
+
+# =============================================================================
+# NOTEBOOK OPTION DECORATOR CONSISTENCY TESTS
+# =============================================================================
+
+
+def _discover_notebook_commands():
+    """Walk the assembled root CLI and return all (group_label, subcommand_name,
+    Option) triples for any command exposing the `-n/--notebook` flag — including
+    top-level commands (e.g. `notebooklm ask -n ...`) and grouped subcommands
+    (e.g. `notebooklm artifact list -n ...`).
+
+    Programmatic discovery is intentional: it guarantees that any *future*
+    command picking up `-n/--notebook` is automatically subjected to the
+    canonical-decorator gate, with no extra parametrize-list maintenance.
+    """
+    from click import Group, Option
+
+    from notebooklm.notebooklm_cli import cli as root_cli
+
+    discovered: list = []
+
+    def _scan(group_label: str, cmd) -> None:
+        # Record this command if it carries -n/--notebook directly.
+        for param in cmd.params:
+            if not isinstance(param, Option):
+                continue
+            if "-n" in param.opts and "--notebook" in param.opts:
+                discovered.append((group_label, cmd.name, param))
+                break
+        # Then recurse into any nested groups; their subcommands inherit the
+        # group's name as their `group_label` (e.g. `artifact/list`).
+        if isinstance(cmd, Group):
+            for _sub_name, sub in sorted(cmd.commands.items()):
+                _scan(cmd.name, sub)
+
+    # Top-level commands live directly under the root CLI; tag them as `<root>`
+    # so the parametrize id reads `<root>/ask` etc.
+    for _sub_name, sub in sorted(root_cli.commands.items()):
+        _scan("<root>", sub)
+    return discovered
+
+
+_NOTEBOOK_COMMAND_TRIPLES = _discover_notebook_commands()
+
+
+def _canonical_notebook_help() -> str:
+    """Return the canonical help string by introspecting the actual decorator
+    in `cli/options.py`, so tests can never silently drift from the source of
+    truth. We apply `notebook_option` to a throwaway probe function and read
+    back the `help=` Click stored on the resulting Option.
+    """
+    from click import Option
+
+    from notebooklm.cli.options import notebook_option
+
+    @notebook_option
+    def _probe(notebook_id):  # pragma: no cover — never invoked
+        pass
+
+    for param in _probe.__click_params__:  # type: ignore[attr-defined]
+        if isinstance(param, Option) and "--notebook" in param.opts:
+            assert param.help is not None, (
+                "cli/options.py:notebook_option must declare a help= string"
+            )
+            return param.help
+    raise RuntimeError("Failed to introspect cli/options.py:notebook_option help text")
+
+
+_CANONICAL_NOTEBOOK_HELP = _canonical_notebook_help()
+
+
+class TestNotebookOptionConsistency:
+    """Every command exposing -n/--notebook must do so via the canonical
+    `cli/options.py:notebook_option` decorator. We assert via Click's introspection
+    that both the short/long flag pair and the canonical help text are present.
+    """
+
+    def test_some_commands_expose_notebook_flag(self):
+        """Sanity check that the discovery walk found a substantial fraction of
+        the known commands. If this falls far below the live count we silently
+        lose coverage from the parametrized test below — and an entire CLI
+        group could be dropped without tripping the gate.
+        """
+        # As of this PR, discovery finds ~65 commands across all groups + top-level.
+        # The bound is set tight enough that losing one full group (e.g. `source`,
+        # ~13 commands) trips this guard immediately.
+        assert len(_NOTEBOOK_COMMAND_TRIPLES) >= 55, (
+            f"Expected ≥55 -n/--notebook commands discovered, got "
+            f"{len(_NOTEBOOK_COMMAND_TRIPLES)} — discovery walk is broken or "
+            f"a CLI group lost its -n/--notebook surface"
+        )
+
+    @pytest.mark.parametrize(
+        ("group_label", "subcommand", "param"),
+        _NOTEBOOK_COMMAND_TRIPLES,
+        ids=[f"{g}/{s}" for g, s, _ in _NOTEBOOK_COMMAND_TRIPLES],
+    )
+    def test_subcommand_uses_canonical_notebook_option(self, group_label, subcommand, param):
+        """Every subcommand exposing -n/--notebook must use the canonical
+        decorator (asserted via canonical help text — derived live from
+        `cli/options.py` — and the `notebook_id` kwarg name).
+        """
+        assert param.name == "notebook_id", (
+            f"{group_label}/{subcommand} -n/--notebook must bind to kwarg "
+            f"'notebook_id' (the canonical decorator's kwarg name), got "
+            f"{param.name!r}"
+        )
+        assert (param.help or "") == _CANONICAL_NOTEBOOK_HELP, (
+            f"{group_label}/{subcommand} -n/--notebook help must equal the "
+            f"canonical string {_CANONICAL_NOTEBOOK_HELP!r} (from "
+            f"cli/options.py:notebook_option), got {param.help!r}"
+        )
+
+
+# =============================================================================
+# ERROR HANDLING TESTS
+# =============================================================================
+
+
+class TestHandleError:
+    def test_prints_error_and_exits(self):
+        with patch.object(helpers_module, "console") as mock_console:
+            with pytest.raises(SystemExit) as exc_info:
+                handle_error(ValueError("Test error"))
+            assert exc_info.value.code == 1
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args[0][0]
+            assert "Test error" in call_args
+
+    def test_falls_back_when_console_cannot_encode_error(self):
+        class DummyStderr:
+            encoding = "cp950"
+
+        calls = []
+
+        def flaky_echo(message=None, **kwargs):
+            err = kwargs.get("err", False)
+            if not calls:
+                calls.append((message, err))
+                raise UnicodeEncodeError(
+                    "cp950",
+                    str(message),
+                    0,
+                    1,
+                    "illegal multibyte sequence",
+                )
+            calls.append((message, err))
+
+        with (
+            patch.object(helpers_module, "console") as mock_console,
+            patch.object(encoding_module.click, "echo", side_effect=flaky_echo),
+            patch.object(encoding_module.sys, "stderr", DummyStderr()),
+        ):
+            mock_console.print.side_effect = UnicodeEncodeError(
+                "cp950",
+                "Error: broken 🌐",
+                14,
+                15,
+                "illegal multibyte sequence",
+            )
+
+            with pytest.raises(SystemExit) as exc_info:
+                handle_error(ValueError("broken 🌐"))
+
+        assert exc_info.value.code == 1
+        assert calls == [("Error: broken 🌐", True), ("Error: broken ?", True)]
+
+
+class TestHandleAuthError:
+    def test_non_json_prints_message_and_exits(self):
+        with patch.object(helpers_module, "console") as mock_console:
+            with pytest.raises(SystemExit) as exc_info:
+                handle_auth_error(json_output=False)
+            assert exc_info.value.code == 1
+            # Enhanced error message makes multiple print calls
+            assert mock_console.print.call_count >= 1
+            # Verify key messages are present across all calls
+            all_output = " ".join(str(call[0][0]) for call in mock_console.print.call_args_list)
+            assert "not logged in" in all_output.lower()
+            assert "login" in all_output.lower()
+
+    def test_json_outputs_json_error_and_exits(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            handle_auth_error(json_output=True)
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["error"] is True
+        assert data["code"] == "AUTH_REQUIRED"
+
+
+class TestDisplayReport:
+    def test_prints_markdown_as_literal_text(self):
+        report = "See [NotebookLM](https://example.com) and [1]"
+
+        with patch.object(helpers_module, "console") as mock_console:
+            display_report(report, max_chars=1000)
+
+        assert mock_console.print.call_count == 2
+        assert mock_console.print.call_args_list[0].args[0] == "\n[bold]Report:[/bold]"
+        assert mock_console.print.call_args_list[1].args[0] == report
+        assert mock_console.print.call_args_list[1].kwargs["markup"] is False
+
+    def test_rendering_module_prints_markdown_as_literal_text(self):
+        report = "See [NotebookLM](https://example.com) and [1]"
+
+        with patch.object(rendering_module, "console") as mock_console:
+            rendering_module.display_report(report, max_chars=1000)
+
+        assert mock_console.print.call_count == 2
+        assert mock_console.print.call_args_list[0].args[0] == "\n[bold]Report:[/bold]"
+        assert mock_console.print.call_args_list[1].args[0] == report
+        assert mock_console.print.call_args_list[1].kwargs["markup"] is False
+
+    def test_truncates_report_and_shows_json_hint(self):
+        report = "abcdef"
+
+        with patch.object(helpers_module, "console") as mock_console:
+            display_report(report, max_chars=3, json_hint=True)
+
+        assert mock_console.print.call_count == 3
+        assert mock_console.print.call_args_list[1].args[0] == "abc"
+        assert mock_console.print.call_args_list[1].kwargs["markup"] is False
+        assert mock_console.print.call_args_list[2].args[0] == (
+            "[dim]... (truncated, use --json for full report)[/dim]"
+        )
+
+    def test_truncates_report_without_json_hint(self):
+        report = "abcdef"
+
+        with patch.object(helpers_module, "console") as mock_console:
+            display_report(report, max_chars=3, json_hint=False)
+
+        assert mock_console.print.call_args_list[2].args[0] == "[dim]... (truncated)[/dim]"
+
+
+class TestDisplayResearchSources:
+    def test_shows_string_result_type_labels(self):
+        sources = [
+            {"title": "Web Result", "url": "https://example.com", "result_type": "web"},
+            {"title": "Drive Result", "url": "https://drive.example.com", "result_type": "drive"},
+        ]
+
+        with patch.object(helpers_module, "console") as mock_console:
+            display_research_sources(sources)
+
+        assert mock_console.print.call_count == 2
+        table = mock_console.print.call_args_list[1].args[0]
+        columns = [column.header for column in table.columns]
+        assert columns == ["Title", "Type", "URL"]
+        type_cells = table.columns[1]._cells
+        assert type_cells == ["Web", "Drive"]
+
+
+# =============================================================================
+# WITH_CLIENT DECORATOR TESTS
+# =============================================================================
+
+
+class TestWithClientDecorator:
+    def test_decorator_passes_auth_to_function(self):
+        """Test that @with_client properly injects client_auth"""
+        import click
+        from click.testing import CliRunner
+
+        @click.command()
+        @with_client
+        def test_cmd(ctx, client_auth):
+            async def _run():
+                click.echo(f"Got auth: {client_auth is not None}")
+
+            return _run()
+
+        runner = CliRunner()
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf", "session")
+                result = runner.invoke(test_cmd)
+
+        assert result.exit_code == 0
+        assert "Got auth: True" in result.output
+
+    def test_decorator_handles_no_auth(self):
+        """Test that @with_client handles missing auth gracefully"""
+        import click
+        from click.testing import CliRunner
+
+        @click.command()
+        @with_client
+        def test_cmd(ctx, client_auth):
+            async def _run():
+                pass
+
+            return _run()
+
+        runner = CliRunner()
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.side_effect = FileNotFoundError("No auth")
+            result = runner.invoke(test_cmd)
+
+        assert result.exit_code == 1
+        assert "login" in result.output.lower()
+
+    def test_decorator_file_not_found_in_command_not_treated_as_auth_error(self):
+        """Test that FileNotFoundError from command logic is NOT treated as auth error.
+
+        Regression test for GitHub issue #153: `source add --type file` with a
+        missing file was incorrectly showing 'Not logged in' because the
+        with_client decorator caught all FileNotFoundError as auth errors.
+
+        After the with_client refactor, ``with_client`` routes body errors through ``handle_errors``,
+        so an unexpected FileNotFoundError surfaces as an UNEXPECTED_ERROR
+        (exit 2) — still NOT an auth error.
+        """
+        import click
+        from click.testing import CliRunner
+
+        @click.command()
+        @with_client
+        def test_cmd(ctx, client_auth):
+            async def _run():
+                raise FileNotFoundError("File not found: /tmp/nonexistent.pdf")
+
+            return _run()
+
+        runner = CliRunner()
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf", "session")
+                result = runner.invoke(test_cmd)
+
+        # Must not exit 0; the operation failed.
+        assert result.exit_code != 0
+        # The crucial property: this is NOT misclassified as an auth error.
+        combined = (result.output or "") + " " + (getattr(result, "stderr", "") or "")
+        assert "login" not in combined.lower()
+
+    def test_decorator_handles_exception_non_json(self):
+        """Unhandled body exceptions surface via ``handle_errors`` (exit 2)."""
+        import click
+        from click.testing import CliRunner
+
+        @click.command()
+        @with_client
+        def test_cmd(ctx, client_auth):
+            async def _run():
+                raise ValueError("Test error")
+
+            return _run()
+
+        runner = CliRunner()
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf", "session")
+                result = runner.invoke(test_cmd)
+
+        # UNEXPECTED_ERROR → exit 2 (system/bug bucket).
+        assert result.exit_code == 2
+        combined = (result.output or "") + " " + (getattr(result, "stderr", "") or "")
+        assert "Test error" in combined
+
+    def test_decorator_handles_exception_json_mode(self):
+        """``--json`` mode emits parseable JSON with nonzero exit."""
+        import click
+        from click.testing import CliRunner
+
+        @click.command()
+        @click.option("--json", "json_output", is_flag=True)
+        @with_client
+        def test_cmd(ctx, json_output, client_auth):
+            async def _run():
+                raise ValueError("Test error")
+
+            return _run()
+
+        runner = CliRunner()
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf", "session")
+                result = runner.invoke(test_cmd, ["--json"])
+
+        assert result.exit_code != 0
+        data = json.loads(result.stdout)
+        assert data["error"] is True
+        assert "Test error" in data["message"]
+
+
+# =============================================================================
+# GET_CLIENT AND GET_AUTH_TOKENS TESTS
+# =============================================================================
+
+
+class TestGetClient:
+    def test_returns_tuple_of_auth_components(self):
+        ctx = MagicMock()
+        ctx.obj = None
+
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test_sid", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf_token", "session_id")
+
+                cookies, csrf, session = get_client(ctx)
+
+        assert cookies == {"SID": "test_sid", "__Secure-1PSIDTS": "test_1psidts"}
+        assert csrf == "csrf_token"
+        assert session == "session_id"
+
+    def test_uses_storage_path_from_context(self):
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": "/custom/path"}
+
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf", "session")
+
+                get_client(ctx)
+
+        mock_load.assert_called_once_with("/custom/path")
+
+    def test_auth_runtime_observes_helper_patch_seams(self):
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": "/custom/path", "profile": "agent"}
+
+        with (
+            patch.object(helpers_module, "load_auth_from_storage") as mock_load,
+            patch.object(helpers_module, "run_async", return_value=("csrf", "session")) as runner,
+        ):
+            mock_load.return_value = {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+            token_fetch = object()
+            mock_fetch = MagicMock(return_value=token_fetch)
+
+            with patch.object(auth_module, "fetch_tokens_with_domains", new=mock_fetch):
+                cookies, csrf, session = auth_runtime_module.get_client(ctx)
+
+        mock_load.assert_called_once_with("/custom/path")
+        mock_fetch.assert_called_once_with("/custom/path", "agent")
+        runner.assert_called_once_with(token_fetch)
+        assert cookies == {"SID": "test", "__Secure-1PSIDTS": "test_1psidts"}
+        assert csrf == "csrf"
+        assert session == "session"
+
+    def test_fetches_tokens_before_loading_cookies_so_recovery_is_visible(self):
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": "/custom/path", "profile": "agent"}
+        events = []
+
+        async def fetch_tokens(*args):
+            events.append("fetch")
+            return "csrf", "session"
+
+        def load_cookies(path):
+            events.append("load")
+            return {"SID": "healed", "__Secure-1PSIDTS": "fresh"}
+
+        with (
+            patch.object(helpers_module, "load_auth_from_storage", side_effect=load_cookies),
+            patch.object(auth_module, "fetch_tokens_with_domains", new=fetch_tokens),
+        ):
+            cookies, csrf, session = auth_runtime_module.get_client(ctx)
+
+        assert events == ["fetch", "load"]
+        assert cookies["SID"] == "healed"
+        assert (csrf, session) == ("csrf", "session")
+
+
+class TestGetAuthTokens:
+    def test_returns_auth_tokens_object(self):
+        ctx = MagicMock()
+        ctx.obj = None
+
+        with patch.object(helpers_module, "load_auth_from_storage") as mock_load:
+            mock_load.return_value = {"SID": "test_sid", "__Secure-1PSIDTS": "test_1psidts"}
+            with patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch:
+                mock_fetch.return_value = ("csrf_token", "session_id")
+
+                auth = get_auth_tokens(ctx)
+
+        assert auth.cookies == {
+            ("SID", ".google.com", "/"): "test_sid",
+            ("__Secure-1PSIDTS", ".google.com", "/"): "test_1psidts",
+        }
+        assert auth.flat_cookies == {"SID": "test_sid", "__Secure-1PSIDTS": "test_1psidts"}
+        assert auth.csrf_token == "csrf_token"
+        assert auth.session_id == "session_id"
+
+    def test_explicit_storage_path_overrides_auth_json_cookie_jar(self, tmp_path, monkeypatch):
+        storage_path = tmp_path / "storage_state.json"
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": storage_path, "profile": None}
+        monkeypatch.setenv(
+            "NOTEBOOKLM_AUTH_JSON",
+            json.dumps(
+                {
+                    "cookies": [
+                        {"name": "SID", "value": "env", "domain": ".google.com"},
+                        {
+                            "name": "__Secure-1PSIDTS",
+                            "value": "test_1psidts",
+                            "domain": ".google.com",
+                        },
+                    ]
+                }
+            ),
+        )
+
+        with (
+            patch.object(helpers_module, "load_auth_from_storage") as mock_load,
+            patch.object(
+                auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+            ) as mock_fetch,
+            patch.object(auth_module, "build_httpx_cookies_from_storage") as mock_env_jar,
+            patch.object(helpers_module, "build_cookie_jar") as mock_build_jar,
+        ):
+            mock_load.return_value = {"SID": "file", "__Secure-1PSIDTS": "test_1psidts"}
+            mock_fetch.return_value = ("csrf", "session")
+            mock_build_jar.return_value = httpx.Cookies()
+
+            auth = get_auth_tokens(ctx)
+
+        mock_env_jar.assert_not_called()
+        mock_build_jar.assert_called_once_with(
+            cookies={"SID": "file", "__Secure-1PSIDTS": "test_1psidts"}, storage_path=storage_path
+        )
+        assert auth.storage_path == storage_path
+
+
+class TestRunAsync:
+    def test_runs_coroutine_and_returns_result(self):
+        async def sample_coro():
+            return "result"
+
+        result = run_async(sample_coro())
+        assert result == "result"
+
+    def test_runtime_module_runs_coroutine_and_returns_result(self):
+        async def sample_coro():
+            return "result"
+
+        result = runtime_module.run_async(sample_coro())
+        assert result == "result"
+
+    def test_helpers_run_async_is_compatibility_wrapper(self):
+        async def sample_coro():
+            return "result"
+
+        coro = sample_coro()
+        try:
+            with patch.object(runtime_module, "run_async", return_value="patched") as runner:
+                result = run_async(coro)
+        finally:
+            coro.close()
+
+        runner.assert_called_once_with(coro)
+        assert result == "patched"
+
+    def test_nested_event_loop_raises_helpful_error(self):
+        """Calling run_async from inside a running loop raises a CLI-shaped
+        RuntimeError and does NOT leak a 'coroutine was never awaited' warning.
+
+        The nested-loop guard wraps ``asyncio.run`` and explicitly closes the
+        coroutine before re-raising so callers see the helpful message,
+        not the noisy RuntimeWarning.
+        """
+
+        async def sample_coro():
+            return "should-never-run"
+
+        async def driver():
+            coro = sample_coro()
+            try:
+                # Filter RuntimeWarning to surface as an error so pytest's
+                # filterwarnings doesn't swallow it even in environments
+                # that downgrade it. If close() works, no warning fires.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", RuntimeWarning)
+                    with pytest.raises(RuntimeError) as exc_info:
+                        run_async(coro)
+                return exc_info.value
+            finally:
+                # Defensive: ensure no coroutine leak even if the assertion
+                # path above changes — close() is idempotent.
+                coro.close()
+
+        err = asyncio.run(driver())
+        assert "existing event loop" in str(err)
+        assert "async API" in str(err)
+
+    def test_non_loop_runtime_error_passes_through_unchanged(self):
+        """RuntimeError raised *inside* the coroutine must propagate as-is
+        (not be rewritten into the nested-loop message). The guard is keyed
+        on the 'running event loop' substring of asyncio.run's own error.
+        """
+
+        async def boom():
+            raise RuntimeError("kaboom")
+
+        with pytest.raises(RuntimeError, match="kaboom"):
+            run_async(boom())
+
+
+class TestImportWithRetry:
+    @pytest.mark.asyncio
+    async def test_helpers_import_with_retry_passes_console_without_global_mutation(self):
+        client = MagicMock()
+        original_console = research_import_module.console
+
+        with (
+            patch.object(helpers_module, "console") as mock_console,
+            patch.object(
+                research_import_module,
+                "import_with_retry",
+                new_callable=AsyncMock,
+            ) as mock_import,
+        ):
+            mock_import.return_value = [{"id": "src_1", "title": "Source 1"}]
+
+            imported = await helpers_module.import_with_retry(
+                client,
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert imported == [{"id": "src_1", "title": "Source 1"}]
+        assert research_import_module.console is original_console
+        mock_import.assert_awaited_once_with(
+            client,
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+            max_elapsed=1800,
+            initial_delay=5,
+            backoff_factor=2,
+            max_delay=60,
+            json_output=False,
+            output_console=mock_console,
+        )
+
+    @pytest.mark.asyncio
+    async def test_helpers_import_research_sources_uses_patchable_retry_wrapper(self):
+        client = MagicMock()
+
+        with patch.object(
+            helpers_module,
+            "import_with_retry",
+            new_callable=AsyncMock,
+        ) as mock_import:
+            mock_import.return_value = [{"id": "src_1", "title": "Source 1"}]
+
+            result = await helpers_module.import_research_sources(
+                client,
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+                max_elapsed=123,
+            )
+
+        assert result.imported == [{"id": "src_1", "title": "Source 1"}]
+        mock_import.assert_awaited_once_with(
+            client,
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+            max_elapsed=123,
+        )
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_research_api_method(self):
+        """The CLI shim must forward all retry knobs unchanged to
+        ``client.research.import_sources_with_verification`` (issue #315).
+
+        Behavior tests for the retry+verify loop live at the library layer
+        in ``tests/unit/test_research_import_with_verification.py``; this
+        test only locks down the CLI→library wiring.
+        """
+        client = MagicMock()
+        client.research.import_sources_with_verification = AsyncMock(
+            return_value=[{"id": "src_1", "title": "Source 1"}]
+        )
+
+        imported = await import_with_retry(
+            client,
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+            max_elapsed=900,
+            initial_delay=3,
+            backoff_factor=4,
+            max_delay=120,
+            json_output=True,  # accepted for back-compat; library method ignores it
+        )
+
+        assert imported == [{"id": "src_1", "title": "Source 1"}]
+        client.research.import_sources_with_verification.assert_awaited_once_with(
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+            max_elapsed=900,
+            initial_delay=3,
+            backoff_factor=4,
+            max_delay=120,
+        )
+
+
+class TestGetAuthTokensAuthuser:
+    """Regression for #359: get_auth_tokens must read authuser from context.json
+    so RPC URLs route to the right Google account."""
+
+    def test_authuser_from_context_json_propagates_to_authtokens(self, tmp_path):
+        storage = tmp_path / "storage_state.json"
+        storage.write_text(
+            json.dumps(
+                {
+                    "cookies": [
+                        {"name": "SID", "value": "x", "domain": ".google.com"},
+                        {"name": "HSID", "value": "x", "domain": ".google.com"},
+                        {"name": "SSID", "value": "x", "domain": ".google.com"},
+                        {"name": "APISID", "value": "x", "domain": ".google.com"},
+                        {"name": "SAPISID", "value": "x", "domain": ".google.com"},
+                        {"name": "__Secure-1PSIDTS", "value": "x", "domain": ".google.com"},
+                    ]
+                }
+            )
+        )
+        (tmp_path / "context.json").write_text(
+            json.dumps({"account": {"authuser": 2, "email": "bob@example.com"}}),
+            encoding="utf-8",
+        )
+
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": storage, "profile": None}
+
+        token_fetch = object()
+        with (
+            patch.object(
+                auth_module, "fetch_tokens_with_domains", new=lambda *_, **__: token_fetch
+            ),
+            patch.object(
+                helpers_module,
+                "run_async",
+                return_value=("csrf_v2", "sess_v2"),
+            ),
+        ):
+            tokens = get_auth_tokens(ctx)
+
+        assert tokens.authuser == 2
+        assert tokens.csrf_token == "csrf_v2"
+
+    def test_default_authuser_when_no_account_metadata(self, tmp_path):
+        storage = tmp_path / "storage_state.json"
+        storage.write_text(
+            json.dumps(
+                {
+                    "cookies": [
+                        {"name": "SID", "value": "x", "domain": ".google.com"},
+                        {"name": "HSID", "value": "x", "domain": ".google.com"},
+                        {"name": "SSID", "value": "x", "domain": ".google.com"},
+                        {"name": "APISID", "value": "x", "domain": ".google.com"},
+                        {"name": "SAPISID", "value": "x", "domain": ".google.com"},
+                        {"name": "__Secure-1PSIDTS", "value": "x", "domain": ".google.com"},
+                    ]
+                }
+            )
+        )
+
+        ctx = MagicMock()
+        ctx.obj = {"storage_path": storage, "profile": None}
+
+        token_fetch = object()
+        with (
+            patch.object(
+                auth_module, "fetch_tokens_with_domains", new=lambda *_, **__: token_fetch
+            ),
+            patch.object(
+                helpers_module,
+                "run_async",
+                return_value=("csrf", "sess"),
+            ),
+        ):
+            tokens = get_auth_tokens(ctx)
+
+        assert tokens.authuser == 0

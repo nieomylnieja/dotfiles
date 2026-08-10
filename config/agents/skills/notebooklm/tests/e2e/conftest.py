@@ -1,0 +1,1308 @@
+"""E2E test fixtures and configuration."""
+
+import contextlib
+import hashlib
+import logging
+import os
+import subprocess
+import sys
+import warnings
+from collections.abc import AsyncGenerator, AsyncIterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
+
+import pytest
+
+from notebooklm._env import get_base_url
+
+if TYPE_CHECKING:
+    from notebooklm.client import NotebookLMClient
+
+# Load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, rely on shell environment
+
+from notebooklm import NotebookLMClient
+
+# ``load_auth_from_storage`` was de-blessed from ``notebooklm.auth.__all__`` in
+# #1592 (still importable there for back-compat); first-party code — including
+# these e2e fixtures — imports it from its canonical ``_auth.tokens`` home.
+from notebooklm._auth.tokens import load_auth_from_storage
+from notebooklm.auth import AuthTokens
+from notebooklm.exceptions import ChatError, RateLimitError
+from notebooklm.paths import get_profile_dir
+
+# Substrings in ChatError / skip messages that mark a server-side rate-limit
+# or quota rejection rather than a client bug. Covers both the explicit
+# UserDisplayableError message and the HTTP-status-wrapped 429 path in
+# ``notebooklm._chat.transport.chat_aware_authed_post``, the generation skip
+# phrase in assert_generation_started, and the "Rate limit:" prefix
+# _install_generation_rate_limit_skip adds to typed RateLimitError skips.
+_RATE_LIMIT_PHRASES = (
+    "rate limit",
+    "rate limited",
+    "rate-limited",
+    "rejected by the api",
+    "429",
+    "too many requests",
+)
+_LIVE_CHAT_ASK_MARKER = "live_chat_ask"
+_LIVE_GENERATION_MARKER = "live_generation"
+# Coverage-floor markers → human label. A floor "fails" when at least one marked
+# test was rate-limit-skipped and none passed (hollow-green coverage). Enforced
+# only when E2E_ENFORCE_COVERAGE_FLOOR=1 (the nightly), so a shared daily-quota
+# exhaustion never reds a release job — see #1819 / _coverage_floor_enforced.
+_COVERAGE_FLOOR_MARKERS = {
+    _LIVE_CHAT_ASK_MARKER: "live chat",
+    _LIVE_GENERATION_MARKER: "live generation",
+}
+
+# Every live entrypoint that issues CREATE_ARTIFACT and can raise a quota
+# RateLimitError *before* any GenerationStatus exists (so assert_generation_started's
+# skip never runs). Keyed by client-namespace attr → predicate over method name.
+# Quizzes/flashcards/audio/video/etc. ride client.artifacts.generate_*/revise_*; the
+# interactive mind map goes through the separate client.mind_maps.generate path (the
+# #1819 gap that hard-failed the suite). Add new generation namespaces here — the guard
+# test TestGenerationSkipRegistryCoverage.test_registry_covers_all_generate_and_revise_methods
+# fails if an unregistered generate_/revise_/retry_ method appears on a covered class.
+#
+# Note: wrapping a whole method means a RateLimitError from a *post-create* RPC (e.g.
+# mind_maps.generate(wait=True) polling, or its settling _find_interactive LIST, after
+# CREATE_ARTIFACT already made the artifact) also skips — before generate returns the id
+# to its caller, so the caller can't clean up and the artifact leaks. The #1819
+# create-time case raises before any artifact exists (no leak). Splitting create from
+# poll does NOT close this: even generate(wait=False) issues a post-create LIST. Callers
+# that need cleanup therefore guard with an unconditional teardown sweep of the created
+# artifact type (id capture is unreliable across the skip) — see
+# tests/e2e/test_interactive_mind_map.py's swept_interactive_mind_maps fixture (#1937).
+_GENERATION_SKIP_TARGETS = {
+    # ``retry_failed`` re-runs generation and raises RateLimitError on quota, same
+    # as generate_*/revise_* — cover it too so a future e2e test doesn't hard-fail.
+    "artifacts": lambda n: n.startswith(("generate_", "revise_")) or n == "retry_failed",
+    "mind_maps": lambda n: n == "generate",
+    # Deliberately NOT here: client.labels.generate (CREATE_LABEL, the AI Auto-label
+    # action) and client.research.start (Deep Research). These are separate limit
+    # classes, not the daily CREATE_ARTIFACT quota — labels has no documented quota,
+    # and research already tolerates throttling via @pytest.mark.xfail. Don't lump
+    # them in on theory; add here (with evidence) only if one actually hard-fails CI.
+}
+
+
+def _install_chat_rate_limit_skip(client: NotebookLMClient) -> None:
+    """Wrap ``client.chat.ask`` so rate-limit ``ChatError``s become skips.
+
+    Non-rate-limit ``ChatError``s (HTTP, auth, parse) still raise so real
+    defects stay visible.
+    """
+    original_ask = client.chat.ask
+
+    async def _ask_with_skip(*args, **kwargs):
+        try:
+            return await original_ask(*args, **kwargs)
+        except ChatError as e:
+            if any(phrase in str(e).lower() for phrase in _RATE_LIMIT_PHRASES):
+                pytest.skip(str(e))
+            raise
+
+    client.chat.ask = _ask_with_skip
+
+
+def _install_generation_rate_limit_skip(client: NotebookLMClient) -> None:
+    """Wrap every live CREATE_ARTIFACT entrypoint so ``RateLimitError`` becomes a skip.
+
+    The RPC layer raises a typed ``RateLimitError`` when Google rejects
+    CREATE_ARTIFACT with a quota error (e.g. upstream status 8, Resource
+    exhausted) — before any ``GenerationStatus`` exists, so the
+    ``is_rate_limited`` skip in ``assert_generation_started`` never runs.
+    That is server-side throttling, not a client defect. Only the precise
+    typed ``RateLimitError`` skips; every other exception still raises so
+    real defects stay visible.
+
+    Covers every namespace in ``_GENERATION_SKIP_TARGETS`` — not just
+    ``client.artifacts`` — so paths like ``client.mind_maps.generate`` (the
+    interactive mind map, #1819) skip on quota exhaustion instead of hard-failing.
+    """
+
+    def _wrap(original):
+        async def _with_skip(*args, **kwargs):
+            try:
+                return await original(*args, **kwargs)
+            except RateLimitError as e:
+                # The "Rate limit:" prefix guarantees a _RATE_LIMIT_PHRASES
+                # match regardless of the exception message wording, so the
+                # skip always lands in pytest_terminal_summary's section.
+                pytest.skip(f"Rate limit: {e}")
+
+        return _with_skip
+
+    for ns_name, matches in _GENERATION_SKIP_TARGETS.items():
+        namespace = getattr(client, ns_name, None)
+        if namespace is None:
+            continue
+        for name in dir(namespace):
+            if not matches(name):
+                continue
+            original = getattr(namespace, name)
+            if not callable(original):
+                continue
+            setattr(namespace, name, _wrap(original))
+
+
+def _emit_auth_route_diagnostic(auth_tokens: AuthTokens) -> None:
+    """Emit non-secret auth-routing context for CI debugging."""
+    source = (
+        "NOTEBOOKLM_AUTH_JSON"
+        if auth_tokens.storage_path is None and os.environ.get("NOTEBOOKLM_AUTH_JSON")
+        else "storage_state"
+    )
+    email_hash = "none"
+    if auth_tokens.account_email:
+        email_hash = hashlib.sha256(auth_tokens.account_email.lower().encode()).hexdigest()[:12]
+    message = (
+        "E2E auth route: "
+        f"source={source} "
+        f"storage_path={'none' if auth_tokens.storage_path is None else 'file'} "
+        f"authuser={auth_tokens.authuser} "
+        f"account_email_hash={email_hash}"
+    )
+    if os.environ.get("GITHUB_ACTIONS"):
+        print(f"::notice::{message}")
+    else:
+        logging.info(message)
+
+
+# =============================================================================
+# --profile flag plumbing
+# =============================================================================
+# `--profile NAME` selects the NotebookLM profile for the test session by
+# setting ``NOTEBOOKLM_PROFILE``. The flag is applied in two places:
+#
+# 1. At module import (via ``_argv_profile``) so the module-level
+#    ``requires_auth = pytest.mark.skipif(not has_auth(), ...)`` below resolves
+#    auth under the selected profile. ``pytest_configure`` runs *after*
+#    conftest import, which is too late for that marker. The early peek only
+#    sees ``sys.argv`` — flags injected via ``addopts`` in ``pytest.ini`` /
+#    ``pyproject.toml`` are not visible until ``pytest_configure``.
+# 2. In ``pytest_configure``, as a backstop for invocations that mutate
+#    sys.argv after conftest is imported (e.g. ``pytest.main(args=...)``)
+#    and to pick up ``--profile`` from ``addopts``.
+#
+# ``pytest_unconfigure`` restores the prior env var so the mutation does not
+# leak across the rest of the pytest process (matters for IDE/in-process runs).
+
+# Records prior NOTEBOOKLM_PROFILE state on first mutation; ``None`` means we
+# never mutated. ``(was_set, value)`` lets unconfigure restore an existing
+# value or pop the var entirely.
+_PROFILE_PRIOR: tuple[bool, str | None] | None = None
+
+
+def _argv_profile(argv: list[str] | None = None) -> str | None:
+    """Extract ``--profile NAME`` or ``--profile=NAME`` from argv.
+
+    Iterates from the end so the *last* occurrence wins (matching argparse
+    semantics for ``action="store"``), and rejects values that look like
+    another flag (``--profile --verbose`` should not consume ``--verbose``
+    as the profile name).
+    """
+    args = sys.argv if argv is None else argv
+    for i in range(len(args) - 1, -1, -1):
+        arg = args[i]
+        if arg.startswith("--profile="):
+            return arg.split("=", 1)[1]
+        if arg == "--profile" and i + 1 < len(args):
+            value = args[i + 1]
+            if not value.startswith("-"):
+                return value
+    return None
+
+
+def _apply_profile(profile: str) -> None:
+    """Set ``NOTEBOOKLM_PROFILE``; record prior state for ``pytest_unconfigure``."""
+    global _PROFILE_PRIOR
+    if _PROFILE_PRIOR is None:
+        _PROFILE_PRIOR = (
+            "NOTEBOOKLM_PROFILE" in os.environ,
+            os.environ.get("NOTEBOOKLM_PROFILE"),
+        )
+    os.environ["NOTEBOOKLM_PROFILE"] = profile
+
+
+if _early := _argv_profile():
+    _apply_profile(_early)
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Delay constants for polling
+SOURCE_PROCESSING_DELAY = 2.0  # Delay for source processing
+POLL_INTERVAL = 2.0  # Interval between poll attempts
+POLL_TIMEOUT = 60.0  # Max time to wait for operations
+
+# Rate limiting delay between generation tests (seconds)
+# Helps avoid API rate limits when running multiple generation tests
+GENERATION_TEST_DELAY = 15.0
+
+# Delay between chat tests (seconds) to avoid API rate limits from rapid ask() calls
+CHAT_TEST_DELAY = 5.0
+E2E_TEST_DIR = Path(__file__).resolve().parent
+
+
+def _is_path_under(path: Path, directory: Path) -> bool:
+    """Return True when path resolves under directory."""
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def assert_generation_started(result, artifact_type: str = "Artifact") -> None:
+    """Assert that artifact generation started successfully.
+
+    Skips the test if rate limited by the API instead of failing.
+
+    Args:
+        result: GenerationStatus from a generate_* method
+        artifact_type: Name of artifact type for error messages
+
+    Raises:
+        pytest.skip: If rate limited by API
+        AssertionError: If generation failed for other reasons
+    """
+    assert result is not None, f"{artifact_type} generation returned None"
+
+    if result.is_rate_limited:
+        pytest.skip("Rate limited by API")
+
+    assert result.task_id, f"{artifact_type} generation failed: {result.error}"
+    assert result.status in (
+        "pending",
+        "in_progress",
+    ), f"Unexpected {artifact_type.lower()} status: {result.status}"
+
+
+def has_auth() -> bool:
+    try:
+        load_auth_from_storage()
+        return True
+    except (FileNotFoundError, ValueError):
+        return False
+
+
+requires_auth = pytest.mark.skipif(
+    not has_auth(),
+    reason="Requires NotebookLM authentication (run 'notebooklm login')",
+)
+
+
+# =============================================================================
+# Pytest Hooks
+# =============================================================================
+
+
+def pytest_addoption(parser):
+    """Add E2E test command-line options."""
+    parser.addoption(
+        "--include-variants",
+        action="store_true",
+        default=False,
+        help="Include variant tests (skipped by default to save API quota)",
+    )
+    parser.addoption(
+        "--profile",
+        action="store",
+        default=None,
+        metavar="NAME",
+        help="NotebookLM profile to use for E2E tests (overrides NOTEBOOKLM_PROFILE env var)",
+    )
+
+
+def pytest_configure(config):
+    """Re-apply --profile after CLI parsing (backstop for the import-time peek).
+
+    Precedence: --profile flag > NOTEBOOKLM_PROFILE env var > config default.
+    """
+    profile = config.getoption("--profile")
+    if profile:
+        _apply_profile(profile)
+
+
+def pytest_unconfigure(config):
+    """Restore the original ``NOTEBOOKLM_PROFILE`` if we mutated it."""
+    global _PROFILE_PRIOR
+    if _PROFILE_PRIOR is None:
+        return
+    was_set, prev = _PROFILE_PRIOR
+    _PROFILE_PRIOR = None
+    if was_set and prev is not None:
+        os.environ["NOTEBOOKLM_PROFILE"] = prev
+    else:
+        os.environ.pop("NOTEBOOKLM_PROFILE", None)
+
+
+def pytest_itemcollected(item):
+    """Mark every item under tests/e2e as E2E before marker deselection."""
+    if _is_path_under(Path(item.path), E2E_TEST_DIR):
+        item.add_marker(pytest.mark.e2e)
+
+
+def _skip_reason(report) -> str:
+    longrepr = report.longrepr
+    if isinstance(longrepr, tuple) and len(longrepr) >= 3:
+        return str(longrepr[2])
+    return str(longrepr) if longrepr else ""
+
+
+def _is_call_report(report) -> bool:
+    # Unit fakes may omit ``when``; real pytest reports always include it.
+    return getattr(report, "when", "call") == "call"
+
+
+def _has_marker(report, marker: str) -> bool:
+    return marker in (getattr(report, "keywords", {}) or {})
+
+
+def _is_rate_limit_skip(report) -> bool:
+    return any(phrase in _skip_reason(report).lower() for phrase in _RATE_LIMIT_PHRASES)
+
+
+def _rate_limit_skip_reports(terminalreporter) -> list[Any]:
+    return [
+        report
+        for report in terminalreporter.stats.get("skipped", [])
+        if _is_rate_limit_skip(report)
+    ]
+
+
+def _coverage_floor_enforced() -> bool:
+    """Whether coverage floors escalate to a suite failure.
+
+    Off by default so a shared daily-quota exhaustion can never red a release job
+    (e.g. Verify Package, #1819) — the release path skips rate-limited
+    generation/chat freely. The nightly sets ``E2E_ENFORCE_COVERAGE_FLOOR=1`` to
+    turn hollow-green (every marked test skipped, none passed) into a red where
+    the quota is fresh and the signal is real.
+    """
+    return os.environ.get("E2E_ENFORCE_COVERAGE_FLOOR") == "1"
+
+
+def _coverage_floor_failures(terminalreporter, exitstatus, marker: str) -> list[Any]:
+    """Rate-limit skips that breach the coverage floor for ``marker``.
+
+    Non-empty only when at least one ``marker`` test was rate-limit-skipped and no
+    ``marker`` test passed — i.e. that live surface produced zero real coverage.
+    """
+    # Only meaningful for a *completed* run: everything passed (OK) or some tests
+    # failed (TESTS_FAILED). A broken run (usage/internal/interrupt/no-tests) is its
+    # own signal — don't evaluate the floor or rewrite that exit code.
+    #
+    # We deliberately do NOT bail on TESTS_FAILED. Under the nightly's
+    # ``continue-on-error`` main step + ``--last-failed`` retry, an *unrelated* test
+    # that fails on the main run and then passes on retry lands the job green — so a
+    # blanket ``exitstatus != OK`` bail would let that transient failure MASK a
+    # genuinely hollow generation/chat surface (all rate-limited, none passed). We
+    # still record the breach; only a failure of a test *with this marker* defers,
+    # since the retry may re-run it into a pass (real coverage). Caught by
+    # test_generation_floor_records_breach_despite_unrelated_failure (#1819).
+    if exitstatus not in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED):
+        return []
+
+    marked_skips = [
+        report
+        for report in _rate_limit_skip_reports(terminalreporter)
+        if _has_marker(report, marker)
+    ]
+    if not marked_skips:
+        return []
+
+    marked_passes = [
+        report
+        for report in terminalreporter.stats.get("passed", [])
+        if _is_call_report(report) and _has_marker(report, marker)
+    ]
+    if marked_passes:
+        return []
+
+    # No marked test passed and some were rate-limited. A marked *failure* has its
+    # real outcome deferred to the retry (may pass there → coverage), so hold off;
+    # otherwise this is a final zero-coverage breach — record it even when other,
+    # unmarked tests failed. Count a failure in ANY phase (setup/call/teardown):
+    # ``--last-failed`` retries a test that failed in any phase, so a setup-phase
+    # failure of a marked test is just as deferrable as a call-phase one (gemini/codex).
+    marked_failures = [
+        report for report in terminalreporter.stats.get("failed", []) if _has_marker(report, marker)
+    ]
+    if marked_failures:
+        return []
+
+    return marked_skips
+
+
+def _coverage_events(terminalreporter, exitstatus) -> list[str]:
+    """Per-marker ``PASS``/``SKIP`` events for cross-run coverage-floor accumulation.
+
+    One tab-separated line per monitored surface that produced a signal this run:
+    ``PASS\t<label>`` when a marked test passed (real coverage), else
+    ``SKIP\t<label>`` when a marked test was rate-limit-skipped (candidate breach).
+    A surface that neither passed nor skipped emits nothing.
+    """
+    if exitstatus not in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED):
+        return []
+    skip_reports = _rate_limit_skip_reports(terminalreporter)
+    events: list[str] = []
+    for marker, label in _COVERAGE_FLOOR_MARKERS.items():
+        passed = any(
+            _is_call_report(r) and _has_marker(r, marker)
+            for r in terminalreporter.stats.get("passed", [])
+        )
+        if passed:
+            events.append(f"PASS\t{label}")
+        elif any(_has_marker(r, marker) for r in skip_reports):
+            events.append(f"SKIP\t{label}")
+    return events
+
+
+def pytest_sessionfinish(session, exitstatus):
+    terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminalreporter is None:
+        return
+
+    # Coverage floors are advisory unless the nightly opts in (see
+    # _coverage_floor_enforced), so a rate-limited release job stays green (#1819).
+    if not _coverage_floor_enforced():
+        return
+
+    sentinel = os.environ.get("E2E_COVERAGE_FLOOR_SENTINEL")
+    if sentinel:
+        # Sentinel delivery (nightly). The main e2e step is ``continue-on-error`` and
+        # its ``--last-failed`` retry re-runs only failures, so a ``session.exitstatus``
+        # override would be masked. Instead every enforcing run (main AND retry)
+        # appends PASS/SKIP events; the "Enforce coverage floors" step breaches a
+        # surface seen SKIP but never PASS across all runs. This closes the retry gap
+        # (a marked test that fails on main then skips on retry) WITHOUT false-breaching
+        # when coverage was achieved in another run (codex/coderabbit). Exit status is
+        # left alone so a pure-skip run stays exit 0 and doesn't trip a spurious retry;
+        # a write failure falls back to the inline exit code (best-effort).
+        events = _coverage_events(terminalreporter, exitstatus)
+        if not events or _append_sentinel(sentinel, events):
+            return
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        return
+
+    # Inline delivery (local runs, simple jobs, unit tests): no retry, so decide from
+    # this single run.
+    breached = any(
+        _coverage_floor_failures(terminalreporter, exitstatus, marker)
+        for marker in _COVERAGE_FLOOR_MARKERS
+    )
+    if breached:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def _append_sentinel(path: str, lines: list[str]) -> bool:
+    """Append lines to the coverage-floor sentinel. Returns True on success.
+
+    Creates the parent directory first so a missing directory can't turn the
+    enforcement signal into a silent no-op (gemini).
+    """
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            for line in lines:
+                f.write(line + "\n")
+        return True
+    except OSError as exc:
+        # The sentinel IS the enforcement signal — a silent write failure would let a
+        # hollow-green nightly pass. Fail loud AND signal the caller to fall back to
+        # the inline exit-code path.
+        print(
+            f"::error::could not write coverage-floor sentinel {path!r} ({exc})",
+            file=sys.stderr,
+        )
+        return False
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Surface chat rate-limit skips so they're visible despite green CI.
+
+    Without this, the L1 skip-fixture (_install_chat_rate_limit_skip) makes
+    Google-side throttling invisible — the job stays green but coverage
+    silently degrades. Emit a pytest summary section plus, on GitHub Actions,
+    a warning annotation and step-summary entry.
+    """
+    rate_limit_skips = _rate_limit_skip_reports(terminalreporter)
+    nodeids = [report.nodeid for report in rate_limit_skips]
+    if not nodeids:
+        return
+
+    terminalreporter.write_sep("=", f"rate-limit skips ({len(nodeids)})", yellow=True)
+    for nodeid in nodeids:
+        terminalreporter.write_line(f"  {nodeid}")
+
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        try:
+            with open(summary_path, "a", encoding="utf-8") as f:
+                f.write(f"\n### Rate-limit skips: {len(nodeids)}\n\n")
+                for nodeid in nodeids:
+                    f.write(f"- `{nodeid}`\n")
+        except OSError:
+            pass
+
+    if os.environ.get("GITHUB_ACTIONS"):
+        joined = ", ".join(nodeids)
+        print(f"::warning::{len(nodeids)} test(s) skipped due to rate-limit: {joined}")
+
+    enforced = _coverage_floor_enforced()
+    for marker, label in _COVERAGE_FLOOR_MARKERS.items():
+        breaches = _coverage_floor_failures(terminalreporter, exitstatus, marker)
+        if not breaches:
+            continue
+        if enforced:
+            terminalreporter.write_sep("=", f"{label} coverage floor failed", red=True)
+            terminalreporter.write_line(
+                f"No marked {label} test completed successfully (all rate-limited)."
+            )
+        else:
+            terminalreporter.write_sep(
+                "=", f"{label} coverage floor breached (not enforced)", yellow=True
+            )
+            terminalreporter.write_line(
+                f"No marked {label} test passed; not failing (E2E_ENFORCE_COVERAGE_FLOOR unset)."
+            )
+        for report in breaches:
+            terminalreporter.write_line(f"  {report.nodeid}")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip variant tests by default unless --include-variants is passed."""
+    if config.getoption("--include-variants"):
+        return
+
+    skip_variants = pytest.mark.skip(
+        reason="Variant tests skipped by default. Use --include-variants to run."
+    )
+    for item in items:
+        if "variants" in [m.name for m in item.iter_markers()]:
+            item.add_marker(skip_variants)
+
+
+def pytest_runtest_teardown(item, nextitem):
+    """Add delay after generation and chat tests to avoid API rate limits.
+
+    This hook runs after each test. Adds delays for:
+    - test_generation.py: 15s between generation tests (artifact quotas)
+    - test_chat.py: 5s between chat tests (ask() rate limits)
+    """
+    import time
+
+    if nextitem is None:
+        return
+
+    if item.path.name == "test_generation.py":
+        if "generation_notebook_id" not in item.fixturenames:
+            return
+        logging.info(
+            "Delaying %ss between generation tests to avoid rate limiting", GENERATION_TEST_DELAY
+        )
+        time.sleep(GENERATION_TEST_DELAY)
+        return
+
+    if item.path.name == "test_chat.py":
+        if "multi_source_notebook_id" not in item.fixturenames:
+            return
+        logging.info("Delaying %ss between chat tests to avoid rate limiting", CHAT_TEST_DELAY)
+        time.sleep(CHAT_TEST_DELAY)
+
+
+# =============================================================================
+# Auth Fixtures (session-scoped for efficiency)
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def auth_tokens() -> AuthTokens:
+    """Load domain-preserving auth tokens from storage (session-scoped)."""
+    import asyncio
+
+    tokens = asyncio.run(AuthTokens.from_storage())
+    _emit_auth_route_diagnostic(tokens)
+    return tokens
+
+
+@pytest.fixture
+async def client(auth_tokens) -> AsyncGenerator[NotebookLMClient, None]:
+    async with NotebookLMClient(auth_tokens, storage_path=auth_tokens.storage_path) as c:
+        _install_chat_rate_limit_skip(c)
+        _install_generation_rate_limit_skip(c)
+        yield c
+
+
+@pytest.fixture
+def read_only_notebook_id():
+    """Get notebook ID from NOTEBOOKLM_READ_ONLY_NOTEBOOK_ID env var.
+
+    This env var is REQUIRED for E2E tests. You must create your own
+    read-only test notebook with sources and artifacts.
+
+    This fixture provides a notebook ID for READ-ONLY tests - tests that
+    list, get, or query but do NOT modify the notebook. Do not use this
+    fixture for tests that create, update, or delete resources.
+
+    See docs/development.md for setup instructions.
+    """
+    notebook_id = os.environ.get("NOTEBOOKLM_READ_ONLY_NOTEBOOK_ID")
+    if not notebook_id:
+        pytest.exit(
+            "\n\nERROR: NOTEBOOKLM_READ_ONLY_NOTEBOOK_ID environment variable is not set.\n\n"
+            "E2E tests require YOUR OWN test notebook with content.\n\n"
+            "Setup instructions:\n"
+            f"  1. Create a notebook at {get_base_url()}\n"
+            "  2. Add sources (text, URL, PDF, etc.)\n"
+            "  3. Generate some artifacts (audio, quiz, etc.)\n"
+            "  4. Copy notebook ID from URL and run:\n"
+            "     export NOTEBOOKLM_READ_ONLY_NOTEBOOK_ID='your-notebook-id'\n\n"
+            "See docs/development.md for details.\n",
+            returncode=1,
+        )
+    return notebook_id
+
+
+@pytest.fixture
+def created_notebooks():
+    notebooks = []
+    yield notebooks
+
+
+@pytest.fixture
+async def cleanup_notebooks(created_notebooks, auth_tokens):
+    """Cleanup created notebooks after test."""
+    yield
+    if created_notebooks:
+        async with NotebookLMClient(auth_tokens, storage_path=auth_tokens.storage_path) as client:
+            for nb_id in created_notebooks:
+                try:
+                    await client.notebooks.delete(nb_id)
+                except Exception as e:
+                    warnings.warn(f"Failed to cleanup notebook {nb_id}: {e}", stacklevel=2)
+
+
+# =============================================================================
+# Notebook Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+async def temp_notebook(client, created_notebooks, cleanup_notebooks):
+    """Create a temporary notebook with content that auto-deletes after test.
+
+    Use for CRUD tests that need isolated state. Includes a text source
+    so artifact generation operations have content to work with.
+    """
+    import asyncio
+    from uuid import uuid4
+
+    notebook = await client.notebooks.create(f"Test-{uuid4().hex[:8]}")
+    created_notebooks.append(notebook.id)
+
+    # Add a text source so artifact operations have content to work with
+    await client.sources.add_text(
+        notebook.id,
+        title="Test Content",
+        content=(
+            "This is test content for E2E testing. "
+            "It covers topics including artificial intelligence, "
+            "machine learning, and software engineering principles."
+        ),
+    )
+
+    # Delay to ensure source is processed
+    await asyncio.sleep(SOURCE_PROCESSING_DELAY)
+
+    return notebook
+
+
+# =============================================================================
+# Generation Notebook Fixtures
+# =============================================================================
+
+# File to store auto-created generation notebook ID
+GENERATION_NOTEBOOK_ID_FILE = "generation_notebook_id"
+
+# Module-level state to ensure cleanup only runs once per session
+_generation_cleanup_done = False
+
+
+def _get_generation_notebook_id_path() -> Path:
+    """Get the path to the generation notebook ID file (per active profile)."""
+    return get_profile_dir() / GENERATION_NOTEBOOK_ID_FILE
+
+
+def _load_stored_generation_notebook_id() -> str | None:
+    """Load generation notebook ID from stored file."""
+    path = _get_generation_notebook_id_path()
+    if path.exists():
+        try:
+            return path.read_text().strip()
+        except Exception:
+            return None
+    return None
+
+
+def _save_generation_notebook_id(notebook_id: str) -> None:
+    """Save generation notebook ID to file for future runs."""
+    path = _get_generation_notebook_id_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(notebook_id)
+
+
+async def _create_generation_notebook(client: NotebookLMClient) -> str:
+    """Create a new generation notebook with content.
+
+    Returns the notebook ID.
+    """
+    import asyncio
+    from uuid import uuid4
+
+    notebook = await client.notebooks.create(f"E2E-Generation-{uuid4().hex[:8]}")
+
+    # Add a text source so the notebook has content for operations
+    # Content must be substantial enough for all artifact types including infographics
+    await client.sources.add_text(
+        notebook.id,
+        title="Machine Learning Fundamentals",
+        content=(
+            "# Introduction to Machine Learning\n\n"
+            "Machine learning is a subset of artificial intelligence that enables "
+            "systems to learn and improve from experience without being explicitly programmed.\n\n"
+            "## Key Concepts\n\n"
+            "### Supervised Learning\n"
+            "Uses labeled data to train models. Common algorithms include:\n"
+            "- Linear Regression: Predicts continuous values\n"
+            "- Decision Trees: Makes decisions based on feature values\n"
+            "- Neural Networks: Mimics human brain structure\n\n"
+            "### Unsupervised Learning\n"
+            "Finds patterns in unlabeled data. Examples:\n"
+            "- Clustering: Groups similar data points (K-means, DBSCAN)\n"
+            "- Dimensionality Reduction: Reduces feature space (PCA, t-SNE)\n\n"
+            "### Reinforcement Learning\n"
+            "Agents learn through trial and error with rewards and penalties.\n\n"
+            "## Applications\n\n"
+            "| Domain | Use Case | Impact |\n"
+            "|--------|----------|--------|\n"
+            "| Healthcare | Disease diagnosis | 95% accuracy in some cancers |\n"
+            "| Finance | Fraud detection | $20B saved annually |\n"
+            "| Transportation | Autonomous vehicles | 40% fewer accidents |\n"
+            "| Retail | Recommendation systems | 35% increase in sales |\n\n"
+            "## Model Evaluation Metrics\n\n"
+            "1. **Accuracy**: Correct predictions / Total predictions\n"
+            "2. **Precision**: True positives / (True positives + False positives)\n"
+            "3. **Recall**: True positives / (True positives + False negatives)\n"
+            "4. **F1 Score**: Harmonic mean of precision and recall\n\n"
+            "## Best Practices\n\n"
+            "- Always split data into training, validation, and test sets\n"
+            "- Use cross-validation to avoid overfitting\n"
+            "- Normalize features for better model performance\n"
+            "- Monitor for data drift in production systems\n"
+        ),
+    )
+
+    # Delay to ensure source is processed
+    await asyncio.sleep(SOURCE_PROCESSING_DELAY)
+
+    return notebook.id
+
+
+async def _cleanup_generation_notebook(client: NotebookLMClient, notebook_id: str) -> None:
+    """Clean up existing artifacts and notes from generation notebook.
+
+    This runs BEFORE tests to ensure a clean starting state.
+    """
+    # Delete all artifacts
+    try:
+        artifacts = await client.artifacts.list(notebook_id)
+        for artifact in artifacts:
+            try:
+                await client.artifacts.delete(notebook_id, artifact.id)
+            except Exception:
+                pass  # Ignore individual delete failures
+    except Exception:
+        pass  # Ignore list failures
+
+    # Delete all notes (except pinned system notes)
+    try:
+        notes = await client.notes.list(notebook_id)
+        for note in notes:
+            # Skip if no id or if it's a pinned system note
+            if note.id and not getattr(note, "pinned", False):
+                try:
+                    await client.notes.delete(notebook_id, note.id)
+                except Exception:
+                    pass  # Ignore individual delete failures
+    except Exception:
+        pass  # Ignore list failures
+
+
+def _is_ci_environment() -> bool:
+    """Check if running in CI environment.
+
+    Detects common CI systems: GitHub Actions, GitLab CI, CircleCI, Travis CI,
+    Azure Pipelines, and others that set CI=true/1/yes.
+    """
+    ci_value = os.environ.get("CI", "").lower()
+    return ci_value in ("true", "1", "yes")
+
+
+def _delete_stored_generation_notebook_id() -> None:
+    """Delete the stored generation notebook ID file."""
+    path = _get_generation_notebook_id_path()
+    if path.exists():
+        try:
+            path.unlink()
+        except Exception:
+            pass
+
+
+async def _verify_notebook_exists(client, notebook_id: str) -> bool:
+    """Verify a notebook exists and is accessible."""
+    try:
+        nb = await client.notebooks.get(notebook_id)
+        return nb is not None
+    except Exception:
+        return False
+
+
+@pytest.fixture
+async def generation_notebook_id(client):
+    """Get or create a notebook for generation tests.
+
+    This fixture uses a hybrid approach:
+    1. Check NOTEBOOKLM_GENERATION_NOTEBOOK_ID env var
+    2. If not set, check for a stored ID in the active profile cache
+       (~/.notebooklm/profiles/<name>/generation_notebook_id)
+    3. If not found, auto-create a notebook and store its ID
+
+    All notebook IDs (env var or stored) are verified to exist before use.
+
+    In CI environments (CI=true/1/yes), auto-created notebooks are deleted after tests.
+    In local environments, the notebook persists across runs for verification.
+
+    Artifacts and notes are cleaned up BEFORE tests to ensure clean state.
+    Sources are NOT cleaned (generation tests need them).
+
+    Use for: artifact generation tests (audio, video, quiz, etc.)
+    Do NOT use for: CRUD tests (use temp_notebook instead)
+    """
+    auto_created = False
+    source = None  # Track where notebook ID came from for debugging
+
+    # Priority 1: Environment variable
+    notebook_id = os.environ.get("NOTEBOOKLM_GENERATION_NOTEBOOK_ID")
+    if notebook_id:
+        source = "env var"
+
+    # Priority 2: Stored ID file
+    if not notebook_id:
+        notebook_id = _load_stored_generation_notebook_id()
+        if notebook_id:
+            source = "stored file"
+
+    # Verify notebook exists (for both env var AND stored IDs)
+    if notebook_id:
+        if not await _verify_notebook_exists(client, notebook_id):
+            warnings.warn(
+                f"Generation notebook {notebook_id} from {source} no longer exists, "
+                "creating new one",
+                stacklevel=2,
+            )
+            notebook_id = None
+
+    # Priority 3: Auto-create
+    if not notebook_id:
+        notebook_id = await _create_generation_notebook(client)
+        _save_generation_notebook_id(notebook_id)
+        auto_created = True
+
+    # Clean up artifacts and notes before tests (only once per session)
+    global _generation_cleanup_done
+    if not _generation_cleanup_done:
+        await _cleanup_generation_notebook(client, notebook_id)
+        _generation_cleanup_done = True
+
+    yield notebook_id
+
+    # Cleanup: In CI, delete auto-created notebooks to avoid orphans
+    if auto_created and _is_ci_environment():
+        # Delete stored file first (idempotent), then attempt notebook delete (best effort)
+        _delete_stored_generation_notebook_id()
+        try:
+            await client.notebooks.delete(notebook_id)
+        except Exception as e:
+            warnings.warn(f"Failed to delete generation notebook {notebook_id}: {e}", stacklevel=2)
+
+
+# =============================================================================
+# Multi-Source Notebook Fixtures
+# =============================================================================
+
+# File to store auto-created multi-source notebook ID
+MULTI_SOURCE_NOTEBOOK_ID_FILE = "multi_source_notebook_id"
+
+# Module-level state to ensure cleanup only runs once per session
+_multi_source_cleanup_done = False
+
+
+def _get_multi_source_notebook_id_path() -> Path:
+    """Get the path to the multi-source notebook ID file (per active profile)."""
+    return get_profile_dir() / MULTI_SOURCE_NOTEBOOK_ID_FILE
+
+
+def _load_stored_multi_source_notebook_id() -> str | None:
+    """Load multi-source notebook ID from stored file."""
+    path = _get_multi_source_notebook_id_path()
+    if path.exists():
+        try:
+            return path.read_text().strip()
+        except Exception:
+            return None
+    return None
+
+
+def _save_multi_source_notebook_id(notebook_id: str) -> None:
+    """Save multi-source notebook ID to file for future runs."""
+    path = _get_multi_source_notebook_id_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(notebook_id)
+
+
+def _delete_stored_multi_source_notebook_id() -> None:
+    """Delete the stored multi-source notebook ID file."""
+    path = _get_multi_source_notebook_id_path()
+    if path.exists():
+        try:
+            path.unlink()
+        except Exception:
+            pass
+
+
+async def _create_multi_source_notebook(client: NotebookLMClient) -> str:
+    """Create a notebook with multiple sources for testing source selection.
+
+    Returns the notebook ID.
+    """
+    import asyncio
+    from uuid import uuid4
+
+    notebook = await client.notebooks.create(f"E2E-MultiSource-{uuid4().hex[:8]}")
+
+    # Add 3 distinct text sources with different content
+    sources_content = [
+        (
+            "Python Programming",
+            (
+                "# Python Programming Fundamentals\n\n"
+                "Python is a high-level, interpreted programming language known for "
+                "its clear syntax and readability. Created by Guido van Rossum in 1991.\n\n"
+                "## Key Features\n"
+                "- Dynamic typing\n"
+                "- Automatic memory management\n"
+                "- Extensive standard library\n"
+                "- Multi-paradigm support\n\n"
+                "## Data Types\n"
+                "- int, float, complex for numbers\n"
+                "- str for text\n"
+                "- list, tuple, set, dict for collections\n"
+            ),
+        ),
+        (
+            "Machine Learning Basics",
+            (
+                "# Machine Learning Overview\n\n"
+                "Machine learning enables computers to learn from data without "
+                "explicit programming. It's a subset of artificial intelligence.\n\n"
+                "## Types of ML\n"
+                "- Supervised Learning: Uses labeled data\n"
+                "- Unsupervised Learning: Finds patterns in unlabeled data\n"
+                "- Reinforcement Learning: Learns through rewards\n\n"
+                "## Common Algorithms\n"
+                "- Linear Regression\n"
+                "- Decision Trees\n"
+                "- Neural Networks\n"
+                "- K-Means Clustering\n"
+            ),
+        ),
+        (
+            "Web Development",
+            (
+                "# Web Development Essentials\n\n"
+                "Web development involves creating websites and web applications.\n\n"
+                "## Frontend Technologies\n"
+                "- HTML: Structure\n"
+                "- CSS: Styling\n"
+                "- JavaScript: Interactivity\n\n"
+                "## Backend Technologies\n"
+                "- Node.js, Python, Ruby, Go\n"
+                "- Databases: PostgreSQL, MongoDB\n"
+                "- APIs: REST, GraphQL\n\n"
+                "## Modern Frameworks\n"
+                "- React, Vue, Angular for frontend\n"
+                "- Django, FastAPI, Express for backend\n"
+            ),
+        ),
+    ]
+
+    for title, content in sources_content:
+        await client.sources.add_text(notebook.id, title=title, content=content)
+
+    # Delay to ensure all sources are processed
+    await asyncio.sleep(SOURCE_PROCESSING_DELAY * 2)
+
+    return notebook.id
+
+
+async def _cleanup_multi_source_notebook(client: NotebookLMClient, notebook_id: str) -> None:
+    """Clean up existing artifacts from multi-source notebook.
+
+    This runs BEFORE tests to ensure a clean starting state.
+    Sources are NOT cleaned (tests need them).
+    """
+    try:
+        artifacts = await client.artifacts.list(notebook_id)
+        for artifact in artifacts:
+            try:
+                await client.artifacts.delete(notebook_id, artifact.id)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+@pytest.fixture
+async def multi_source_notebook_id(client):
+    """Get or create a notebook with multiple sources for source selection tests.
+
+    This fixture uses a hybrid approach similar to generation_notebook_id:
+    1. Check NOTEBOOKLM_MULTI_SOURCE_NOTEBOOK_ID env var
+    2. If not set, check for a stored ID in the active profile cache
+       (~/.notebooklm/profiles/<name>/multi_source_notebook_id)
+    3. If not found, auto-create a notebook with 3 sources
+
+    All IDs are verified to exist before use.
+    Artifacts are cleaned before tests. Sources are preserved.
+    """
+    auto_created = False
+    source = None
+
+    # Priority 1: Environment variable
+    notebook_id = os.environ.get("NOTEBOOKLM_MULTI_SOURCE_NOTEBOOK_ID")
+    if notebook_id:
+        source = "env var"
+
+    # Priority 2: Stored ID file
+    if not notebook_id:
+        notebook_id = _load_stored_multi_source_notebook_id()
+        if notebook_id:
+            source = "stored file"
+
+    # Verify notebook exists
+    if notebook_id:
+        if not await _verify_notebook_exists(client, notebook_id):
+            warnings.warn(
+                f"Multi-source notebook {notebook_id} from {source} no longer exists, "
+                "creating new one",
+                stacklevel=2,
+            )
+            notebook_id = None
+
+    # Priority 3: Auto-create
+    if not notebook_id:
+        notebook_id = await _create_multi_source_notebook(client)
+        _save_multi_source_notebook_id(notebook_id)
+        auto_created = True
+
+    # Clean up artifacts before tests (only once per session)
+    global _multi_source_cleanup_done
+    if not _multi_source_cleanup_done:
+        await _cleanup_multi_source_notebook(client, notebook_id)
+        _multi_source_cleanup_done = True
+
+    yield notebook_id
+
+    # Cleanup: In CI, delete auto-created notebooks
+    if auto_created and _is_ci_environment():
+        _delete_stored_multi_source_notebook_id()
+        try:
+            await client.notebooks.delete(notebook_id)
+        except Exception as e:
+            warnings.warn(
+                f"Failed to delete multi-source notebook {notebook_id}: {e}", stacklevel=2
+            )
+
+
+# =============================================================================
+# Layer B — in-process MCP HTTP transport (ASGI, no socket)
+# =============================================================================
+# These helpers build the FastMCP http app bound to the LIVE e2e client (via the
+# ``client_factory`` seam) and drive it entirely in-process over
+# ``httpx.ASGITransport`` — the proven pattern from
+# ``tests/unit/mcp/test_remote_auth.py``. No port, no subprocess. fastmcp is
+# imported LAZILY inside these helpers so the shared e2e conftest still loads
+# cleanly when the ``mcp`` extra is absent (non-MCP e2e suites must not break).
+
+#: Bearer token the Layer-B tests authenticate the in-process http transport
+#: with. Arbitrary (the server compares against whatever ``build_auth`` was given).
+MCP_TEST_BEARER = "e2e-test-bearer-token"
+
+#: Base URL the in-process ASGI app answers on. Requests are routed by
+#: ``httpx.ASGITransport`` straight to the app object, so the host is cosmetic.
+_ASGI_BASE_URL = "http://app"
+
+
+class InProcessMcp:
+    """Handle to an in-process MCP http app for the Layer-B e2e tests.
+
+    Exposes both transports the tests need within one app lifespan:
+
+    * :meth:`mcp_client` — a ``fastmcp.Client`` over ``StreamableHttpTransport``
+      that drives MCP tool calls through the bearer-gated ``/mcp`` route.
+    * :meth:`raw_client` — a plain ``httpx.AsyncClient`` for the raw custom
+      routes (``/files/*``, ``/.well-known/*``, and the unauth ``/mcp`` probe).
+    """
+
+    def __init__(self, app: Any, token: str) -> None:
+        self.app = app
+        self.token = token
+
+    def mcp_client(self, token: str | None = None) -> Any:
+        """Return a (not-yet-entered) ``fastmcp.Client`` bearer-authed to the app."""
+        import httpx
+        from fastmcp import Client
+        from fastmcp.client.transports import StreamableHttpTransport
+
+        bearer = self.token if token is None else token
+
+        def httpx_factory(**kwargs: Any) -> httpx.AsyncClient:
+            # fastmcp passes its own transport; drive the app in-process via ASGI.
+            kwargs.pop("transport", None)
+            return httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=self.app), base_url=_ASGI_BASE_URL, **kwargs
+            )
+
+        return Client(
+            StreamableHttpTransport(
+                f"{_ASGI_BASE_URL}/mcp",
+                headers={"Authorization": f"Bearer {bearer}"},
+                httpx_client_factory=httpx_factory,
+            )
+        )
+
+    def raw_client(self) -> Any:
+        """Return a (not-yet-entered) plain ``httpx.AsyncClient`` over the ASGI app."""
+        import httpx
+
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app), base_url=_ASGI_BASE_URL
+        )
+
+
+def asgi_path(url: str) -> str:
+    """Strip a minted signed URL down to the path the in-process ASGI client hits.
+
+    Minted ``/files/*`` URLs carry the configured public origin
+    (``https://127.0.0.1``); the in-process httpx client routes by path, so only
+    the path segment matters. Preserves any query string (none today, but cheap).
+    """
+    parts = urlsplit(url)
+    return parts.path + (f"?{parts.query}" if parts.query else "")
+
+
+@contextlib.asynccontextmanager
+async def inprocess_mcp_server(
+    real_client: "NotebookLMClient",
+    *,
+    token: str | None = MCP_TEST_BEARER,
+    oauth: Any = None,
+    file_transfer: Any = None,
+) -> AsyncIterator[InProcessMcp]:
+    """Build the MCP http app bound to ``real_client`` and enter its lifespan.
+
+    Mirrors ``tests/unit/mcp/test_remote_auth.py`` exactly, but the
+    ``client_factory`` yields the already-open LIVE e2e client (the fixture owns
+    its lifecycle, so the factory must NOT close it). Entering
+    ``app.router.lifespan_context`` is REQUIRED — the ``/files/*`` handlers read
+    the lifespan-bound client off ``app.state`` and 500 without it.
+    """
+    from notebooklm.mcp._auth import build_auth
+    from notebooklm.mcp.server import create_server
+
+    @contextlib.asynccontextmanager
+    async def factory() -> AsyncIterator["NotebookLMClient"]:
+        yield real_client
+
+    server = create_server(
+        client_factory=factory,
+        auth=build_auth(token, oauth),
+        file_transfer=file_transfer,
+    )
+    app = server.http_app()
+    async with app.router.lifespan_context(app):
+        yield InProcessMcp(app, token or MCP_TEST_BEARER)
+
+
+# =============================================================================
+# CLI subprocess helper (deliverable 4)
+# =============================================================================
+
+
+def run_cli(
+    *args: str,
+    notebook: str | None = None,
+    extra_env: dict[str, str] | None = None,
+    timeout: float = 180.0,
+) -> subprocess.CompletedProcess[str]:
+    """Invoke the CLI as ``sys.executable -m notebooklm.notebooklm_cli``.
+
+    Runs the real installed CLI in a child process so the binary entry point,
+    argument parsing, and ``--json`` stdout/stderr split are exercised end to
+    end. The child inherits the parent environment (so ``NOTEBOOKLM_AUTH_JSON`` /
+    storage materialized for the e2e client carries over) — never ``--profile``,
+    which would make the CLI ignore an inline ``NOTEBOOKLM_AUTH_JSON`` secret.
+
+    Pass the target notebook via ``notebook=`` (exported as
+    ``NOTEBOOKLM_NOTEBOOK``) or an explicit ``-n <id>`` in ``args`` — NEVER
+    ``notebooklm use`` (that mutates shared profile state).
+    """
+    env = os.environ.copy()
+    # Belt for the child's *encode* side: force UTF-8 stdout so a non-Latin-1
+    # char in a live answer can't crash the child on a non-UTF-8-locale runner.
+    # (On Windows the CLI already does this itself via
+    # ``notebooklm_cli._configure_windows_runtime``; this mirrors it for any
+    # other locale.) Set as a base default so ``extra_env`` can override it.
+    env.setdefault("PYTHONUTF8", "1")
+    if notebook is not None:
+        env["NOTEBOOKLM_NOTEBOOK"] = notebook
+    if extra_env:
+        env.update(extra_env)
+    # The load-bearing fix is our *decode* side: without ``encoding=``,
+    # ``text=True`` decodes the child's UTF-8 stdout with the locale codec
+    # (cp1252 on Windows), which raises ``UnicodeDecodeError`` on an undefined
+    # byte (e.g. 0x9d, the tail of a closing curly quote U+201D → ``E2 80 9D``);
+    # the reader thread dies, ``proc.stdout`` becomes ``None``, and
+    # ``json.loads(None)`` fails with a misleading ``TypeError``. Pin the decode
+    # to UTF-8; ``errors="replace"`` guarantees a ``str`` (never ``None``).
+    return subprocess.run(
+        [sys.executable, "-m", "notebooklm.notebooklm_cli", *args],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        timeout=timeout,
+    )

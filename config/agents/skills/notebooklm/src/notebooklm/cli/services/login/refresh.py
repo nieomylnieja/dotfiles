@@ -1,0 +1,612 @@
+"""Refresh + bulk-login drivers + post-login server-language sync.
+
+Top of the leaf-ward DAG: imports from :mod:`.browser_accounts`,
+:mod:`.cookie_writes`, and :mod:`.profile_targets`. Owns:
+
+- ``_login_browser_cookies_single`` — extract one account into a profile.
+- ``_login_all_accounts_from_browser`` — extract every signed-in account.
+- ``_login_with_browser_cookies`` — single-jar default-account login.
+- ``_refresh_from_browser_cookies`` — repair account drift for the
+  active profile.
+- ``_sync_server_language_to_config`` — fetch server language setting
+  after login and persist locally. **Legacy import path preservation:**
+  37+ patch sites monkeypatch ``notebooklm.cli.session_cmd._sync_server_language_to_config``.
+  The session module's ``from .services.login import _sync_server_language_to_config``
+  resolves via the package's ``__init__.py`` re-export of this function.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, NoReturn
+
+import httpx
+
+# The write-time domain filter, the post-filter required-cookie revalidation
+# (#2086), the account-metadata embed, and the atomic storage-state write all
+# live in the canonical storage writer now (refactor (b), b-PR3); the CLI reaches
+# it through the public ``auth`` facade — ``cli/`` may not import private
+# ``_auth.*`` modules (tests/_guardrails/test_cli_boundary.py).
+from ....auth import (
+    CLEAR_ACCOUNT,
+    AccountRecord,
+    cookie_names_from_storage,
+    drop_legacy_account_key,
+    fetch_tokens_with_domains,
+    missing_cookies_hint,
+    read_account_metadata,
+    replace_from_login,
+    validate_with_recovery,
+)
+from ....client import NotebookLMClient
+from ....paths import get_storage_path
+from ...language_cmd import set_language
+from .browser_accounts import _enumerate_browser_accounts, _read_browser_cookies
+from .cookie_writes import _select_account, _select_refresh_account, _write_extracted_cookies
+from .io_seam import LoginIO, resolve_login_io
+from .outcomes import BrowserCookieOutcome
+from .profile_targets import (
+    _profiles_by_account_email,
+    _resolve_all_accounts_target,
+    _validate_profile_name,
+    email_to_profile_name,
+)
+
+# Type alias for the overwrite-confirmer callback. ``True`` means proceed
+# with the overwrite; ``False`` means abort. When no callback is injected,
+# overwrite is auto-accepted for tests and non-interactive callers. The
+# Click command layer injects ``functools.partial(click.confirm,
+# default=False)`` so interactive runs prompt before overwriting.
+ConfirmCallback = Callable[[str], bool]
+
+logger = logging.getLogger(__name__)
+
+
+def _list_profiles() -> list[str]:
+    from ....paths import list_profiles
+
+    return list_profiles()
+
+
+def _emit(io: LoginIO, message: str) -> None:
+    """Emit one Rich-markup line through the caller-injected sink.
+
+    Routes every refresh-driver line through ``io.emit`` so this service
+    never imports the command layer's ``...rendering`` module (ADR-0008
+    level-3 boundary, #1393). Text-mode UX is byte-for-byte unchanged.
+    """
+    io.emit(message)
+
+
+def _exit_on_outcome(io: LoginIO, outcome: BrowserCookieOutcome) -> NoReturn:
+    """Render a helper-chain failure outcome and exit with code 1.
+
+    Implements the text-mode behavior for refresh.py-driven paths: the
+    Rich-markup message is emitted through the injected ``io`` sink and the
+    process exits (``io.fail`` → ``exit_with_code``). The shared rendering
+    boundary for the browser-cookie helper chain's typed outcomes.
+    """
+    _emit(io, outcome.message)
+    io.fail(1)
+
+
+def _login_browser_cookies_single(
+    browser_cookies: str,
+    *,
+    storage: str | None,
+    account_email: str | None,
+    profile_name: str | None,
+    active_profile: str | None,
+    include_domains: set[str] | None = None,
+    confirm: ConfirmCallback | None = None,
+    io: LoginIO | None = None,
+    deps: RefreshDeps | None = None,
+) -> None:
+    """Extract one account from ``--browser-cookies`` into a profile.
+
+    Resolves the target storage path:
+
+    - ``--storage`` wins outright.
+    - ``--profile-name`` selects a sibling profile under the home dir.
+    - Otherwise we write to the active profile, even when ``--account`` selects
+      a non-default browser account.
+
+    Args:
+        confirm: Optional overwrite-confirmer for the
+            ``_confirm_profile_account_overwrite`` path. Receives the
+            confirmation prompt as a string and returns ``True`` to
+            proceed, ``False`` to abort. ``None`` (the default) skips the
+            confirmation entirely — used by tests and non-interactive
+            callers. The Click command layer injects ``click.confirm`` at
+            the boundary so interactive ``notebooklm login`` runs still
+            prompt.
+        io: Optional caller-injected :class:`.io_seam.LoginIO` sink. When
+            ``None`` (direct callers) the command-layer default factory is
+            resolved so console / exit / async behavior is unchanged.
+    """
+    io = resolve_login_io(io)
+    deps = deps or default_refresh_deps()
+    explicit_storage = Path(storage) if storage else None
+
+    if account_email is None and profile_name is None:
+        # Path 1: existing behavior — extract default account into active profile.
+        resolved_storage = explicit_storage or deps.get_storage_path(profile=active_profile)
+        _login_with_browser_cookies(
+            resolved_storage,
+            browser_cookies,
+            active_profile,
+            include_domains=include_domains,
+            io=io,
+            deps=deps,
+        )
+        return
+
+    # Path 2: targeted extraction. Select the requested browser account, then
+    # write it to an explicit destination or to the active profile.
+    enum_result = deps.enumerate_browser_accounts(
+        browser_cookies, include_domains=include_domains, io=io
+    )
+    if isinstance(enum_result, BrowserCookieOutcome):
+        _exit_on_outcome(io, enum_result)
+    per_profile_cookies, accounts = enum_result
+    selected_or_outcome = deps.select_account(io, accounts, account_email=account_email)
+    if isinstance(selected_or_outcome, BrowserCookieOutcome):
+        _exit_on_outcome(io, selected_or_outcome)
+    selected = selected_or_outcome
+
+    target_profile: str | None
+    if profile_name is not None:
+        target_profile = _validate_profile_name(profile_name)
+    else:
+        target_profile = active_profile
+
+    target_storage = explicit_storage or deps.get_storage_path(profile=target_profile)
+    storage_profile = target_profile if not explicit_storage else active_profile
+    if explicit_storage is None:
+        deps.confirm_profile_account_overwrite(
+            target_storage,
+            profile=storage_profile,
+            selected_email=selected.email,
+            confirm=confirm,
+            io=io,
+        )
+
+    write_outcome = deps.write_extracted_cookies(
+        io,
+        per_profile_cookies[selected.browser_profile],
+        storage_path=target_storage,
+        profile=storage_profile,
+        authuser=selected.authuser,
+        email=selected.email,
+        include_domains=include_domains,
+    )
+    if isinstance(write_outcome, BrowserCookieOutcome):
+        _exit_on_outcome(io, write_outcome)
+    io.emit(f"  [green]✓[/green] {storage_profile or target_storage}  →  {selected.email}")
+    deps.sync_server_language_to_config(storage_path=target_storage, profile=storage_profile)
+
+
+def _confirm_profile_account_overwrite(
+    storage_path: Path,
+    *,
+    profile: str | None,
+    selected_email: str,
+    confirm: ConfirmCallback | None = None,
+    io: LoginIO | None = None,
+) -> None:
+    """Prompt before replacing a profile bound to a different Google account.
+
+    Args:
+        confirm: Overwrite-confirmer callback injected by the Click
+            command layer. Receives the confirmation prompt string and
+            returns ``True`` to proceed with overwrite, ``False`` to
+            abort (which renders via the :func:`_emit` seam and
+            ``io.fail(1)``). When ``None``, the confirmation is
+            skipped (treated as auto-accept) — used by non-interactive
+            callers; production Click commands always inject
+            ``click.confirm`` at the boundary so interactive runs prompt.
+        io: Optional caller-injected :class:`.io_seam.LoginIO` sink; resolved
+            to the command-layer default when ``None``.
+    """
+    io = resolve_login_io(io)
+    metadata = read_account_metadata(storage_path)
+    existing_email = metadata.get("email")
+    if isinstance(existing_email, str) and existing_email.strip():
+        existing_email = existing_email.strip()
+    elif storage_path.exists():
+        existing_email = None
+    else:
+        return
+    if existing_email is not None and existing_email.casefold() == selected_email.casefold():
+        return
+
+    target = f"profile '{profile}'" if profile else f"profile at {storage_path.parent}"
+    conflict = (
+        f"auth for {existing_email}"
+        if existing_email is not None
+        else "saved auth without account metadata"
+    )
+    if confirm is None or confirm(
+        f"{target} already has {conflict}. Overwrite it with {selected_email}?"
+    ):
+        return
+
+    _emit(
+        io,
+        f"[red]Aborted:[/red] {target} still has {conflict}; not overwriting with {selected_email}.",
+    )
+    io.fail(1)
+
+
+def _login_all_accounts_from_browser(
+    browser_cookies: str,
+    *,
+    update: bool = False,
+    include_domains: set[str] | None = None,
+    io: LoginIO | None = None,
+    deps: RefreshDeps | None = None,
+) -> None:
+    """Extract every signed-in Google account into its own profile.
+
+    Args:
+        browser_cookies: rookiepy browser alias forwarded to
+            :func:`_enumerate_browser_accounts`.
+        update: When True and the natural profile name for an account
+            (e.g. ``alice`` for ``alice@gmail.com``) already exists but has
+            no account metadata — or its metadata matches the same email —
+            adopt that profile in place rather than allocating a suffixed
+            ``alice-2``. Profiles whose metadata already binds a *different*
+            email are still given a suffix to avoid clobbering them. Useful
+            for users who hand-created profiles via plain ``notebooklm
+            login --profile NAME`` before extending to ``--all-accounts``.
+        include_domains: Forwarded to :func:`_enumerate_browser_accounts`.
+        io: Optional caller-injected :class:`.io_seam.LoginIO` sink; resolved
+            to the command-layer default when ``None``.
+    """
+    io = resolve_login_io(io)
+    deps = deps or default_refresh_deps()
+    enum_result = deps.enumerate_browser_accounts(
+        browser_cookies, include_domains=include_domains, io=io
+    )
+    if isinstance(enum_result, BrowserCookieOutcome):
+        _exit_on_outcome(io, enum_result)
+    per_profile_cookies, accounts = enum_result
+    if not accounts:
+        io.emit("[yellow]No accounts discovered.[/yellow]")
+        return
+
+    io.emit(f"\n[bold]Found {len(accounts)} accounts.[/bold] Saving profiles:")
+    # Reuse a profile when its account metadata already points at the same
+    # email. This makes repeated --all-accounts runs idempotent and lets a
+    # later run update authuser if Google's account indices shifted. Only
+    # allocate a suffix when the desired profile name belongs to a different
+    # account or a hand-created profile with no account metadata.
+    existing_profiles = deps.list_profiles()
+    existing_profiles_set = set(existing_profiles)
+    profiles_by_email = deps.profiles_by_account_email(existing_profiles)
+    unavailable: set[str] = set(existing_profiles)
+    claimed: set[str] = set()
+    # Server language is persisted as one CLI-wide preference, so syncing once
+    # avoids a network request and config write per discovered account.
+    language_sync_target: tuple[Path, str] | None = None
+    for account in accounts:
+        base_name = deps.email_to_profile_name(account.email)
+        target_profile = profiles_by_email.get(account.email.casefold())
+        if target_profile is None or target_profile in claimed:
+            target_profile = deps.resolve_all_accounts_target(
+                base_name=base_name,
+                account_email=account.email,
+                existing_profiles=existing_profiles_set,
+                unavailable=unavailable,
+                claimed=claimed,
+                update=update,
+            )
+        unavailable.add(target_profile)
+        claimed.add(target_profile)
+
+        target_storage = deps.get_storage_path(profile=target_profile)
+        write_outcome = deps.write_extracted_cookies(
+            io,
+            per_profile_cookies[account.browser_profile],
+            storage_path=target_storage,
+            profile=target_profile,
+            authuser=account.authuser,
+            email=account.email,
+            include_domains=include_domains,
+        )
+        if isinstance(write_outcome, BrowserCookieOutcome):
+            _exit_on_outcome(io, write_outcome)
+        io.emit(f"  [green]✓[/green] {target_profile or target_storage}  →  {account.email}")
+        language_sync_target = (target_storage, target_profile)
+
+    if language_sync_target is not None:
+        target_storage, target_profile = language_sync_target
+        deps.sync_server_language_to_config(storage_path=target_storage, profile=target_profile)
+
+
+def _refresh_from_browser_cookies(
+    browser_name: str,
+    *,
+    storage_path: Path,
+    profile: str | None,
+    quiet: bool,
+    include_domains: set[str] | None = None,
+    io: LoginIO | None = None,
+    deps: RefreshDeps | None = None,
+) -> None:
+    """Refresh the active profile from browser cookies, repairing account drift.
+
+    ``io`` is an optional caller-injected :class:`.io_seam.LoginIO` sink,
+    resolved to the command-layer default when ``None``.
+    """
+    io = resolve_login_io(io)
+    deps = deps or default_refresh_deps()
+    enum_result = deps.enumerate_browser_accounts(
+        browser_name, verbose=not quiet, include_domains=include_domains, io=io
+    )
+    if isinstance(enum_result, BrowserCookieOutcome):
+        _exit_on_outcome(io, enum_result)
+    per_profile_cookies, accounts = enum_result
+    if not accounts:
+        _emit(io, f"[red]No signed-in Google accounts found in {browser_name}.[/red]")
+        io.fail(1)
+
+    metadata = deps.read_account_metadata(storage_path)
+    selected_or_outcome = deps.select_refresh_account(accounts, metadata, browser_name)
+    if isinstance(selected_or_outcome, BrowserCookieOutcome):
+        _exit_on_outcome(io, selected_or_outcome)
+    selected = selected_or_outcome
+    write_outcome = deps.write_extracted_cookies(
+        io,
+        per_profile_cookies[selected.browser_profile],
+        storage_path=storage_path,
+        profile=profile,
+        authuser=selected.authuser,
+        email=selected.email,
+        include_domains=include_domains,
+        quiet=True,
+    )
+    if isinstance(write_outcome, BrowserCookieOutcome):
+        _exit_on_outcome(io, write_outcome)
+    deps.sync_server_language_to_config(storage_path=storage_path, profile=profile)
+
+    if not quiet:
+        _emit(
+            io,
+            f"[green]ok[/green] refreshed from {browser_name}: {storage_path}\n"
+            f"[green]account[/green] {selected.email}",
+        )
+
+
+def _login_with_browser_cookies(
+    storage_path: Path,
+    browser_name: str,
+    profile: str | None = None,
+    *,
+    authuser: int = 0,
+    email: str | None = None,
+    include_domains: set[str] | None = None,
+    io: LoginIO | None = None,
+    deps: RefreshDeps | None = None,
+) -> None:
+    """Extract Google cookies from an installed browser via rookiepy.
+
+    Args:
+        storage_path: Where to write storage_state.json.
+        browser_name: "auto" to use rookiepy.load(), or a specific browser name.
+        profile: Profile name (forwarded to verification step).
+        authuser: Internal Google account index fallback for this profile.
+        email: Optional account email to record for stable routing.
+        include_domains: Optional ``--include-domains`` label set forwarded
+            to :func:`_read_browser_cookies`.
+        io: Optional caller-injected :class:`.io_seam.LoginIO` sink; resolved
+            to the command-layer default when ``None``.
+    """
+    io = resolve_login_io(io)
+    deps = deps or default_refresh_deps()
+    cookies_result = deps.read_browser_cookies(browser_name, include_domains=include_domains, io=io)
+    if isinstance(cookies_result, BrowserCookieOutcome):
+        _exit_on_outcome(io, cookies_result)
+    raw_cookies = cookies_result
+
+    # ``validate_with_recovery`` mutates ``raw_cookies`` in place if the
+    # in-memory ``RotateCookies`` recovery succeeds (issue #990), so the
+    # ``storage_state`` returned here already includes the rotated PSIDTS.
+    storage_state, validation_error = deps.validate_with_recovery(raw_cookies)
+    if validation_error is not None:
+        cookie_names = deps.cookie_names_from_storage(storage_state)
+        hint = deps.missing_cookies_hint(cookie_names, browser_label=browser_name)
+        _emit(
+            io,
+            "[red]No valid Google authentication cookies found.[/red]\n"
+            f"{validation_error}\n\n"
+            f"{hint}",
+        )
+        io.fail(1)
+
+    # The write-time domain filter, the post-filter required-cookie
+    # revalidation (#2086), the account-metadata embed, and the atomic write all
+    # happen inside the canonical storage writer, under the storage lock.
+    # ``validate_with_recovery`` above still runs FIRST (recovery must see the
+    # full jar). Even on a default-account login (authuser=0, no email) the
+    # account binding is CLEARED in the same write so refreshed cookies cannot
+    # keep routing to an older account.
+    account = (
+        AccountRecord(authuser=authuser, email=email) if (authuser or email) else CLEAR_ACCOUNT
+    )
+    try:
+        outcome = deps.replace_from_login(
+            storage_path,
+            storage_state,
+            include_domains=include_domains,
+            account=account,
+        )
+    except OSError as e:
+        # G6: redact the bound exception in the log line (use the type name) so
+        # subprocess stderr / payload data captured in ``e`` is not persisted in
+        # caller log destinations — matching ``cookie_writes._write_extracted_cookies``.
+        logger.error("Failed to save authentication to %s: %s", storage_path, type(e).__name__)
+        _emit(io, f"[red]Failed to save authentication to {storage_path}.[/red]\nDetails: {e}")
+        io.fail(1)
+
+    if outcome.required_cookies_dropped:
+        # A required cookie's only copy sat on a non-allowlisted domain and was
+        # dropped by the write-time filter; the writer wrote nothing. Same
+        # contract as #2086 (io.fail(1), not-exists).
+        hint = deps.missing_cookies_hint(set(outcome.present_names), browser_label=browser_name)
+        _emit(
+            io,
+            "[red]Required authentication cookies were dropped by the "
+            "write-time cookie-domain policy.[/red]\n"
+            f"Missing after domain filtering: {', '.join(outcome.missing_required)} "
+            "(the only copies were scoped to non-allowlisted domains).\n\n"
+            f"{hint}",
+        )
+        io.fail(1)
+    if outcome.lock_unavailable:
+        logger.error("Failed to save authentication to %s: storage lock unavailable", storage_path)
+        _emit(
+            io,
+            f"[red]Failed to save authentication to {storage_path}.[/red]\n"
+            "Details: storage lock unavailable (another process may hold it).",
+        )
+        io.fail(1)
+
+    # The writer embedded (or cleared) the in-band account binding atomically;
+    # drop the legacy sibling ``context.json[account]`` key so a default-account
+    # login can't keep routing to a stale legacy account (best-effort, own lock).
+    drop_legacy_account_key(storage_path)
+
+    saved_msg = f"\n[green]Authentication saved to:[/green] {storage_path}"
+    if email:
+        saved_msg += f"\n[green]Account:[/green] {email}"
+    _emit(io, saved_msg)
+
+    # Verify that cookies work.
+    try:
+        io.run_async(deps.fetch_tokens_with_domains(storage_path, profile))
+        logger.info("Cookies verified successfully")
+        _emit(io, "[green]Cookies verified successfully.[/green]")
+    except ValueError as e:
+        # Cookie validation failed - the extracted cookies are invalid
+        logger.error("Extracted cookies are invalid: %s", e)
+        _emit(
+            io,
+            "[red]Warning: Extracted cookies failed validation.[/red]\n"
+            "The cookies may be expired or malformed.\n"
+            f"Error: {e}\n\n"
+            "Saved anyway, but you may need to re-run login if these are invalid.",
+        )
+    except httpx.RequestError as e:
+        # Network error - can't verify but cookies might be OK
+        logger.warning("Could not verify cookies due to network error: %s", e)
+        _emit(
+            io,
+            "[yellow]Warning: Could not verify cookies (network issue).[/yellow]\n"
+            "Cookies saved but may not be working.\n"
+            "Try running 'notebooklm ask' to test authentication.",
+        )
+    except Exception as e:
+        # Unexpected error - log it fully
+        logger.exception("Unexpected error verifying cookies: %s: %s", type(e).__name__, e)
+        _emit(
+            io,
+            f"[yellow]Warning: Unexpected error during verification: {e}[/yellow]\n"
+            "Cookies saved but please verify with 'notebooklm auth check --test'",
+        )
+
+    deps.sync_server_language_to_config(storage_path=storage_path, profile=profile)
+
+
+def _sync_server_language_to_config(
+    *,
+    storage_path: Path | None = None,
+    profile: str | None = None,
+    io: LoginIO | None = None,
+) -> None:
+    """Fetch server language setting and persist to local config.
+
+    Called after login to ensure the local config reflects the server's
+    global language setting. This prevents generate commands from defaulting
+    to 'en' when the user has configured a different language on the server.
+
+    Non-critical: logs errors at debug level to avoid blocking login. ``io``
+    is an optional caller-injected :class:`.io_seam.LoginIO` sink (resolved to
+    the command-layer default when ``None``) used both to drive the async
+    settings fetch and to emit the rare manual-sync warning.
+    """
+    io = resolve_login_io(io)
+
+    async def _fetch() -> Any:
+        kwargs: dict[str, Any] = {}
+        if storage_path is not None:
+            kwargs["path"] = str(storage_path)
+        if profile is not None:
+            kwargs["profile"] = profile
+        async with NotebookLMClient.from_storage(**kwargs) as client:
+            return await client.settings.get_output_language()
+
+    try:
+        server_lang = io.run_async(_fetch())
+        if server_lang:
+            set_language(server_lang)
+    except Exception as e:
+        logger.debug("Failed to sync server language to config: %s", e)
+        io.emit(
+            "[dim]Warning: Could not sync language setting. "
+            "Run 'notebooklm language get' to sync manually.[/dim]"
+        )
+
+
+@dataclass(frozen=True)
+class RefreshDeps:
+    """Collaborators used by the refresh/login drivers.
+
+    This keeps tests on explicit object references instead of patching private
+    module layout by import string.
+    """
+
+    cookie_names_from_storage: Callable[..., Any]
+    confirm_profile_account_overwrite: Callable[..., Any]
+    email_to_profile_name: Callable[..., Any]
+    enumerate_browser_accounts: Callable[..., Any]
+    fetch_tokens_with_domains: Callable[..., Any]
+    get_storage_path: Callable[..., Any]
+    list_profiles: Callable[..., Any]
+    missing_cookies_hint: Callable[..., Any]
+    profiles_by_account_email: Callable[..., Any]
+    read_account_metadata: Callable[..., Any]
+    read_browser_cookies: Callable[..., Any]
+    replace_from_login: Callable[..., Any]
+    resolve_all_accounts_target: Callable[..., Any]
+    select_account: Callable[..., Any]
+    select_refresh_account: Callable[..., Any]
+    sync_server_language_to_config: Callable[..., Any]
+    validate_with_recovery: Callable[..., Any]
+    write_extracted_cookies: Callable[..., Any]
+
+
+def default_refresh_deps() -> RefreshDeps:
+    return RefreshDeps(
+        cookie_names_from_storage=cookie_names_from_storage,
+        confirm_profile_account_overwrite=_confirm_profile_account_overwrite,
+        email_to_profile_name=email_to_profile_name,
+        enumerate_browser_accounts=_enumerate_browser_accounts,
+        fetch_tokens_with_domains=fetch_tokens_with_domains,
+        get_storage_path=get_storage_path,
+        list_profiles=_list_profiles,
+        missing_cookies_hint=missing_cookies_hint,
+        profiles_by_account_email=_profiles_by_account_email,
+        read_account_metadata=read_account_metadata,
+        read_browser_cookies=_read_browser_cookies,
+        replace_from_login=replace_from_login,
+        resolve_all_accounts_target=_resolve_all_accounts_target,
+        select_account=_select_account,
+        select_refresh_account=_select_refresh_account,
+        sync_server_language_to_config=_sync_server_language_to_config,
+        validate_with_recovery=validate_with_recovery,
+        write_extracted_cookies=_write_extracted_cookies,
+    )

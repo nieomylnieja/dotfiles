@@ -1,0 +1,533 @@
+"""Tests for research CLI commands."""
+
+import importlib
+import json
+from unittest.mock import AsyncMock, patch
+
+from notebooklm.notebooklm_cli import cli
+
+from .conftest import create_mock_client, inject_client, research_task
+
+research_module = importlib.import_module("notebooklm.cli.research_cmd")
+research_import_module = importlib.import_module("notebooklm.cli.research_import")
+
+# =============================================================================
+# RESEARCH STATUS TESTS
+# =============================================================================
+
+
+class TestResearchStatus:
+    def test_status_no_research(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(return_value=research_task({"status": "no_research"}))
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "No research running" in result.output
+
+    def test_status_in_progress(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task({"status": "in_progress", "query": "AI research"})
+        )
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "Research in progress" in result.output
+        assert "AI research" in result.output
+
+    def test_status_completed(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "completed",
+                    "query": "AI research",
+                    "sources": [
+                        {"title": "Source 1", "url": "http://example.com/1"},
+                        {"title": "Source 2", "url": "http://example.com/2"},
+                    ],
+                    "summary": "This is a summary of the research results.",
+                    "report": "# Research Report\nDetailed findings here.",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "Research completed" in result.output
+        assert "Found 2 sources" in result.output
+        assert "Source 1" in result.output
+        assert "Research Report" in result.output
+
+    def test_status_completed_with_many_sources(self, runner, mock_auth, mock_fetch_tokens):
+        """Test that more than 10 sources shows truncation message."""
+        mock_client = create_mock_client()
+        sources = [{"title": f"Source {i}", "url": f"http://example.com/{i}"} for i in range(15)]
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "completed",
+                    "query": "AI research",
+                    "sources": sources,
+                    "summary": "",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "Found 15 sources" in result.output
+        assert "and 5 more" in result.output
+
+    def test_status_unknown(self, runner, mock_auth, mock_fetch_tokens):
+        # ``research status`` renders any status it does not special-case
+        # (no_research / in_progress / completed) via the generic
+        # ``Status: <value>`` line. ``failed`` is a valid terminal status that
+        # hits that fallback branch. (The typed return guarantees the status is
+        # one of the ResearchStatus values, so a truly "unknown" string can no
+        # longer reach the CLI.)
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(return_value=research_task({"status": "failed"}))
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "Status: failed" in result.output
+
+    def test_status_json_output(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "completed",
+                    "query": "AI research",
+                    "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    "summary": "Summary",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "status", "-n", "nb_123", "--json"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["status"] == "completed"
+        assert len(data["sources"]) == 1
+
+
+# =============================================================================
+# RESEARCH WAIT TESTS
+# =============================================================================
+
+
+class TestResearchWait:
+    def test_wait_completes(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "completed",
+                    "task_id": "task_123",
+                    "query": "AI research",
+                    "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    "report": "# Test Report",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        assert "Research completed" in result.output
+        assert "Found 1 sources" in result.output
+        assert "Test Report" in result.output
+
+    def test_wait_no_research(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(return_value=research_task({"status": "no_research"}))
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 1
+        assert "No research running" in result.output
+
+    def test_wait_failed(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "failed",
+                    "task_id": "task_123",
+                    "query": "AI research",
+                    "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    "report": "# Partial",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 1
+        assert "Research failed" in result.output
+        assert "AI research" in result.output
+
+    def test_wait_timeout(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task({"status": "in_progress", "query": "AI research"})
+        )
+
+        result = runner.invoke(
+            cli,
+            ["research", "wait", "-n", "nb_123", "--timeout", "1", "--interval", "1"],
+            obj=inject_client(mock_client),
+        )
+
+        assert result.exit_code == 1
+        assert "Timed out" in result.output
+
+    def test_wait_with_import_all(self, runner, mock_auth, mock_fetch_tokens):
+        with patch.object(
+            research_import_module, "import_with_retry", new_callable=AsyncMock
+        ) as mock_import:
+            mock_client = create_mock_client()
+            mock_client.research.poll = AsyncMock(
+                return_value=research_task(
+                    {
+                        "status": "completed",
+                        "task_id": "task_123",
+                        "query": "AI research",
+                        "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    }
+                )
+            )
+            mock_import.return_value = [{"id": "src_1", "title": "Source 1"}]
+
+            result = runner.invoke(
+                cli,
+                ["research", "wait", "-n", "nb_123", "--import-all"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0
+        assert "Imported 1 sources" in result.output
+        mock_import.assert_awaited_once_with(
+            mock_client,
+            "nb_123",
+            "task_123",
+            [{"url": "http://example.com", "title": "Source 1", "result_type": 1}],
+            max_elapsed=300,
+        )
+
+    def test_wait_with_import_all_cited_only(self, runner, mock_auth, mock_fetch_tokens):
+        with patch.object(
+            research_import_module, "import_with_retry", new_callable=AsyncMock
+        ) as mock_import:
+            mock_client = create_mock_client()
+            mock_client.research.poll = AsyncMock(
+                return_value=research_task(
+                    {
+                        "status": "completed",
+                        "task_id": "task_123",
+                        "query": "AI research",
+                        "sources": [
+                            {"title": "Cited", "url": "https://example.com/cited"},
+                            {"title": "Uncited", "url": "https://example.com/uncited"},
+                        ],
+                        "report": "Report cites https://example.com/cited",
+                    }
+                )
+            )
+            mock_import.return_value = [{"id": "src_1", "title": "Cited"}]
+
+            result = runner.invoke(
+                cli,
+                ["research", "wait", "-n", "nb_123", "--import-all", "--cited-only"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0
+        assert "Imported 1 sources" in result.output
+        mock_import.assert_awaited_once_with(
+            mock_client,
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com/cited", "title": "Cited", "result_type": 1}],
+            max_elapsed=300,
+        )
+
+    def test_wait_cited_only_requires_import_all(self, runner, mock_auth, mock_fetch_tokens):
+        result = runner.invoke(cli, ["research", "wait", "-n", "nb_123", "--cited-only"])
+
+        # ``click.UsageError`` exits 2 — Click's standard convention.
+        assert result.exit_code == 2
+        assert "--cited-only requires --import-all" in result.output
+
+    def test_wait_json_output_completed(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "completed",
+                    "task_id": "task_123",
+                    "query": "AI research",
+                    "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    "report": "# JSON Report",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123", "--json"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["status"] == "completed"
+        assert data["sources_found"] == 1
+        assert data["report"] == "# JSON Report"
+
+    def test_wait_json_output_with_import(self, runner, mock_auth, mock_fetch_tokens):
+        with patch.object(
+            research_import_module, "import_with_retry", new_callable=AsyncMock
+        ) as mock_import:
+            mock_client = create_mock_client()
+            mock_client.research.poll = AsyncMock(
+                return_value=research_task(
+                    {
+                        "status": "completed",
+                        "task_id": "task_123",
+                        "query": "AI research",
+                        "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    }
+                )
+            )
+            mock_import.return_value = [{"id": "src_1", "title": "Source 1"}]
+
+            result = runner.invoke(
+                cli,
+                ["research", "wait", "-n", "nb_123", "--json", "--import-all"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["status"] == "completed"
+        assert data["imported"] == 1
+        assert len(data["imported_sources"]) == 1
+        mock_import.assert_awaited_once_with(
+            mock_client,
+            "nb_123",
+            "task_123",
+            [{"url": "http://example.com", "title": "Source 1", "result_type": 1}],
+            max_elapsed=300,
+            json_output=True,
+        )
+
+    def test_wait_json_output_with_import_cited_only(self, runner, mock_auth, mock_fetch_tokens):
+        with patch.object(
+            research_import_module, "import_with_retry", new_callable=AsyncMock
+        ) as mock_import:
+            mock_client = create_mock_client()
+            mock_client.research.poll = AsyncMock(
+                return_value=research_task(
+                    {
+                        "status": "completed",
+                        "task_id": "task_123",
+                        "query": "AI research",
+                        "sources": [
+                            {"title": "Cited", "url": "https://example.com/cited"},
+                            {"title": "Uncited", "url": "https://example.com/uncited"},
+                        ],
+                        "report": "Report cites https://example.com/cited",
+                    }
+                )
+            )
+            mock_import.return_value = [{"id": "src_1", "title": "Cited"}]
+
+            result = runner.invoke(
+                cli,
+                ["research", "wait", "-n", "nb_123", "--json", "--import-all", "--cited-only"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["cited_only"] is True
+        assert data["cited_sources_selected"] == 1
+        assert data["cited_only_fallback"] is False
+        mock_import.assert_awaited_once_with(
+            mock_client,
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com/cited", "title": "Cited", "result_type": 1}],
+            max_elapsed=300,
+            json_output=True,
+        )
+
+    def test_wait_json_no_research(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(return_value=research_task({"status": "no_research"}))
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123", "--json"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["status"] == "no_research"
+        assert "error" in data
+
+    def test_wait_json_failed(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task(
+                {
+                    "status": "failed",
+                    "task_id": "task_123",
+                    "query": "AI research",
+                    "sources": [{"title": "Source 1", "url": "http://example.com"}],
+                    "report": "# Partial",
+                }
+            )
+        )
+
+        result = runner.invoke(
+            cli, ["research", "wait", "-n", "nb_123", "--json"], obj=inject_client(mock_client)
+        )
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["status"] == "failed"
+        assert data["error"] == "Research failed"
+        assert data["query"] == "AI research"
+        assert data["sources_found"] == 1
+        assert data["report"] == "# Partial"
+
+    def test_wait_json_timeout(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.poll = AsyncMock(
+            return_value=research_task({"status": "in_progress", "query": "AI research"})
+        )
+
+        result = runner.invoke(
+            cli,
+            ["research", "wait", "-n", "nb_123", "--json", "--timeout", "1", "--interval", "1"],
+            obj=inject_client(mock_client),
+        )
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["status"] == "timeout"
+
+
+# =============================================================================
+# RESEARCH CANCEL TESTS
+# =============================================================================
+
+
+class TestResearchCancel:
+    def test_cancel_requests_and_confirms(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.cancel = AsyncMock(return_value=None)
+
+        result = runner.invoke(
+            cli,
+            ["research", "cancel", "run_456", "-n", "nb_123"],
+            obj=inject_client(mock_client),
+        )
+
+        assert result.exit_code == 0
+        assert "Cancel requested for run:" in result.output
+        assert "run_456" in result.output
+        # The notebook is resolved and passed through with the run id; fire-and-
+        # forget so the command never asserts success from the (empty) response.
+        mock_client.research.cancel.assert_awaited_once()
+        args = mock_client.research.cancel.await_args.args
+        assert args[0] == "nb_123"
+        assert args[1] == "run_456"
+
+    def test_cancel_json_output(self, runner, mock_auth, mock_fetch_tokens):
+        mock_client = create_mock_client()
+        mock_client.research.cancel = AsyncMock(return_value=None)
+
+        result = runner.invoke(
+            cli,
+            ["research", "cancel", "run_456", "-n", "nb_123", "--json"],
+            obj=inject_client(mock_client),
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data == {"run_id": "run_456", "cancel_requested": True}
+
+    def test_cancel_does_not_raise_on_unknown_id(self, runner, mock_auth, mock_fetch_tokens):
+        # The server returns [] for an unknown id; ``cancel`` returns None and
+        # the command still reports success (fire-and-forget — confirm by poll).
+        mock_client = create_mock_client()
+        mock_client.research.cancel = AsyncMock(return_value=None)
+
+        result = runner.invoke(
+            cli,
+            ["research", "cancel", "00000000-0000-0000-0000-000000000000", "-n", "nb_123"],
+            obj=inject_client(mock_client),
+        )
+
+        assert result.exit_code == 0
+        assert "Cancel requested for run:" in result.output
+
+    def test_cancel_requires_run_id(self, runner):
+        # RUN_ID is a required positional; omitting it is a Click usage error.
+        result = runner.invoke(cli, ["research", "cancel", "-n", "nb_123"])
+        assert result.exit_code == 2
+        assert "Missing argument" in result.output or "Usage:" in result.output
+
+
+# =============================================================================
+# COMMAND EXISTENCE TESTS
+# =============================================================================
+
+
+class TestResearchCommandsExist:
+    def test_research_group_exists(self, runner):
+        result = runner.invoke(cli, ["research", "--help"])
+        assert result.exit_code == 0
+        assert "Research management commands" in result.output
+
+    def test_research_status_command_exists(self, runner):
+        result = runner.invoke(cli, ["research", "status", "--help"])
+        assert result.exit_code == 0
+        assert "Check research status" in result.output
+
+    def test_research_wait_command_exists(self, runner):
+        result = runner.invoke(cli, ["research", "wait", "--help"])
+        assert result.exit_code == 0
+        assert "Wait for research to complete" in result.output
+
+    def test_research_cancel_command_exists(self, runner):
+        result = runner.invoke(cli, ["research", "cancel", "--help"])
+        assert result.exit_code == 0
+        assert "Cancel an in-flight research run" in result.output

@@ -1,0 +1,48 @@
+interactions:
+- request:
+    body: test=data
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '9'
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Cookie:
+      - SID=SCRUBBED; HSID=SCRUBBED
+      Host:
+      - httpbin.org
+      User-Agent:
+      - python-httpx/0.28.1
+    method: POST
+    uri: https://httpbin.org/post
+  response:
+    body:
+      string: "{\n  \"args\": {}, \n  \"data\": \"\", \n  \"files\": {}, \n  \"form\":
+        {\n    \"test\": \"data\"\n  }, \n  \"headers\": {\n    \"Accept\": \"*/*\",
+        \n    \"Accept-Encoding\": \"gzip, deflate\", \n    \"Content-Length\": \"9\",
+        \n    \"Content-Type\": \"application/x-www-form-urlencoded\", \n    \"Cookie\":
+        \"SID=SCRUBBED; HSID=SCRUBBED"
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Origin:
+      - '*'
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '534'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 Jan 2026 14:01:52 GMT
+      Server:
+      - gunicorn/19.9.0
+    status:
+      code: 200
+      message: OK
+version: 1

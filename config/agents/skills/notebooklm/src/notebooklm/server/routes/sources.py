@@ -1,0 +1,657 @@
+"""Source routes — ``/v1/notebooks/{id}/sources`` list / get / add / delete.
+
+Adapters over the transport-neutral ``_app.source_add`` core and the public
+``client.sources`` namespace, with poll-the-resource status backed by the
+in-process provenance registry (:mod:`.._pending`).
+
+``add`` accepts ``url`` / ``text`` / ``file``:
+
+* ``url`` / ``text`` flow through ``build_source_add_plan`` +
+  ``execute_source_add`` (which runs the SSRF / upload-path validation).
+* ``file`` spools the multipart body to a uniquely-named ``0o600`` temp file
+  (under a max-upload-size limit), then runs the same core, and deletes the temp
+  file in a ``finally`` (including on a mid-stream client disconnect).
+
+A successful create records the source id in the pending registry. The GET poll
+consults it to resolve the 200-vs-404 ambiguity that the client's
+``get_or_none``-returns-``None`` alone cannot: a registry-known id returning
+``None`` (the not-yet-listable window) → ``200`` pending; an unknown id → ``404``.
+Once the source is ``READY`` it is dropped from the registry (now listable).
+
+This module imports NO ``click`` / ``rich`` / ``cli``.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import tempfile
+from typing import Annotated, Any, Literal, get_args
+
+import pydantic
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from pydantic import BaseModel
+
+from ..._app import source_add as add_core
+from ..._app import source_content as content_core
+from ..._app import source_mutations as mut_core
+from ..._app import source_wait as wait_core
+from ..._app.source_batch import MAX_BATCH_URLS, batch_item_is_fatal
+from ..._app.source_wait import (
+    MAX_WAIT_SOURCE_IDS,
+    MAX_WAIT_TIMEOUT,
+    validate_wait_bounds,
+    wait_all_sources,
+)
+from ..._app.views import source_view
+from ...client import NotebookLMClient
+from ...exceptions import ValidationError
+from .._context import get_client, get_pending, limit_source_mutation, limit_source_wait
+from .._errors import error_item, safe_detail
+from .._pagination import MAX_LIMIT, paginate_envelope
+from .._pending import PendingRegistry
+from ._passthrough import passthrough_source_id
+
+__all__ = [
+    "MAX_BATCH_URLS",
+    "MAX_UPLOAD_BYTES",
+    "MAX_WAIT_SOURCE_IDS",
+    "MAX_WAIT_TIMEOUT",
+    "router",
+]
+
+router = APIRouter(prefix="/notebooks/{notebook_id}/sources", tags=["sources"])
+
+ClientDep = Annotated[NotebookLMClient, Depends(get_client)]
+PendingDep = Annotated[PendingRegistry, Depends(get_pending)]
+_field_validator = getattr(pydantic, "field_validator", pydantic.validator)
+
+#: Max accepted upload size. Bounds temp-file disk pressure under concurrent
+#: uploads; an upload exceeding it is rejected with 413 before it is spooled to
+#: completion. 200 MiB comfortably covers documents/audio while staying
+#: single-user-safe.
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+
+#: Chunk size when streaming an upload to the temp file.
+_UPLOAD_CHUNK = 1024 * 1024
+
+# The batch/wait cap policy (MAX_BATCH_URLS, MAX_WAIT_TIMEOUT, MAX_WAIT_SOURCE_IDS)
+# and the fatal-vs-isolate classifier now live in the transport-neutral _app core
+# (_app.source_batch / _app.source_wait) and are imported above so the MCP adapter
+# shares the exact same policy. tests/_guardrails/test_source_policy_parity.py
+# forbids re-declaring them here.
+
+#: Safe-basename sanitizer for a spooled upload. Aliased to the shared neutral
+#: helper (:func:`notebooklm._app.source_add.safe_upload_name`) so the REST
+#: ``add_file`` route and the MCP ``/files/ul`` route sanitize identically —
+#: control chars stripped, ``.``/``..`` and slashes rejected, extension preserved
+#: on stem-truncation (the old ``basename(...)[:255]`` could drop the extension).
+_safe_upload_name = add_core.safe_upload_name
+
+
+class SourceAddUrl(BaseModel):
+    """Request body for adding a URL source."""
+
+    url: str
+    allow_internal: bool = False
+
+
+class SourceAddText(BaseModel):
+    """Request body for adding a text source."""
+
+    text: str
+    title: str | None = None
+
+
+class SourceAddDrive(BaseModel):
+    """Request body for adding a Google Drive document source.
+
+    ``mime_type`` is REQUIRED (no ``google-doc`` default): defaulting a non-Doc
+    Drive file to ``google-doc`` silently routes it through the Google Docs
+    converter, fails the import, and leaves an error source stub behind (#1827).
+    An omitted value is rejected by Pydantic (422) before any add RPC runs.
+    """
+
+    document_id: str
+    title: str | None = None
+    mime_type: mut_core.DriveMimeChoice
+
+    # ``field_validator`` (not the v1-compat ``_field_validator`` alias) so mypy
+    # sees the v2 ``mode="before"`` overload — the hint must run BEFORE the
+    # ``Literal`` core check rejects an unsupported value with a bare enum error.
+    @pydantic.field_validator("mime_type", mode="before")
+    def _guide_unsupported_mime(cls, value: object) -> object:
+        """Give an unsupported ``mime_type`` (e.g. ``epub``) the upload hint before
+        the ``Literal`` check rejects it with a bare enum error. Google-native +
+        PDF are the only by-reference Drive types; other Drive files must be
+        downloaded and added as a ``file`` source (#1827)."""
+        if isinstance(value, str) and value not in get_args(mut_core.DriveMimeChoice):
+            raise ValueError(
+                f"{value!r} is not importable via Drive. NotebookLM's Drive import "
+                "supports google-doc/google-slides/google-sheets/pdf only; download an "
+                "upload-only file (epub/docx/txt/md/rtf/odt/csv) and add it as a `file` "
+                "source instead."
+            )
+        return value
+
+
+class SourceAddBatch(BaseModel):
+    """Request body for adding many http(s) URL sources in one call."""
+
+    urls: list[str]
+    allow_internal: bool = False
+
+    @_field_validator("urls")
+    def _limit_urls(cls, value: list[str]) -> list[str]:
+        if len(value) > MAX_BATCH_URLS:
+            raise ValueError(f"urls must contain at most {MAX_BATCH_URLS} entries")
+        return value
+
+
+class SourceRename(BaseModel):
+    """Request body for renaming a source (title only)."""
+
+    title: str
+
+
+class SourceWaitBody(BaseModel):
+    """Request body for waiting on source readiness.
+
+    Omitting ``source_ids`` waits for EVERY source in the notebook (mirroring the
+    MCP ``source_wait`` all-sources mode).
+    """
+
+    source_ids: list[str] | None = None
+    timeout: float = 120.0
+    interval: float = 1.0
+
+    @_field_validator("source_ids")
+    def _limit_source_ids(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and len(value) > MAX_WAIT_SOURCE_IDS:
+            raise ValueError(f"source_ids must contain at most {MAX_WAIT_SOURCE_IDS} entries")
+        return value
+
+
+async def _add_source(
+    client: NotebookLMClient,
+    pending: PendingRegistry,
+    notebook_id: str,
+    *,
+    content: str,
+    source_type: add_core.SourceAddType,
+    title: str | None,
+    mime_type: str | None = None,
+    allow_internal: bool = False,
+) -> dict[str, Any]:
+    """Build + execute a source-add, then record the new id and project it.
+
+    Shared by the ``url`` / ``text`` / ``file`` handlers: each supplies its own
+    ``content`` / ``source_type`` / ``title`` (and the URL handler its
+    ``allow_internal`` flag), while the SSRF / upload-path validators and the
+    execute → record → serialize tail live here once.
+    """
+    plan = add_core.build_source_add_plan(
+        content=content,
+        source_type=source_type,
+        title=title,
+        mime_type=mime_type,
+        follow_symlinks=False,
+        validate_path=add_core.validate_upload_path,
+        looks_path_shaped=add_core.looks_like_path,
+        allow_internal=allow_internal,
+    )
+    result = await add_core.execute_source_add(
+        client, add_core.SourceAddExecutionPlan(notebook_id=notebook_id, plan=plan)
+    )
+    pending.record(notebook_id, result.source.id)
+    # Project with the shared enriched view (string ``kind`` / ``status_label``
+    # alongside the raw codes) so the create path matches ``GET`` — a raw
+    # ``to_jsonable`` here would leak bare ``status`` / ``_type_code`` integers.
+    return source_view(result.source)
+
+
+@router.get("")
+async def list_sources(
+    notebook_id: str,
+    client: ClientDep,
+    limit: Annotated[int | None, Query(ge=1, le=MAX_LIMIT)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """List a notebook's sources.
+
+    Each source carries string ``kind`` / ``status_label`` labels alongside the
+    raw type/status codes (shared with the MCP ``source_list`` surface). Defaults
+    to the full collection under ``sources`` (unchanged); supply ``?limit=`` to
+    slice and add a ``meta`` block, ``?offset=`` to page forward.
+    """
+    sources = await client.sources.list(notebook_id)
+    data = [source_view(s) for s in sources]
+    return paginate_envelope(
+        data, key="sources", limit=limit, offset=offset, notebook_id=notebook_id
+    )
+
+
+@router.get("/{source_id}")
+async def get_source(
+    notebook_id: str, source_id: str, client: ClientDep, pending: PendingDep
+) -> dict[str, Any]:
+    """Poll one source.
+
+    A registry-known id returning ``None`` (the not-yet-listable window) → 200
+    ``pending``; an unknown id → 404. A ``READY`` source is dropped from the
+    registry and returned.
+    """
+    source = await client.sources.get_or_none(notebook_id, source_id)
+    if source is None:
+        if pending.knows(notebook_id, source_id):
+            return {"notebook_id": notebook_id, "source_id": source_id, "status": "pending"}
+        raise HTTPException(status_code=404, detail="Source not found")
+    if source.is_ready:
+        pending.drop(notebook_id, source_id)
+    # Enriched view: string ``kind`` / ``status_label`` alongside the raw codes
+    # (shared with the MCP source surface).
+    return source_view(source)
+
+
+@router.post("/url", status_code=201, dependencies=[Depends(limit_source_mutation)])
+async def add_url(
+    notebook_id: str, body: SourceAddUrl, client: ClientDep, pending: PendingDep
+) -> dict[str, Any]:
+    """Add a URL source (SSRF-validated via the neutral core)."""
+    return await _add_source(
+        client,
+        pending,
+        notebook_id,
+        content=body.url,
+        source_type="url",
+        title=None,
+        allow_internal=body.allow_internal,
+    )
+
+
+@router.post("/text", status_code=201, dependencies=[Depends(limit_source_mutation)])
+async def add_text(
+    notebook_id: str, body: SourceAddText, client: ClientDep, pending: PendingDep
+) -> dict[str, Any]:
+    """Add an inline-text source."""
+    return await _add_source(
+        client,
+        pending,
+        notebook_id,
+        content=body.text,
+        source_type="text",
+        title=body.title,
+    )
+
+
+@router.post("/file", status_code=201)
+async def add_file(
+    notebook_id: str,
+    client: ClientDep,
+    pending: PendingDep,
+    file: Annotated[UploadFile, File()],
+    title: Annotated[str | None, Form()] = None,
+) -> dict[str, Any]:
+    """Add a file source by spooling the multipart upload to a temp file.
+
+    The multipart request MUST send a ``Content-Length`` header: a chunked
+    (no-Content-Length) multipart upload is rejected with ``411`` by design, so
+    the size can be bounded before any part is spooled to disk (see the app
+    middleware in ``app.py``).
+
+    The upload is spooled into a private ``0o700`` ``mkdtemp`` directory, named
+    after the caller's basename (see :func:`_safe_upload_name`). The real name
+    matters: the resumable-upload init derives the upload filename from the path,
+    the source-id extraction keys off it, and the API 400s on an extensionless
+    name — a random temp name breaks all three. ``basename`` strips directory
+    components (traversal guard) and the unique directory isolates the file, so
+    the caller's name is reproduced safely. The file is ``0o600`` and the whole
+    directory is removed in a ``finally`` (so a mid-stream disconnect or a
+    downstream error still cleans up). ``content_type`` is passed as the explicit
+    upload mime.
+
+    ``validate_upload_path`` guards a *caller-supplied* path string; our temp
+    path is trusted, so we canonicalize it with ``realpath`` first — keeping the
+    symlink-parent guard from tripping on a symlinked temp root (e.g. macOS
+    ``/var`` → ``/private/var``).
+
+    The per-chunk size check below caps the copy into *our* temp file; the
+    primary disk-exhaustion guard is the Content-Length pre-check in the app
+    middleware (see ``app.py``). For a chunked (no-Content-Length) upload that
+    bypasses the pre-check, Starlette has already spooled the part before this
+    runs, so the check is a backstop on our own write, not on Starlette's spool.
+    """
+    temp_dir = tempfile.mkdtemp(prefix="nblm-upload-")
+    temp_path = os.path.join(temp_dir, _safe_upload_name(file.filename))
+    try:
+        # O_EXCL + 0o600: we own the unique dir, so the create cannot clobber.
+        fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        total = 0
+        with os.fdopen(fd, "wb") as out:
+            while chunk := await file.read(_UPLOAD_CHUNK):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Upload exceeds the size limit")
+                out.write(chunk)
+        return await _add_source(
+            client,
+            pending,
+            notebook_id,
+            content=os.path.realpath(temp_path),
+            source_type="file",
+            title=title,  # explicit override only; the upload already uses the real name
+            mime_type=file.content_type,
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@router.get("/{source_id}/content")
+async def get_source_content(
+    notebook_id: str,
+    source_id: str,
+    client: ClientDep,
+    detail: Annotated[Literal["full", "summary"], Query()] = "full",
+    output_format: Annotated[Literal["text", "markdown"], Query()] = "text",
+    max_chars: Annotated[int | None, Query(ge=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """Read a source's content (distinct from the status-poll ``GET /{source_id}``).
+
+    ``detail=full`` (default) returns the extracted body, bounded by ``max_chars``
+    (default 10,000) and windowed by ``offset``, with the FULL ``char_count`` and a
+    ``truncated`` flag. ``content`` is ``null`` (``char_count`` 0) when the source
+    is not READY yet or has no extractable text. A resolved id the backend no
+    longer has is a 404 (existence-gated), never a false empty success. Unlike the
+    status-poll ``GET /{source_id}`` route, this requires a *listable* source: a
+    known-but-not-yet-listable (pending) id is a 404 here, not a pending indicator.
+
+    ``output_format`` (``text`` default / ``markdown``) selects the extracted-body
+    format for ``detail=full`` (ignored for ``summary``); ``markdown`` needs the
+    server's ``markdownify`` extra and otherwise fails with a deterministic
+    ``dependency`` error (HTTP 500). Mirrors the MCP ``source_read`` tool's
+    ``output_format``.
+
+    ``detail=summary`` returns the AI source-guide digest ``{summary, keywords}``
+    for cheap low-token triage.
+    """
+    if detail == "summary":
+        # Existence guard so a missing source is a 404, not an empty guide.
+        guard = await content_core.execute_source_get(
+            client, content_core.SourceGetPlan(notebook_id=notebook_id, source_id=source_id)
+        )
+        if guard.source is None:
+            raise HTTPException(status_code=404, detail="Source not found")
+        guide = await content_core.execute_source_guide(
+            client, content_core.SourceGuidePlan(notebook_id=notebook_id, source_id=source_id)
+        )
+        return {
+            "notebook_id": notebook_id,
+            "source_id": guide.source_id,
+            "summary": guide.summary,
+            "keywords": list(guide.keywords),
+        }
+
+    read = await content_core.execute_source_read(
+        client,
+        content_core.SourceReadPlan(
+            notebook_id=notebook_id,
+            source_id=source_id,
+            output_format=output_format,
+            max_chars=max_chars,
+            offset=offset,
+        ),
+    )
+    return {
+        "notebook_id": notebook_id,
+        "source_id": source_id,
+        "content": read.content,
+        "char_count": read.char_count,
+        "truncated": read.truncated,
+        "output_format": output_format,
+    }
+
+
+@router.post("/drive", status_code=201, dependencies=[Depends(limit_source_mutation)])
+async def add_drive(
+    notebook_id: str, body: SourceAddDrive, client: ClientDep, pending: PendingDep
+) -> dict[str, Any]:
+    """Add a Google Drive document as a source.
+
+    ``mime_type`` is REQUIRED — one of ``google-doc`` / ``google-slides`` /
+    ``google-sheets`` / ``pdf``. It is a ``Literal``, so an omitted OR unknown value
+    is rejected with 422 by Pydantic at the schema boundary (the neutral core's
+    ``ValidationError`` guard is a defense-in-depth backstop that this route never
+    reaches). There is no ``google-doc`` default because it silently fails non-Doc
+    Drive imports and leaves an error stub behind (#1827). Flows through
+    ``_app.source_mutations.execute_source_add_drive`` (the neutral ``source_add``
+    core has no Drive path).
+    """
+    result = await mut_core.execute_source_add_drive(
+        client,
+        mut_core.SourceAddDrivePlan(
+            notebook_id=notebook_id,
+            file_id=body.document_id,
+            title=body.title or "",
+            mime_type=body.mime_type,
+        ),
+    )
+    pending.record(notebook_id, result.source.id)
+    return source_view(result.source)
+
+
+@router.post("/batch", status_code=201, dependencies=[Depends(limit_source_mutation)])
+async def add_batch(
+    notebook_id: str,
+    body: SourceAddBatch,
+    client: ClientDep,
+    pending: PendingDep,
+    response: Response,
+) -> dict[str, Any]:
+    """Add many http(s) URL sources in one call (mirrors MCP ``source_add`` batch).
+
+    The shared notebook / auth context is validated ONCE up front (a bad
+    ``notebook_id`` or stale auth surfaces as the normal top-level 404 / 401),
+    so a whole-batch failure is never masked as ``201`` with every item errored.
+    Only per-entry **input** failures (bad URL / 404 / SSRF-blocked host) are
+    isolated — recorded as an ``error`` item and skipped — so partial failure stays
+    visible; a **fatal** service failure (auth / rate-limit / 5xx, per
+    :func:`batch_item_is_fatal`) re-raises so the top-level handler maps it to the
+    right 401 / 429 / 5xx instead of a partial-success envelope. Each entry is added
+    SEQUENTIALLY (concurrent bulk writes
+    invite backend rate-limiting) with ``source_type="url"`` so the http/https
+    SSRF guard runs per item. Results are positional (``results[i]`` ↔
+    ``urls[i]``).
+
+    The top-level ``status`` is ``"added"`` once at least one source was added,
+    else ``"error"`` (every item failed) — so the envelope can't claim success
+    while every ``results[].status`` says error (MCP ``_add_url_batch`` parity).
+    An all-failed batch returns ``200`` (nothing was created) rather than ``201``.
+    """
+    if not body.urls:
+        raise ValidationError("urls must contain at least one URL")
+    # Validate the SHARED context once, before the per-item loop: a missing
+    # notebook or stale auth would otherwise fail every entry identically and be
+    # swallowed into a 201-all-errored body. Letting it raise here routes it
+    # through the normal classify → 404 / 401 contract.
+    await client.notebooks.get(notebook_id)
+    results: list[dict[str, Any]] = []
+    for entry in body.urls:
+        try:
+            plan = add_core.build_source_add_plan(
+                content=entry,
+                source_type="url",
+                title=None,
+                mime_type=None,
+                follow_symlinks=False,
+                validate_path=add_core.validate_upload_path,
+                looks_path_shaped=add_core.looks_like_path,
+                allow_internal=body.allow_internal,
+            )
+            result = await add_core.execute_source_add(
+                client, add_core.SourceAddExecutionPlan(notebook_id=notebook_id, plan=plan)
+            )
+        except Exception as exc:  # noqa: BLE001 - per-item isolation; CancelledError still propagates
+            # Re-raise service/infra failures (auth / rate-limit / server /
+            # transport) so the top-level handler maps them to the correct
+            # 401 / 429 / 5xx instead of masking them as a 200/201 batch
+            # envelope; keep per-item isolation only for per-URL input failures.
+            if batch_item_is_fatal(exc):
+                raise
+            # ``error_item`` routes ``str(exc)`` through the shared ``_redact``
+            # chokepoint (same scrubber as ``safe_detail``), so the per-item text
+            # carries no raw exception/stack detail (CodeQL information-exposure).
+            results.append({"input": entry, "status": "error", "error": error_item(exc)})
+        else:
+            pending.record(notebook_id, result.source.id)
+            view = source_view(result.source)
+            results.append(
+                {
+                    "input": entry,
+                    "status": "added",
+                    "source_id": result.source.id,
+                    "title": result.source.title,
+                    "status_label": view["status_label"],
+                }
+            )
+    added = sum(1 for item in results if item["status"] == "added")
+    # Nothing created → 200 (not 201). ``status`` mirrors the MCP batch envelope:
+    # "added" when ≥1 succeeded, "error" when every item failed.
+    if not added:
+        response.status_code = 200
+    return {
+        "status": "added" if added else "error",
+        "notebook_id": notebook_id,
+        "added": added,
+        "failed": len(results) - added,
+        "results": results,
+    }
+
+
+@router.post("/wait", dependencies=[Depends(limit_source_wait)])
+async def wait_sources(notebook_id: str, body: SourceWaitBody, client: ClientDep) -> dict[str, Any]:
+    """Wait for source(s) to finish processing (mirrors MCP ``source_wait``).
+
+    Waits for the given ``source_ids``, or — when omitted — for EVERY source in
+    the notebook. Both modes return the SAME aggregate::
+
+        {"notebook_id", "ok", "ready", "timed_out", "failed", "not_found"}
+
+    plus per-bucket ``*_count`` and a ``total_count`` (their sum). ``ready`` holds
+    the sources that reached READY (each with ``kind`` / ``status_label`` labels);
+    the error buckets hold ``{"source_id", "error"}`` entries. ``ok`` is true iff
+    all three error buckets are empty — the all-sources mode reports partial
+    progress rather than discarding the sources that did become ready.
+    """
+    # Non-finite + range guards (shared with the MCP tools so the two can't
+    # drift): JSON allows ``inf`` / ``NaN`` and ``NaN`` slips through every
+    # comparison, so ``math.isfinite`` is checked before the range bounds.
+    validate_wait_bounds(body.timeout, body.interval)
+    if body.source_ids is not None:
+        # An EXPLICIT empty list is rejected: it would otherwise return an
+        # immediate ``ok:true`` with nothing waited on — a false "ready" for a
+        # caller that serialized "all sources" as ``[]``. Omit ``source_ids``
+        # (None) to wait for every source.
+        if not body.source_ids:
+            raise ValidationError(
+                "source_ids must not be empty; omit it entirely to wait for all sources"
+            )
+        ids = _dedupe_source_ids(body.source_ids)
+    else:
+        ids = _dedupe_source_ids([s.id for s in await client.sources.list(notebook_id)])
+        if len(ids) > MAX_WAIT_SOURCE_IDS:
+            raise ValidationError(
+                f"notebook has {len(ids)} sources; wait-all is capped at "
+                f"{MAX_WAIT_SOURCE_IDS}. Pass source_ids to wait for a smaller subset."
+            )
+    outcomes = await wait_all_sources(
+        client, notebook_id, ids, timeout=body.timeout, interval=body.interval
+    )
+    return _aggregate_wait_outcomes(notebook_id, outcomes)
+
+
+@router.patch("/{source_id}", dependencies=[Depends(limit_source_mutation)])
+async def rename_source(
+    notebook_id: str, source_id: str, body: SourceRename, client: ClientDep
+) -> dict[str, Any]:
+    """Rename a source (title only). Returns the enriched source view."""
+    result = await mut_core.execute_source_rename(
+        client,
+        mut_core.SourceRenamePlan(
+            notebook_id=notebook_id, source_id=source_id, new_title=body.title, json_output=True
+        ),
+        resolve_source_id=passthrough_source_id,
+    )
+    return source_view(result.source)
+
+
+@router.delete("/{source_id}", status_code=204, dependencies=[Depends(limit_source_mutation)])
+async def delete_source(
+    notebook_id: str, source_id: str, client: ClientDep, pending: PendingDep
+) -> Response:
+    """Delete a source (idempotent)."""
+    await client.sources.delete(notebook_id, source_id)
+    pending.drop(notebook_id, source_id)
+    return Response(status_code=204)
+
+
+def _dedupe_source_ids(source_ids: list[str]) -> list[str]:
+    """Return source ids in first-seen order with duplicates removed."""
+    return list(dict.fromkeys(source_ids))
+
+
+def _aggregate_wait_outcomes(
+    notebook_id: str, outcomes: list[wait_core.SourceWaitOutcome]
+) -> dict[str, Any]:
+    """Project per-source wait outcomes onto the unified aggregate wire shape.
+
+    Ready sources (enriched via :func:`source_view`) are returned alongside the
+    ones that timed out / failed / went missing. ``ok`` is true iff nothing landed
+    in an error bucket. (The MCP surface additionally annotates thin web-page
+    content here; REST deliberately omits that costly extra fetch — Phase 1's
+    scope decision — so this is warning-free.)
+    """
+    ready: list[dict[str, Any]] = []
+    timed_out: list[dict[str, str]] = []
+    failed: list[dict[str, str]] = []
+    not_found: list[dict[str, str]] = []
+    for outcome in outcomes:
+        if isinstance(outcome, wait_core.SourceWaitReady):
+            ready.append(source_view(outcome.source))
+        elif isinstance(outcome, wait_core.SourceWaitTimeout):
+            timed_out.append(_wait_bucket_entry(outcome.error))
+        elif isinstance(outcome, wait_core.SourceWaitProcessingError):
+            failed.append(_wait_bucket_entry(outcome.error))
+        elif isinstance(outcome, wait_core.SourceWaitNotFound):
+            not_found.append(_wait_bucket_entry(outcome.error))
+        else:  # exhaustive over the closed SourceWaitOutcome union
+            raise AssertionError(f"unhandled SourceWaitOutcome: {outcome!r}")
+    # Explicit counts mirror the MCP aggregate (#1822): additive to the buckets,
+    # ``total_count`` folds all four so it equals the number of sources waited on.
+    ready_count = len(ready)
+    timed_out_count = len(timed_out)
+    failed_count = len(failed)
+    not_found_count = len(not_found)
+    return {
+        "notebook_id": notebook_id,
+        "ok": not (timed_out or failed or not_found),
+        "ready": ready,
+        "timed_out": timed_out,
+        "failed": failed,
+        "not_found": not_found,
+        "ready_count": ready_count,
+        "timed_out_count": timed_out_count,
+        "failed_count": failed_count,
+        "not_found_count": not_found_count,
+        "total_count": ready_count + timed_out_count + failed_count + not_found_count,
+    }
+
+
+def _wait_bucket_entry(error: Any) -> dict[str, str]:
+    """Project a handled wait failure onto its ``{source_id, error}`` bucket entry.
+
+    The message is scrubbed + length-capped via :func:`safe_detail` (the same
+    ``_redact`` chokepoint the rest of the server error projection uses) so the
+    bucket entry cannot leak a credential or a multi-kilobyte dump.
+    """
+    return {"source_id": error.source_id, "error": safe_detail(str(error))}

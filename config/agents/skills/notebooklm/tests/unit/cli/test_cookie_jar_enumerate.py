@@ -1,0 +1,198 @@
+"""Unit tests for ``_enumerate_one_jar`` failure-outcome branches.
+
+``_enumerate_one_jar`` probes one rookiepy cookie set against
+``?authuser=N`` and returns either a list of :class:`Account` records or a
+:class:`BrowserCookieOutcome` subclass on failure. The CLI-level fan-out
+tests exercise the happy paths and the quiet network branch; these direct
+unit tests pin the remaining validation-failure and stale-cookie outcome
+shapes (both quiet and loud).
+"""
+
+from __future__ import annotations
+
+from contextlib import ExitStack, contextmanager
+from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+
+import notebooklm.auth as auth_module
+from notebooklm._auth.cookie_policy import app_host_scope_note
+from notebooklm._env import ENTERPRISE_BASE_HOST, PERSONAL_LEGACY_HOST
+from notebooklm.cli.services.login import cookie_jar
+from notebooklm.cli.services.login.outcomes import (
+    CookieValidationFailure,
+    NetworkFailure,
+    StaleCookies,
+)
+from tests._fixtures.login_io import RecordingLoginIO
+
+
+class _FakeAccount:
+    def __init__(self, authuser, email, is_default):
+        self.authuser = authuser
+        self.email = email
+        self.is_default = is_default
+
+
+@contextmanager
+def _enumerate_env(*, validate_return, run_async_side_effect=None, run_async_return=None):
+    """Patch the collaborators ``_enumerate_one_jar`` reaches at call time.
+
+    ``validate_with_recovery`` is a module-level import in ``cookie_jar``
+    (patched via ``patch.object``); ``build_cookie_jar`` /
+    ``extract_cookies_with_domains`` / ``enumerate_accounts`` are *function-local*
+    ``from ....auth import ...`` lookups, so they're patched on ``notebooklm.auth``.
+    ``enumerate_accounts`` is async, so an auto-specced ``patch`` would hand back
+    an un-awaited coroutine (the ``io.run_async`` stub never awaits it); an
+    explicit sync ``MagicMock`` returns a plain sentinel instead.
+
+    The async bridge is no longer a module-level ``run_async`` (#1393 inverted
+    it behind the injected ``LoginIO`` sink). This helper yields a
+    :class:`RecordingLoginIO` whose ``run_async`` is the configured stub; tests
+    pass it as ``io=`` so the probe result / side-effect is controlled exactly
+    as before.
+    """
+    run_async = MagicMock(side_effect=run_async_side_effect, return_value=run_async_return)
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch.object(cookie_jar, "validate_with_recovery", return_value=validate_return)
+        )
+        stack.enter_context(
+            patch.object(auth_module, "extract_cookies_with_domains", return_value={})
+        )
+        stack.enter_context(patch.object(auth_module, "build_cookie_jar", return_value=object()))
+        stack.enter_context(
+            patch.object(auth_module, "enumerate_accounts", MagicMock(return_value=object()))
+        )
+        yield RecordingLoginIO(run_async=run_async)
+
+
+class TestValidationFailure:
+    def test_quiet_returns_collapsed_validation_failure(self):
+        with _enumerate_env(validate_return=({"cookies": []}, ValueError("missing SID"))) as io:
+            out = cookie_jar._enumerate_one_jar([], "chrome", None, quiet=True, io=io)
+
+        assert isinstance(out, CookieValidationFailure)
+        assert out.code == "COOKIE_VALIDATION_FAILED"
+        # Quiet mode collapses to the single-line message naming the browser.
+        assert "chrome" in out.message
+        assert "\n" not in out.message
+
+    def test_loud_returns_validation_failure_with_hint(self):
+        with _enumerate_env(validate_return=({"cookies": []}, ValueError("missing SID"))) as io:
+            out = cookie_jar._enumerate_one_jar([], "chrome", None, quiet=False, io=io)
+
+        assert isinstance(out, CookieValidationFailure)
+        assert out.code == "COOKIE_VALIDATION_FAILED"
+        # Loud mode includes the underlying error and a multi-line hint body.
+        assert "missing SID" in out.message
+        assert "No valid Google authentication cookies" in out.message
+
+
+class TestStaleCookies:
+    def test_quiet_returns_collapsed_stale_outcome(self):
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None),
+            run_async_side_effect=ValueError("rejected"),
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "firefox", None, quiet=True, io=io)
+
+        assert isinstance(out, StaleCookies)
+        assert out.code == "STALE_COOKIES"
+        assert "firefox" in out.message
+        assert "too stale" in out.message
+
+    def test_loud_returns_detailed_stale_outcome(self):
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None),
+            run_async_side_effect=ValueError("rejected"),
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "firefox", None, quiet=False, io=io)
+
+        assert isinstance(out, StaleCookies)
+        assert out.code == "STALE_COOKIES"
+        assert "Account discovery failed" in out.message
+        assert "notebooklm login" in out.message
+
+    def test_loud_stale_outcome_names_the_probed_host_and_scope_caveat(self, monkeypatch):
+        """A stale-looking rejection can really be a scope mismatch on the sibling host.
+
+        ``enumerate_accounts`` probes the *configured* host, so the refresh advice
+        names that host (not a fixed URL), and carries the shared cross-host
+        caveat — otherwise the message sends the user to re-mint cookies on a
+        host this client never calls.
+        """
+        monkeypatch.setenv("NOTEBOOKLM_BASE_URL", f"https://{PERSONAL_LEGACY_HOST}")
+
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None),
+            run_async_side_effect=ValueError("rejected"),
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "firefox", None, quiet=False, io=io)
+
+        assert isinstance(out, StaleCookies)
+        assert f"https://{PERSONAL_LEGACY_HOST} (the host this client probed)" in out.message
+        assert app_host_scope_note() in out.message
+
+    def test_loud_stale_outcome_drops_the_caveat_on_the_enterprise_host(self, monkeypatch):
+        """The enterprise host has no alias — no cross-host scope to warn about."""
+        monkeypatch.setenv("NOTEBOOKLM_BASE_URL", f"https://{ENTERPRISE_BASE_HOST}")
+
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None),
+            run_async_side_effect=ValueError("rejected"),
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "firefox", None, quiet=False, io=io)
+
+        assert isinstance(out, StaleCookies)
+        assert f"https://{ENTERPRISE_BASE_HOST} (the host this client probed)" in out.message
+        assert "host-scoped" not in out.message
+        # Blank-line hygiene: no double gap where the caveat would have gone.
+        assert "\n\n\n" not in out.message
+
+
+class TestNetworkFailure:
+    def test_quiet_reraises_network_error(self):
+        with (
+            _enumerate_env(
+                validate_return=({"cookies": [1]}, None),
+                run_async_side_effect=httpx.ConnectError("no route"),
+            ) as io,
+            pytest.raises(httpx.RequestError),
+        ):
+            cookie_jar._enumerate_one_jar([{"x": 1}], "chrome", None, quiet=True, io=io)
+
+    def test_loud_returns_network_failure_outcome(self):
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None),
+            run_async_side_effect=httpx.ConnectError("no route"),
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "chrome", None, quiet=False, io=io)
+
+        assert isinstance(out, NetworkFailure)
+        assert out.code == "NETWORK_ERROR"
+
+
+class TestSuccessPath:
+    def test_legacy_single_jar_returns_accounts_unchanged(self):
+        accounts = [_FakeAccount(0, "a@gmail.com", True)]
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None), run_async_return=accounts
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "chrome", None, io=io)
+
+        assert out == accounts
+
+    def test_fanout_tags_accounts_with_browser_profile(self):
+        # Account is reconstructed inside the function from notebooklm.auth, so
+        # leave the real class in place here (only the probe is stubbed).
+        accounts = [_FakeAccount(0, "a@gmail.com", True)]
+        with _enumerate_env(
+            validate_return=({"cookies": [1]}, None), run_async_return=accounts
+        ) as io:
+            out = cookie_jar._enumerate_one_jar([{"x": 1}], "chrome", "Profile 1", io=io)
+
+        assert len(out) == 1
+        assert out[0].browser_profile == "Profile 1"
+        assert out[0].email == "a@gmail.com"
