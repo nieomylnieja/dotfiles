@@ -30,12 +30,6 @@
         "callbackPort": 3118
       }
     },
-    "grep-mcp": {
-      "command": "uvx",
-      "args": [
-        "grep-mcp"
-      ]
-    },
     "exa": {
       "type": "http",
       "url": "https://mcp.exa.ai/mcp"

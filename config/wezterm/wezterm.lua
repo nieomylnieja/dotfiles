@@ -160,59 +160,73 @@ config.keys = {
   { key = 'End', mods = 'SHIFT', action = act.ScrollToBottom },
 }
 
+config.bypass_mouse_reporting_modifiers = 'SHIFT'
+
+local open_selected_file_or_link = wezterm.action_callback(function(window, pane)
+  local selection = window:get_selection_text_for_pane(pane)
+  if selection ~= nil and selection ~= '' then
+    window:perform_action(act.EmitEvent 'open-selected-file-reference', pane)
+    return
+  end
+
+  window:perform_action(act.OpenLinkAtMouseCursor, pane)
+end)
+
+-- Let applications handle plain clicks; use Shift or Ctrl for terminal links
+-- while mouse reporting is active.
 config.mouse_bindings = {
   {
     event = { Down = { streak = 1, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.SelectTextAtMouseCursor 'Cell',
   },
   {
     event = { Drag = { streak = 1, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.ExtendSelectionToMouseCursor 'Cell',
   },
   {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.CompleteSelectionOrOpenLinkAtMouseCursor 'ClipboardAndPrimarySelection',
   },
   {
     event = { Down = { streak = 2, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.SelectTextAtMouseCursor 'Word',
   },
   {
     event = { Drag = { streak = 2, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.ExtendSelectionToMouseCursor 'Word',
   },
   {
     event = { Up = { streak = 2, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.CompleteSelection 'ClipboardAndPrimarySelection',
   },
   {
     event = { Down = { streak = 3, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.SelectTextAtMouseCursor 'Line',
   },
   {
     event = { Drag = { streak = 3, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.ExtendSelectionToMouseCursor 'Line',
   },
   {
     event = { Up = { streak = 3, button = 'Left' } },
     mods = 'NONE',
-    mouse_reporting = true,
+    mouse_reporting = false,
     action = act.CompleteSelection 'ClipboardAndPrimarySelection',
   },
   {
@@ -230,19 +244,25 @@ config.mouse_bindings = {
   {
     event = { Up = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
-    action = wezterm.action_callback(function(window, pane)
-      local selection = window:get_selection_text_for_pane(pane)
-      if selection ~= nil and selection ~= '' then
-        window:perform_action(act.EmitEvent 'open-selected-file-reference', pane)
-        return
-      end
-
-      window:perform_action(act.OpenLinkAtMouseCursor, pane)
-    end),
+    mouse_reporting = false,
+    action = open_selected_file_or_link,
   },
   {
     event = { Down = { streak = 1, button = 'Left' } },
     mods = 'CTRL',
+    mouse_reporting = false,
+    action = act.Nop,
+  },
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    mods = 'CTRL',
+    mouse_reporting = true,
+    action = open_selected_file_or_link,
+  },
+  {
+    event = { Down = { streak = 1, button = 'Left' } },
+    mods = 'CTRL',
+    mouse_reporting = true,
     action = act.Nop,
   },
 }

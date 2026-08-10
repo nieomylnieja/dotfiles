@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly PROG="${0##*/}"
+readonly GAME_DIR="${HOME}/.local/share/Steam/steamapps/common/Medieval II Total War"
+readonly GAME_EXE="${GAME_DIR}/medieval2.exe"
+readonly AGO_DIR="${GAME_DIR}/mods/AGO_V3"
+readonly AGO_EXE="${AGO_DIR}/M2TWEOP_GUI.exe"
+readonly AGO_UNICODE_DLL="${GAME_DIR}/unicode.dll"
+
+usage() {
+  cat << EOF
+Usage: ${PROG} COMMAND [ARG]...
+Launch AGO by replacing medieval2.exe in Steam's generated command.
+
+Options:
+  -h, --help  display this help and exit
+
+Exit status:
+  0  command completed successfully
+  1  launch preparation or command failed
+  2  usage error
+EOF
+}
+
+fatal() {
+  echo "${PROG}: ERROR: $1" >&2
+  exit "${2:-1}"
+}
+
+main() {
+  local -a command=("$@")
+  local index
+  local replacements=0
+
+  if [[ $# -eq 1 && ("$1" == "-h" || "$1" == "--help") ]]; then
+    usage
+    exit 0
+  fi
+
+  [[ $# -gt 0 ]] || fatal "Steam command is required" 2
+  [[ -x "${GAME_EXE}" ]] || fatal "MTW2 executable is not available: ${GAME_EXE}"
+  [[ -x "${AGO_EXE}" ]] || fatal "AGO EOP executable is not available: ${AGO_EXE}"
+  [[ -r "${AGO_UNICODE_DLL}" ]] || fatal "AGO Unicode module is not available: ${AGO_UNICODE_DLL}"
+
+  for index in "${!command[@]}"; do
+    if [[ "${command[index]}" == "${GAME_EXE}" ]]; then
+      command[index]="${AGO_EXE}"
+      ((replacements += 1))
+    fi
+  done
+
+  [[ ${replacements} -eq 1 ]] || fatal "expected one medieval2.exe argument, found ${replacements}"
+  cd "${AGO_DIR}" || fatal "cannot enter AGO directory: ${AGO_DIR}"
+  exec "${command[@]}"
+}
+
+main "$@"

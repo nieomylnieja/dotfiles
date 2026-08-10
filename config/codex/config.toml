@@ -48,9 +48,6 @@ args = ["-y", "@upstash/context7-mcp"]
 url = "https://mcp.deepwiki.com/mcp"
 [mcp_servers.exa]
 url = "https://mcp.exa.ai/mcp"
-[mcp_servers.grep-mcp]
-command = "uvx"
-args = ["grep-mcp"]
 [mcp_servers.pg-aiguide]
 url = "https://mcp.tigerdata.com/docs"
 [mcp_servers.sequential-thinking]

@@ -10,6 +10,22 @@ let
   gdk = pkgs.stable.google-cloud-sdk.withExtraComponents (with pkgs.stable.google-cloud-sdk.components; [
     gke-gcloud-auth-plugin
   ]);
+  # GoLand's Skiko library is not executable, so autoPatchelfHook skips its native dependencies.
+  # Remove this wrapper after NixOS/nixpkgs#548480 is fixed in the pinned revision.
+  goland = pkgs.symlinkJoin {
+    name = "goland-wrapped";
+    paths = [ pkgs.jetbrains.goland ];
+    buildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/goland \
+        --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [
+          pkgs.libGL
+          pkgs.libx11
+          pkgs.fontconfig
+          pkgs.stdenv.cc.cc
+        ]}"
+    '';
+  };
   sessionVariables = {
     DOTFILES = "${dotfilesDir}";
     XDG_SESSION_TYPE = "wayland";
@@ -135,7 +151,7 @@ in
     hyprlock
     hyprpaper
     pkgs.stable.inkscape-with-extensions
-    jetbrains.goland
+    goland
     jetbrains.jdk # JDK for plugin development.
     jc
     jq
@@ -174,6 +190,7 @@ in
     pkgs.stable.pdm
     pinentry-qt
     proton-vpn
+    qgis
     r2modman # for Valheim mods
     kubectl
     kubecolor
@@ -573,6 +590,7 @@ in
 
   # UI
   home.pointerCursor = {
+    enable = true;
     package = pkgs.nordzy-cursor-theme;
     name = "Nordzy-cursors";
     gtk.enable = true;
@@ -582,7 +600,7 @@ in
     enable = true;
     gtk4.theme = config.gtk.theme;
     theme = {
-      package = pkgs.nordic;
+      package = pkgs.stable.nordic;
       name = "Nordic";
     };
     font = {

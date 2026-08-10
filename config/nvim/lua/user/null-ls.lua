@@ -9,6 +9,38 @@ local cspell_config_files = {
   ".cspell.yml",
 }
 
+local markdownlint_project_config_files = {
+  ".markdownlint.jsonc",
+  ".markdownlint.json",
+  ".markdownlint.yaml",
+  ".markdownlint.yml",
+}
+
+local markdownlint_fallback_config = vim.fn.expand("~/.dotfiles/.markdownlint.yaml")
+
+local function has_markdownlint_config(root)
+  for _, filename in ipairs(markdownlint_project_config_files) do
+    local stat = vim.uv.fs_stat(vim.fs.joinpath(root, filename))
+    if stat and stat.type == "file" then
+      return true
+    end
+  end
+
+  return #vim.fs.find(".markdownlintrc", {
+    path = root,
+    upward = true,
+    type = "file",
+  }) > 0
+end
+
+local function markdownlint_extra_args(params)
+  if has_markdownlint_config(params.root) then
+    return {}
+  end
+
+  return { "--config", markdownlint_fallback_config }
+end
+
 M.setup = function(lsp_config)
   local null_ls = require("null-ls")
   local cspell = require("cspell")
@@ -31,13 +63,13 @@ M.setup = function(lsp_config)
         diagnostic.severity = vim.diagnostic.severity.HINT
       end,
     }),
-    lint.markdownlint,
+    lint.markdownlint.with({ extra_args = markdownlint_extra_args }),
     -- FORMATTING:
     fmt.stylua,
     require("none-ls.formatting.golangci_lint"),
     fmt.ocamlformat,
     fmt.terraform_fmt,
-    fmt.markdownlint,
+    fmt.markdownlint.with({ extra_args = markdownlint_extra_args }),
     -- fmt.shfmt, -- handled by bash-language-server
     -- ACTIONS:
     action.gomodifytags.with({

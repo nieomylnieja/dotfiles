@@ -51,8 +51,24 @@
   zramSwap = {
     enable = true;
     algorithm = "zstd";
-    memoryPercent = 50;
+    memoryPercent = 100;
     priority = 100;
+  };
+
+  # Replacing systemd's tmp.conf also requires restating the /var/tmp default.
+  systemd.tmpfiles.settings."tmp" = {
+    "/tmp".q = {
+      mode = "1777";
+      user = "root";
+      group = "root";
+      age = "1d";
+    };
+    "/var/tmp".q = {
+      mode = "1777";
+      user = "root";
+      group = "root";
+      age = "30d";
+    };
   };
 
   # Monitor the per-user systemd tree instead of the root-owned user.slice so

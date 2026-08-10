@@ -33,9 +33,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/supabase/agent-skills.git",
       "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
-      "skillFolderHash": "d11b54a2ab36d33940504ca9ec3a57bfd6126f26",
+      "skillFolderHash": "27bde25111c4cd5e6f803fc9db5fbffe27bb26cf",
       "installedAt": "2026-04-13T20:31:02.845Z",
-      "updatedAt": "2026-07-23T08:37:35.999Z"
+      "updatedAt": "2026-07-30T16:50:57.538Z"
     },
     "agent-browser": {
       "source": "vercel-labs/agent-browser",
@@ -72,6 +72,24 @@
       "skillFolderHash": "2d667b90e0be300db3dd576ffe40451b8c2e810e",
       "installedAt": "2026-07-03T09:27:46.279Z",
       "updatedAt": "2026-07-03T09:27:46.279Z"
+    },
+    "notebooklm": {
+      "source": "teng-lin/notebooklm-py",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/teng-lin/notebooklm-py.git",
+      "skillPath": "SKILL.md",
+      "skillFolderHash": "614d6288ab51e508c41c7bea481729c50d14d309",
+      "installedAt": "2026-07-25T11:15:59.576Z",
+      "updatedAt": "2026-08-06T13:09:36.014Z"
+    },
+    "yt-dlp": {
+      "source": "lwmxiaobei/yt-dlp-skill",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/lwmxiaobei/yt-dlp-skill.git",
+      "skillPath": "SKILL.md",
+      "skillFolderHash": "a28cf2585bbac8cc5ba8318e872c9e79ec88b6fe",
+      "installedAt": "2026-08-06T21:03:45.809Z",
+      "updatedAt": "2026-08-06T21:03:45.809Z"
     }
   },
   "dismissed": {}

@@ -18,7 +18,7 @@ and creates the PR using `gh` CLI.
 
 1. Analyze branch state
 2. Review all changes and commits
-3. Generate PR title and body
+3. Generate PR metadata
 4. Interactive confirmation (confirm/regenerate/edit/cancel)
 5. Push and create PR
 
@@ -72,7 +72,7 @@ all from the Step 1 output.
 **Critical:** Analyze ALL commits in the branch to understand the full context.
 The script provides commit hashes and messages - use `git show` for detailed inspection if needed.
 
-### Step 3: Generate PR Title and Body
+### Step 3: Generate PR Metadata
 
 Based on ALL the commits and changes,
 generate a concise title here
@@ -125,21 +125,35 @@ Follow this format: `<type>: <description>`
 
 Load the `pr-description` skill for the PR body.
 
-Pass it the complete context from Step 1 and Step 2,
-including the branch diff, commits, any linked issue,
+Pass it the complete active context,
+including the original user request;
+all answers, corrections, and manual edits gathered during the workflow;
+and the repository-derived context from Step 1 and Step 2,
+such as the branch diff, commits, linked issues,
 and the `pr_template` value if one exists.
 
-The `pr-description` skill owns:
+Treat `pr-description` as the single source of truth
+for PR body structure, content, and validation.
+Do not restate or independently implement its rules here,
+and do not draft or amend a body outside that skill.
 
-- following the repository template when present
-- keeping the description concise and human-readable
-- focusing on why and reviewer-relevant outcome
-- asking the user clarifying questions before updating the PR if the rationale is unclear
-- stopping before PR creation or PR body updates when user-provided motivation is missing
+Before every preview,
+route the current body through `pr-description`.
+This includes initial, regenerated, and manually edited bodies.
+A body is ready only after `pr-description` completes its `Final Check`.
+If that skill needs more context or rejects the body,
+relay its question or correction and stop until the issue is resolved.
 
-Do not bypass that skill by inventing a body here.
-If `pr-description` requires user motivation,
-ask the user and stop until they provide it.
+#### Draft status
+
+Determine the draft status before showing the preview.
+Honor an explicit user request for a draft or ready-for-review PR.
+If the changes appear to be work in progress
+and the user has not chosen a status,
+offer the draft option before continuing.
+
+Treat draft status as confirmed PR metadata,
+not as an option to change after confirmation.
 
 ### Step 4: Interactive Confirmation
 
@@ -156,6 +170,7 @@ Body:
 
 Branch: [current-branch] → [base-branch]
 Commits: [N commits]
+Status: [Draft | Ready for review]
 ```
 
 Then ask using `AskUserQuestion`:
@@ -165,15 +180,20 @@ Then ask using `AskUserQuestion`:
 - **Options**:
   - "Confirm and create PR" (recommended)
   - "Regenerate title/body"
-  - "Edit title/body manually"
+  - "Edit metadata manually"
   - "Cancel"
 
 **Handle responses:**
 
 - **Confirm**: Proceed to Step 5 immediately
 - **Regenerate**: Go back to Step 3, generate different title/body (vary approach)
-- **Edit**: Ask user for custom title and body, then proceed to Step 5
+- **Edit**: Ask the user for custom title, body, and draft status;
+  return the custom body to `pr-description`,
+  then show the complete edited preview and ask for confirmation again
 - **Cancel**: Exit gracefully, inform user no PR was created
+
+Every path that changes displayed metadata returns to the preview.
+Only confirmation of the currently displayed metadata may proceed to Step 5.
 
 ### Step 5: Push and Create PR
 
@@ -188,25 +208,28 @@ git push -u origin <branch>   # new branch
 git push                       # existing upstream
 ```
 
+Use the confirmed draft status when creating the PR:
+
+For a ready-for-review PR:
+
 ```bash
 gh pr create --title "<title>" --body "<body>"
 ```
 
-Show the PR URL with `gh pr view --json url --jq .url`.
-
-### Alternative: Create Draft PR
-
-If changes are work-in-progress, offer to create as draft:
+For a draft PR:
 
 ```bash
-gh pr create --draft --title "..." --body "..."
+gh pr create --draft --title "<title>" --body "<body>"
 ```
+
+Show the PR URL with `gh pr view --json url --jq .url`.
 
 ## Best Practices
 
 - **Analyze ALL commits**: Don't just look at latest commit, review entire branch
 - **Concise title**: Under 70 characters, imperative mood
 - **Delegate the body**: Use `pr-description` instead of hand-rolling PR copy here
+- **Enforce the body contract**: Require the `pr-description` Final Check before preview
 
 ## Safety Protocol
 
@@ -215,10 +238,10 @@ gh pr create --draft --title "..." --body "..."
 - NEVER create PR with uncommitted changes without warning user
 - ALWAYS show user what will be in the PR before creating
 - ALWAYS wait for confirmation before creating PR
+- ALWAYS show and reconfirm any changed metadata
 - Check for existing PRs for the current branch before creating
-- If the rationale for the PR body is unclear, stop and ask before updating it
-- If the user has not explicitly provided motivation for the PR body,
-  stop and ask before creating or updating the PR
+- NEVER preview or create a body
+  that has not completed the `pr-description` Final Check
 
 ## Error Handling
 
@@ -281,5 +304,6 @@ User: "create PR to develop branch"
 User: "create draft PR"
 
 → Follows normal workflow
+→ Shows "Status: Draft" in the preview
 → Creates as draft PR (--draft flag)
 ```
