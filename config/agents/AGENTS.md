@@ -85,6 +85,11 @@ serves as documentation.
 Even a 1% chance a skill might apply means that you should invoke the skill to check.
 If an invoked skill turns out to be wrong for the situation, you don't need to use it.
 
+Apply each skill only within the scope stated in its description. Do not invoke a
+file-oriented skill merely because a chat response uses the same rendering format.
+For example, use the `markdown` skill for Markdown files, not for ordinary chat
+responses that contain Markdown formatting.
+
 ### Skill Priority
 
 When multiple skills could apply, use this order:
