@@ -1,0 +1,12 @@
+{{- $external := index .MonitorsByTag "external" -}}
+hl.monitor({
+    output = "{{ $external.Name }}",
+    mode = "preferred",
+    position = "auto",
+    scale = 1,
+})
+
+-- Keep each disabled monitor declaration on one line; `hyprdynamicmonitors prepare` removes it before Hyprland starts.
+{{ range .ExtraMonitors -}}
+hl.monitor({ output = "{{ .Name }}", disabled = true })
+{{ end -}}

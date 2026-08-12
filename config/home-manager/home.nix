@@ -279,7 +279,7 @@ in
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/agents/.skill-lock.json ${config.xdg.stateHome}/skills/.skill-lock.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/wezterm/wezterm.lua ${config.xdg.configHome}/wezterm/wezterm.lua
       run mkdir -p ${config.xdg.stateHome}/hyprdynamicmonitors
-      run [ -e ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.conf ] || ${pkgs.coreutils}/bin/install -m 0644 ${dotfilesDir}/config/hyprdynamicmonitors/hyprconfigs/laptop-only.conf ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.conf
+      run [ -e ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.lua ] || ${pkgs.coreutils}/bin/install -m 0644 ${dotfilesDir}/config/hyprdynamicmonitors/hyprconfigs/laptop-only.lua ${config.xdg.stateHome}/hyprdynamicmonitors/monitors.lua
     '';
     syncCodexConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p ${homeDir}/.codex
@@ -348,8 +348,8 @@ in
     "dunst".source = ../dunst;
     "satty".source = ../satty;
     "hyprdynamicmonitors/config.toml".source = ../hyprdynamicmonitors/config.toml;
-    "hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl".source = ../hyprdynamicmonitors/hyprconfigs/external-only.conf.tmpl;
-    "hyprdynamicmonitors/hyprconfigs/laptop-only.conf".source = ../hyprdynamicmonitors/hyprconfigs/laptop-only.conf;
+    "hyprdynamicmonitors/hyprconfigs/external-only.lua.tmpl".source = ../hyprdynamicmonitors/hyprconfigs/external-only.lua.tmpl;
+    "hyprdynamicmonitors/hyprconfigs/laptop-only.lua".source = ../hyprdynamicmonitors/hyprconfigs/laptop-only.lua;
     "glow".source = ../glow;
     "blesh/init.sh".source = ../blesh/blerc;
     # "gh-dash/config.yml".source = ../gh-dash/config.yml;
@@ -384,7 +384,7 @@ in
     };
 
   # User session variables for login shells and systemd/UWSM-launched programs.
-  # PATH is set in hyprland.conf instead.
+  # PATH is set in hyprland.lua instead.
   systemd.user.sessionVariables = sessionVariables;
 
   systemd.user.services.polkit-gnome-authentication-agent-1 = {
