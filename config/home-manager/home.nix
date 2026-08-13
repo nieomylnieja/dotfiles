@@ -267,7 +267,6 @@ in
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/vscode/settings.json ${config.xdg.configHome}/Code/User/settings.json
       ln -s -f $VERBOSE_ARG ${dotfilesDir}/config/cspell/cspell.json ${config.xdg.configHome}/cspell/cspell.json
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents ${homeDir}/.agents
-      ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/skills ${homeDir}/.claude/skills
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${homeDir}/.claude/commands
       ln -s -f -n $VERBOSE_ARG ${dotfilesDir}/config/agents/commands ${config.xdg.configHome}/opencode/commands
       run mkdir -p ${config.xdg.configHome}/opencode
@@ -563,6 +562,7 @@ in
   programs.claude-code = {
     enable = true;
     enableMcpIntegration = true;
+    skills = ../agents/skills;
     settings = builtins.fromJSON (builtins.readFile ../claude/settings.json);
     context = ../agents/AGENTS.md;
   };

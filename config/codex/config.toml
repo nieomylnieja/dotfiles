@@ -44,6 +44,8 @@ nickname_candidates = ["Scout", "Probe"]
 [mcp_servers.Context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]
+[mcp_servers.atlassian]
+url = "https://mcp.atlassian.com/v1/mcp/authv2"
 [mcp_servers.deepwiki]
 url = "https://mcp.deepwiki.com/mcp"
 [mcp_servers.exa]
