@@ -26,6 +26,12 @@ let
         ]}"
     '';
   };
+  # Remove this backport after nixpkgs packages a Waybar release with Hyprland Lua dispatch support.
+  waybarWithLuaDispatch = pkgs.waybar.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or [ ]) ++ [
+      ./patches/waybar-hyprland-lua-dispatch.patch
+    ];
+  });
   sessionVariables = {
     DOTFILES = "${dotfilesDir}";
     XDG_SESSION_TYPE = "wayland";
@@ -229,7 +235,7 @@ in
     unzip
     uv
     vhs
-    waybar
+    waybarWithLuaDispatch
     wezterm
     wl-clipboard
     wlr-randr
@@ -450,7 +456,7 @@ in
     };
 
     Service = {
-      ExecStart = "${pkgs.waybar}/bin/waybar";
+      ExecStart = "${waybarWithLuaDispatch}/bin/waybar";
       Restart = "always";
       RestartSec = 2;
       Environment = [
