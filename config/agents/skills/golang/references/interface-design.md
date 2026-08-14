@@ -1,127 +1,117 @@
 # Interface Design
 
-Where to define Go interfaces: consumer side vs producer side,
-when to create interfaces, and how to keep them small.
+Use interfaces to express behavior required at a boundary. Do not introduce one
+only to follow a slogan or to make every concrete type mockable.
 
-## Core Rule: Consumer Defines the Interface
+## Default: Define the Interface Near Its Consumer
 
-**Define interfaces in the consumer package, not the producer.**
-This is the single most important interface rule in Go.
-The consumer knows what behavior it needs —
-the producer should not dictate abstractions for all possible callers.
+Go's implicit interface satisfaction lets a consumer describe only the methods
+it needs without changing the producer. This usually gives the interface a
+clear purpose, keeps it narrow, and prevents one producer abstraction from
+forcing unrelated consumers to depend on extra methods.
 
-Go's implicit interface satisfaction makes this natural:
-the concrete type never references the interface,
-so the interface can live wherever it is used.
+Apply this default when:
 
-```go
-// RIGHT — consumer defines only what it needs:
-package orderservice
+- a function needs interchangeable behavior;
+- different consumers need different subsets of a concrete type's methods;
+- a test double represents a real consumer boundary; or
+- the abstraction is meaningful in the consumer's domain.
 
-type PaymentProcessor interface {
-    Charge(ctx context.Context, amount int) error
-}
+Do not create a consumer interface before there is a consumer that needs
+substitution. A concrete parameter is simpler when the caller always needs that
+specific type.
 
-func PlaceOrder(ctx context.Context, p PaymentProcessor, items []Item) error {
-    total := calculateTotal(items)
-    return p.Charge(ctx, total)
-}
-```
+Keep an interface as small as its contract permits. One-method interfaces are
+powerful because many types can satisfy them, but two methods is not a maximum.
+A cohesive multi-method protocol is better than several interfaces that cannot
+be used independently.
 
-```go
-// WRONG — producer forces an interface on all consumers:
-package payment
+## Return Concrete Types by Default
 
-type Processor interface {
-    Charge(ctx context.Context, amount int) error
-    Refund(ctx context.Context, id string) error
-    ListTransactions(ctx context.Context) ([]Tx, error)
-}
+A producer normally returns a concrete type. Callers then retain the complete
+API, and each consumer can define its own narrow interface if needed.
 
-func NewProcessor() Processor { return &stripeProcessor{} }
-```
+This is a default, not a type-system rule. An exported function may legally
+return an unexported concrete type, although callers cannot name that type
+directly. Decide whether that restriction creates an intentional API or an
+awkward one.
 
-The producer should return a concrete type.
-Each consumer then defines a narrow interface
-covering only the methods it actually calls.
+Do not return an interface solely to hide methods or enable mocks. Return an
+interface when the interface itself is the stable public contract.
 
-**Do not define interfaces before they are used.**
-Without a realistic consumer, it is impossible to know
-whether an interface is necessary or what methods it should contain.
-Abstractions should be discovered, not invented up front.
+## Valid Producer-Side Interfaces
 
-**Do not define interfaces on the producer side "for mocking".**
-Design the API so that it can be tested using the public API
-of the real implementation.
-If a consumer needs a mock, it defines its own interface —
-that is the consumer's concern, not the producer's.
+A producer-side or shared interface can be appropriate in these cases.
 
-**Keep interfaces small.**
-One or two methods is the sweet spot.
-The bigger the interface, the weaker the abstraction —
-fewer types can satisfy a large interface,
-which defeats the purpose.
+### Multiple hidden implementations
 
-## When the Producer MAY Define the Interface
+A factory may choose among implementations while exposing one deliberate
+contract. `crypto/aes.NewCipher` returning the shared `cipher.Block` interface
+is the standard-library pattern. Multiple hidden implementations make the
+interface useful, but the language does not technically require this return
+type.
 
-There are narrow, well-established exceptions.
-Apply them only when the conditions clearly hold —
-default to consumer-side placement.
+### Shared cross-package contract
 
-**1. Multiple unexported implementations behind a constructor.**
-When a constructor returns different concrete types
-depending on runtime conditions (e.g., hardware support),
-it must return an interface because the concrete types are unexported.
-The `cipher.Block` / `aes.NewCipher` pattern is the canonical example:
+Some contracts are intentionally shared by many producers and consumers, such
+as `io.Reader`, `fmt.Stringer`, `hash.Hash`, and
+`encoding.BinaryMarshaler`. These interfaces belong to the package that owns
+the abstraction, not necessarily to one immediate consumer.
 
-```go
-// crypto/aes
-func NewCipher(key []byte) (cipher.Block, error) {
-    if supportsAES && supportsGFMUL {
-        return &aesCipherGCM{c}, nil
-    }
-    return &c, nil
-}
-```
+The packages that contain them are not all "interface-only" packages. Their
+justification is the stable shared contract.
 
-**2. Interface-only "standard" packages.**
-A package whose sole purpose is to define a shared contract
-that many producers implement and many consumers accept.
-Examples: `hash.Hash`, `encoding.BinaryMarshaler`, `fmt.Stringer`.
-These work because the interfaces are tiny, stable,
-and represent a widely agreed-upon abstraction.
+### Hidden implementation with no additional public API
 
-**3. A type exists only to implement the interface.**
-Per Effective Go: if a type will never have exported methods
-beyond those of the interface, there is no need to export the type.
-Return the interface instead.
-Example: `rand.NewSource` returns `rand.Source`;
-the underlying `rngSource` struct is unexported.
+If a concrete type exists only to implement a public interface and exposes no
+additional useful methods, returning the interface can keep implementation
+details private. `rand.NewSource` returning `rand.Source` is an example.
 
-## Rules of Thumb
+### Protocol or sum of implementations
+
+An interface can be the domain object when callers are expected to provide or
+switch implementations. The producer then owns the protocol and must document
+its behavioral contract, concurrency expectations, and lifecycle.
+
+## Testing
+
+Do not add a broad producer interface "for mocking." Test a producer through
+its concrete public API. When another package needs a substitute, define the
+narrow interface at that consumer boundary.
+
+This is not an absolute ban on producer-owned fakes. A shared protocol may
+provide a test implementation when consistent conformance testing or a complex
+contract makes that useful. The test API must still represent production
+behavior rather than expose implementation details.
+
+## Decision Guide
 
 <!-- markdownlint-disable MD013 -->
-| Signal                                                   | Placement                   |
-| -------------------------------------------------------- | --------------------------- |
-| One consumer or a few consumers with different needs     | Consumer side               |
-| Interface has > 2 methods                                | Consumer side (split it)    |
-| Multiple unexported implementations behind a constructor | Producer side               |
-| Shared standard contract (`hash.Hash`) across packages   | Separate interface-only pkg |
-| You want mocking in tests                                | Consumer side — always      |
-| You are unsure                                           | Consumer side               |
+| Situation | Likely design |
+| --- | --- |
+| No behavioral substitution is needed | Use the concrete type |
+| One consumer needs a subset of methods | Define a narrow consumer interface |
+| Consumers need different method subsets | Define separate consumer interfaces |
+| A factory exposes interchangeable hidden implementations | Consider a producer or shared interface |
+| Many packages implement and consume one stable protocol | Put the interface with the shared abstraction |
+| The implementation has useful additional methods | Return the concrete type by default |
+| The only reason is mocking | Re-evaluate the consumer boundary |
+| The interface methods are not cohesive | Split by independently useful behavior |
 <!-- markdownlint-enable MD013 -->
 
-## Sources
+## Review Questions
 
-<!-- markdownlint-disable MD013 -->
-- [Go Wiki: CodeReviewComments — Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces) —
-  official Go project guidance on interface placement
-- [Effective Go — Generality](https://go.dev/doc/effective_go#generality) —
-  when to return an interface vs a concrete type
-- [Exposing interfaces in Go — Efe Karakus](https://www.efekarakus.com/golang/2019/12/29/working-with-interfaces-in-go.html) —
-  std lib examples of producer-side exceptions
-- [7 Common Interface Mistakes in Go — Andrei Boar](https://medium.com/@andreiboar/7-common-interface-mistakes-in-go-1d3f8e58be60) —
-  anti-patterns and common pitfalls
-- [Define interfaces in the consumer package — devtrovert](https://blog.devtrovert.com/p/go-ep2-define-interfaces-in-the-consumer) —
-  consumer-side pattern walkthrough
-<!-- markdownlint-enable MD013 -->
+1. Which consumer requires substitution?
+2. Could a concrete parameter express the requirement more directly?
+3. Are all interface methods required together?
+4. Does the interface expose behavior rather than data plumbing?
+5. Who owns the contract: one consumer, a shared domain, or the producer?
+6. Will returning an interface hide useful capabilities or lock the API into an
+   abstraction prematurely?
+7. Are cancellation, concurrency, ownership, and cleanup requirements clear?
+
+## Official Sources
+
+- [Go Wiki: Code Review Comments — Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces)
+- [Effective Go — Generality](https://go.dev/doc/effective_go#generality)
+- [Go specification — Interface types](https://go.dev/ref/spec#Interface_types)

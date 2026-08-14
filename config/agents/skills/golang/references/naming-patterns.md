@@ -1,360 +1,210 @@
 # Go Naming Patterns
 
-Standard library naming patterns for functions, types, and variables.
-When naming something,
-find the matching pattern here and follow it.
+Choose names from the concept and the surrounding package. Standard-library
+patterns are evidence, not mechanical laws.
 
 ## General Rules
 
-- **MixedCaps** — Always `MixedCaps` or `mixedCaps`, never underscores.
-- **Initialisms** — Consistent case: `URL`/`url`, `HTTP`/`http`, `ID`/`id`.
-  Never `Url`, `Http`, `Id`.
-- **Length proportional to scope**
-  Short for small scopes (`i`, `c`, `r`),
-  longer for larger scopes (`requestCount`, `defaultTimeout`).
-- **Constants** — `MixedCaps` like everything else,
-  never `UPPER_SNAKE_CASE`.
-  Name by role, not value.
-
-## Function Verb Patterns
-
-### Constructors
-
-**`New`** — Standard constructor.
-Returns a pointer.
-When the package exports one primary type, use just `New`.
-
-```go
-bufio.NewReader(r)       // *bufio.Reader
-list.New()               // *list.List — only type in package
-http.NewRequest(...)     // *http.Request
-http.NewServeMux()       // *http.ServeMux
-```
-
-Never `Create` for constructors.
-`Create` means resource creation with side effects
-(`os.Create` creates a file on disk).
-
-**`Must`** — Panic on error.
-Wraps a fallible function,
-panics instead of returning error.
-Only for package-level init or test setup.
-
-```go
-regexp.MustCompile(`\d+`)
-template.Must(template.New("x").Parse(src))
-```
-
-Convention: `MustX` wraps `X` which returns `(T, error)`.
-
-### Conversion
-
-**`Parse`** — String to type. NEVER use `From`.
-
-```go
-strconv.ParseInt(s, base, bitSize)  // not IntFromString
-strconv.ParseFloat(s, bitSize)      // not FloatFromString
-strconv.ParseBool(s)                // not BoolFromString
-time.Parse(layout, value)           // not TimeFromString
-time.ParseDuration("10s")           // not DurationFromString
-net.ParseIP(s)                      // not IPFromString
-net.ParseCIDR(s)                    // not CIDRFromString
-url.Parse(rawURL)                   // not URLFromString
-```
-
-**`Format`** — Type to string.
-
-```go
-strconv.FormatInt(i, base)
-strconv.FormatFloat(f, fmt, prec, bitSize)
-strconv.FormatBool(b)
-```
-
-**Three output families:**
-
-| Pattern   | Returns          | Example                            |
-|-----------|------------------|------------------------------------|
-| `Format*` | `string`         | `strconv.FormatInt`                |
-| `Sprint*` | `string`         | `fmt.Sprint`, `fmt.Sprintf`        |
-| `Fprint*` | writes to Writer | `fmt.Fprint`, `fmt.Fprintf`        |
-| `Append*` | `[]byte`         | `strconv.AppendInt`, `fmt.Appendf` |
-
-**`Encode`/`Decode` vs `Marshal`/`Unmarshal`:**
-
-- **Marshal/Unmarshal** — Complete in-memory data (`[]byte` ↔ struct).
-- **Encode/Decode** — Streams (`io.Reader`/`io.Writer` ↔ struct).
-
-```go
-json.Marshal(v)                    // struct → []byte
-json.Unmarshal(data, &v)           // []byte → struct
-
-json.NewEncoder(w).Encode(v)      // struct → io.Writer
-json.NewDecoder(r).Decode(&v)     // io.Reader → struct
-```
-
-Custom serialization interfaces:
-`MarshalJSON`/`UnmarshalJSON`,
-`MarshalText`/`UnmarshalText`.
-
-### Accessors
-
-- **Getters — NO `Get` prefix.**
-  The getter is the field name, capitalized.
-  `obj.Owner()` not `obj.GetOwner()`.
-- **Setters — `Set` prefix.**
-  `obj.SetOwner(user)`.
-
-### Predicates
-
-**`Is`** — Identity / state check:
-
-```go
-filepath.IsAbs(path)
-os.IsExist(err)
-os.IsNotExist(err)
-os.IsPermission(err)
-strconv.IsPrint(r)
-```
-
-**`Has`** — Containment:
-
-```go
-strings.HasPrefix(s, prefix)
-strings.HasSuffix(s, suffix)
-```
-
-**No prefix** when the verb is clear:
-
-```go
-strings.Contains(s, substr)
-strings.EqualFold(s, t)
-utf8.Valid(p)
-json.Valid(data)
-sort.IsSorted(data) // exception: reads naturally with Is
-```
-
-### Functional Options
-
-**`With`** — Create derived value or add option:
-
-```go
-context.WithCancel(parent)
-context.WithTimeout(parent, d)
-context.WithValue(parent, key, val)
-```
-
-Functional options pattern:
-
-```go
-func WithTimeout(d time.Duration) Option { ... }
-func WithLogger(l *log.Logger) Option { ... }
-func NewClient(opts ...Option) *Client { ... }
-```
-
-### Lifecycle
-
-| Verb       | Meaning                                      | Example                      |
-|------------|----------------------------------------------|------------------------------|
-| `Run`      | Blocking execution, returns when done        | `cmd.Run()`                  |
-| `Start`    | Non-blocking, begins background work         | `cmd.Start()`                |
-| `Stop`     | Stop background work                         | `server.Stop()`              |
-| `Close`    | Release resources (`io.Closer`)              | `file.Close()`, `db.Close()` |
-| `Shutdown` | Graceful shutdown                            | `http.Server.Shutdown(ctx)`  |
-| `Reset`    | Reinitialize to zero/initial state           | `bytes.Buffer.Reset()`       |
-| `Flush`    | Flush buffered data                          | `bufio.Writer.Flush()`       |
-| `Init`     | Explicit initialization (rare, prefer `New`) | `init()` auto-called         |
-
-### I/O
-
-| Verb        | Meaning               | Example                          |
-|-------------|-----------------------|----------------------------------|
-| `Read`      | Read bytes            | `io.Reader.Read(p)`              |
-| `Write`     | Write bytes           | `io.Writer.Write(p)`             |
-| `ReadFile`  | Read entire file      | `os.ReadFile(name)`              |
-| `WriteFile` | Write entire file     | `os.WriteFile(name, data, perm)` |
-| `ReadAll`   | Read all from reader  | `io.ReadAll(r)`                  |
-| `Copy`      | Copy reader to writer | `io.Copy(dst, src)`              |
-
-`String` suffix for string variants:
-`WriteString`, `MatchString`, `FindString`, `ReplaceAllString`.
-
-### Resources
-
-| Verb     | Meaning                           | Example                     |
-|----------|-----------------------------------|-----------------------------|
-| `Open`   | Acquire read-only resource        | `os.Open(name)`             |
-| `Create` | Create resource with side effects | `os.Create(name)`           |
-| `Close`  | Release resource                  | `file.Close()`              |
-| `Dial`   | Outbound network connection       | `net.Dial(network, addr)`   |
-| `Listen` | Accept inbound connections        | `net.Listen(network, addr)` |
-
-### Network / HTTP
-
-| Verb             | Meaning                           | Example                              |
-|------------------|-----------------------------------|--------------------------------------|
-| `Serve`          | Start serving (blocking)          | `http.Serve(ln, handler)`            |
-| `ListenAndServe` | Listen + serve                    | `http.ListenAndServe(addr, handler)` |
-| `Handle`         | Register handler                  | `mux.Handle(pattern, handler)`       |
-| `HandleFunc`     | Register handler function         | `mux.HandleFunc(pattern, fn)`        |
-| `ServeHTTP`      | Handle single request (interface) | `Handler.ServeHTTP(w, r)`            |
-| `Register`       | Global registration (drivers)     | `sql.Register(name, driver)`         |
-
-### Database
-
-| Verb       | Meaning                | Example                   |
-|------------|------------------------|---------------------------|
-| `Query`    | Returns multiple rows  | `db.Query(q, args...)`    |
-| `QueryRow` | Returns single row     | `db.QueryRow(q, args...)` |
-| `Exec`     | No rows returned       | `db.Exec(q, args...)`     |
-| `Prepare`  | Prepared statement     | `db.Prepare(q)`           |
-| `Begin`    | Start transaction      | `db.Begin()`              |
-| `Commit`   | Commit transaction     | `tx.Commit()`             |
-| `Rollback` | Rollback transaction   | `tx.Rollback()`           |
-| `Scan`     | Read structured fields | `rows.Scan(&id, &name)`   |
-| `Ping`     | Liveness check         | `db.Ping()`               |
-
-`*Context` suffix for context-aware variants:
-`QueryContext`, `ExecContext`.
-
-### Execution and Traversal
-
-| Verb      | Meaning                           | Example                                  |
-|-----------|-----------------------------------|------------------------------------------|
-| `Do`      | Execute single action             | `http.Client.Do(req)`, `sync.Once.Do(f)` |
-| `Apply`   | Apply configuration/transform     | `astutil.Apply(root, pre, post)`         |
-| `Walk`    | Traverse tree with callback       | `filepath.WalkDir(root, fn)`             |
-| `Inspect` | Simplified walk (functional)      | `ast.Inspect(node, f)`                   |
-| `Visit`   | Visitor pattern (interface-based) | `ast.Walk(visitor, node)`                |
-
-### Validation
-
-| Verb       | Meaning                                           |
-|------------|---------------------------------------------------|
-| `Validate` | Returns error if invalid                          |
-| `Valid`    | Returns bool (stdlib: `json.Valid`, `utf8.Valid`) |
-| `Check`    | Less common, sometimes bool                       |
-| `Ensure`   | Idempotent: make it so if not already             |
-
-### Synchronization
-
-```go
-sync.Mutex.Lock() / Unlock()
-sync.Mutex.TryLock()              // non-blocking (1.18+)
-sync.RWMutex.RLock() / RUnlock()  // read lock
-sync.RWMutex.Lock() / Unlock()    // write lock
-```
-
-## Identifier Naming
-
-### Interfaces
-
-**One-method** — method name + `-er`:
-
-```go
-Reader, Writer, Closer, Seeker, Stringer, Formatter, Scanner,
-Marshaler, Unmarshaler
-```
-
-**Composite** — concatenate:
-
-```go
-ReadWriter, ReadCloser, WriteCloser, ReadWriteCloser, ReadSeeker
-```
-
-**Multi-method / broad scope** — noun:
-
-```go
-Handler, RoundTripper, Conn
-```
-
-Interfaces belong in the **consumer** package,
-not the producer.
-
-### Stringer and Error Interfaces
-
-- `String() string` — implement for `fmt` formatting.
-  Use `String` not `ToString`.
-- `Error() string` — implement for `error` interface.
-- `GoString() string` — for `%#v` formatting.
-
-### Errors
-
-**Sentinel variables** — `Err` prefix + noun/adjective:
-
-```go
-var ErrNotExist = errors.New("file does not exist")
-var ErrPermission = errors.New("permission denied")
-var ErrClosed = errors.New("already closed")
-var ErrInvalid = errors.New("invalid argument")
-```
-
-**Error types** — descriptive name, often ending in `Error`:
-
-```go
-type PathError struct { Op, Path string; Err error }
-type SyntaxError struct { Offset int64; msg string }
-type NumError struct { Func, Num string; Err error }
-type UnmarshalTypeError struct { ... }
-```
-
-**Error strings** — lowercase, no punctuation, composable:
-
-```go
-fmt.Errorf("open config: %w", err) // correct
-fmt.Errorf("Open config.")         // wrong
-```
-
-### Packages
-
-- Lowercase, single-word, no underscores or mixedCaps.
-- Don't repeat package name in identifiers:
-  `http.Server` not `http.HTTPServer`.
-- One primary type → constructor is `New()`.
-- Avoid meaningless names:
-  `util`, `common`, `misc`, `api`, `types`, `interfaces`.
-
-### Receivers
-
-- One or two letter abbreviation:
-  `c` for `Client`, `s` for `Server`.
-- Consistent across all methods of the type.
-- Never `self`, `this`, or `me`.
-
-### Tests
-
-- Tests: `TestFunctionName`, `Test_unexportedName`.
-- Subtests: `t.Run("descriptive name", ...)`.
-- Benchmarks: `BenchmarkFunctionName`.
-- Examples: `ExampleFunctionName`, `ExampleType_Method`.
-- Test helpers: mark with `t.Helper()`.
-- Test doubles package: append `test` — `creditcardtest`.
-- Must helpers in tests:
-  `mustParse`, `mustMarshal` (panic on failure).
-- Setup/teardown:
-  use `t.Cleanup(func())`, not explicit methods.
-
-## Anti-Patterns
-
-| Wrong           | Right           | Reason                        |
-|-----------------|-----------------|-------------------------------|
-| `FromString`    | `Parse`         | Go convention for string→type |
-| `ToString`      | `String()`      | Stringer interface            |
-| `CreateReader`  | `NewReader`     | `New` for constructors        |
-| `GetName()`     | `Name()`        | No `Get` prefix on getters    |
-| `UPPER_SNAKE`   | `MixedCaps`     | Go never uses underscore case |
-| `Url`, `Http`   | `URL`, `HTTP`   | Initialisms are all-caps      |
-| `self`/`this`   | `c`/`s`/`re`    | Short receiver names          |
-| `utils` package | focused package | Packages have single purpose  |
-
-## Sources
-
-- [Effective Go](https://go.dev/doc/effective_go) —
-  official guide to writing clear, idiomatic Go
-- [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments) —
-  common code review feedback collected by the Go team
-- [Go Blog — Package Names](https://go.dev/blog/package-names) —
-  conventions for naming Go packages
-- [Google Go Style Guide — Decisions](https://google.github.io/styleguide/go/decisions) —
-  naming, formatting, and style decisions
-- [Google Go Style Guide — Best Practices](https://google.github.io/styleguide/go/best-practices) —
-  patterns for functional options, config structs, and more
+- Use `MixedCaps` or `mixedCaps` for ordinary Go identifiers.
+- Keep initialism casing consistent: `URL`/`url`, `HTTP`/`http`, and `ID`/`id`,
+  not `Url`, `Http`, or `Id`. Follow an established public API when
+  compatibility requires its spelling.
+- Match name length to scope and ambiguity. Short names such as `i`, `r`, or
+  `ctx` work in small, conventional scopes. Use descriptive names as scope or
+  competing concepts grow.
+- Name constants by role, not by literal value. Go code normally uses mixed
+  caps, but generated bindings and identifiers mirroring an external protocol
+  can legitimately preserve underscore-based names.
+- Avoid package stutter: prefer `http.Server` to `http.HTTPServer`.
+- Read names at call sites. A locally plausible name can become redundant or
+  misleading after package qualification.
+
+## Construction and Conversion
+
+### `New`
+
+`New` is the usual name for a constructor that initializes a Go value. It may
+return a value, pointer, interface, or value-plus-error; it does not imply a
+pointer.
+
+When a package centers on one type, `New` can be enough. Use names such as
+`NewReader` or `NewRequest` when the package constructs several concepts.
+
+Do not ban `Create`. It often signals creation of an external or persistent
+resource, as in `os.Create`, and can be correct when that side effect is the
+operation's defining behavior. Distinguish value construction from domain
+resource creation.
+
+### `Must`
+
+`MustX` often parallels a fallible `X` and panics on failure. A helper such as
+`template.Must` instead accepts the `(T, error)` result of another call. Use the
+pattern only when failure means a programmer-controlled input or invariant is
+invalid and the panic contract is explicit. Package initialization and fixed
+test fixtures are common uses, not the only possible ones.
+
+Do not use `Must` for runtime input, network state, filesystem state, or another
+failure that a caller should handle.
+
+### Parsing and formatting
+
+- `Parse` commonly converts validated text into a typed value, such as
+  `time.Parse` or `strconv.ParseInt`.
+- `Format` commonly converts a value to a controlled textual form.
+- `String` commonly provides a human-readable representation or implements
+  `fmt.Stringer`.
+- `Append` commonly writes a representation into an existing byte slice.
+
+Do not prohibit every `From` name. A domain API may use it to describe an
+origin or a conversion that is not textual parsing. Prefer the conventional
+verb when its semantics fit.
+
+### Marshal, encode, and write
+
+The standard library often uses these distinctions:
+
+| Family | Common shape |
+| --- | --- |
+| `Marshal` / `Unmarshal` | Complete in-memory representation and value |
+| `Encode` / `Decode` | Encoder or decoder operation, often streaming |
+| `Read` / `Write` | Byte or resource I/O |
+| `Format` / `Sprint` | Return a string |
+| `Fprint` | Write formatted data to an `io.Writer` |
+| `Append` | Append formatted data to a byte slice |
+
+These are conventions, not guarantees. Check the type's contract. For example,
+an encoder can buffer, and a custom domain may use `Encode` for an in-memory
+result.
+
+## Accessors and Predicates
+
+- A simple Go getter normally uses the field concept: `Owner()`, not
+  `GetOwner()`.
+- A setter normally uses `SetOwner`.
+- `Is` often asks about state or identity: `filepath.IsAbs`, `errors.Is`.
+- `Has` often asks about containment: `strings.HasPrefix`.
+- A clear predicate verb may need no prefix: `strings.Contains`, `utf8.Valid`,
+  or `json.Valid`.
+
+Use `errors.Is(err, fs.ErrNotExist)` and related sentinel matching for modern
+error-chain-aware checks. Legacy helpers such as `os.IsNotExist` still exist but
+should not define new API naming guidance.
+
+## Options and Derived Values
+
+`With` often names either a derived value (`context.WithTimeout`) or a
+functional option (`WithLogger`). A functional option should state what it
+changes and should not hide required configuration that belongs in an explicit
+constructor argument or configuration type.
+
+## Lifecycle and Resources
+
+<!-- markdownlint-disable MD013 -->
+| Verb | Common meaning | Qualification |
+| --- | --- | --- |
+| `Run` | Execute, often until completion | Blocking behavior must be documented |
+| `Start` | Begin work | Often non-blocking, but not guaranteed by the word alone |
+| `Stop` | Stop background activity | State whether it waits and whether reuse is allowed |
+| `Close` | Release a resource | State idempotency and error behavior |
+| `Shutdown` | Graceful, coordinated stop | Usually accepts a deadline or context |
+| `Reset` | Restore an initial reusable state | It need not equal the language zero value |
+| `Flush` | Push buffered data onward | It can fail and may not close anything |
+| `Open` | Open or acquire a named resource | It does not universally mean read-only |
+| `Create` | Create a value or external resource | Make side effects clear |
+| `Dial` | Establish an outbound connection | Network and address semantics belong in the contract |
+| `Listen` | Acquire an inbound listener | It does not itself imply serving |
+<!-- markdownlint-enable MD013 -->
+
+`Register` means adding an entry to a registry. The registry can be global,
+receiver-owned, or explicitly passed. The name alone does not imply global
+state.
+
+`Ensure` has no precise standard-library-wide contract. If used, document
+whether it creates, verifies, repairs, or is idempotent.
+
+## Operation Families
+
+Use established pairs and families when their contracts match:
+
+- `Read` / `Write`, `ReadFile` / `WriteFile`, `Copy`
+- `Serve`, `ServeHTTP`, `Handle`, `HandleFunc`
+- `Query`, `QueryRow`, `Exec`, `Prepare`
+- `Begin`, `Commit`, `Rollback`
+- `Do` for one complete action
+- `Walk`, `Visit`, or `Inspect` for traversal styles
+- `Validate` for a detailed failure and `Valid` for a Boolean predicate
+- `Lock` / `Unlock`, `RLock` / `RUnlock`, and `TryLock`
+
+Use a `Context` suffix when maintaining a context-free sibling API requires it,
+as in `QueryContext`. For a new API without such a sibling, an ordinary method
+can accept `context.Context` without encoding that fact in its name.
+
+## Interfaces
+
+Name an interface for the behavior it represents:
+
+- A natural one-method interface often uses the method name plus `-er`, such as
+  `Reader`, `Writer`, or `Stringer`.
+- Compose established capabilities when the combination is meaningful, such as
+  `ReadCloser`.
+- Use a domain noun for a cohesive protocol that is not naturally named after
+  one method, such as `Handler` or `RoundTripper`.
+
+Do not force an awkward `-er` name, and do not infer that every interface must
+have one method. Define a consumer-specific interface near that consumer by
+default; use the interface-design guidance for valid shared or producer-owned
+contracts.
+
+## Errors
+
+- Exported sentinel errors conventionally start with `Err`, such as
+  `ErrClosed`.
+- Error types usually describe the failure and often end in `Error`, such as
+  `PathError`.
+- Error strings normally start lowercase and omit trailing punctuation so they
+  compose when wrapped. A proper noun or acronym at the start can retain its
+  required capitalization.
+- Include an operation or resource when it adds diagnostic value. Avoid
+  repeating information already supplied by the wrapped error.
+
+## Packages and Receivers
+
+- Package names are normally short, lowercase, and free of underscores.
+- Prefer a name that describes one cohesive capability. Names such as `util`,
+  `common`, `types`, or `api` are weak when they merely collect unrelated code,
+  but they are not forbidden when they accurately name a domain boundary.
+- Receiver names are short, consistent abbreviations for the receiver type.
+  Avoid `this` or `self`; they add no Go-specific information.
+
+## Tests
+
+- Use `TestX`, `BenchmarkX`, `FuzzX`, and valid `Example` naming so the Go tool
+  discovers the intended function.
+- Give subtests concise names that identify the behavior or case.
+- Call `t.Helper()` in helpers that report through `testing.TB`.
+- Prefer `Fatal`, `Error`, or returned errors in test helpers. A helper named
+  `mustParse` need not panic; it can call `t.Helper()` and `t.Fatal` so the test
+  failure is reported correctly.
+- Use `t.Cleanup` for cleanup tied to a test's lifetime.
+
+## Common Misapplications
+
+| Misapplication | Better decision |
+| --- | --- |
+| Every constructor returns a pointer | Return the representation the API needs |
+| `Create` is always wrong | Reserve it for semantics that genuinely mean create |
+| Every text conversion is `Parse` | Use `Parse` when validation of textual syntax is central |
+| Every interface ends in `-er` | Use a natural behavior or domain name |
+| Every short variable is idiomatic | Match length to scope and ambiguity |
+| Underscores never appear in Go names | Allow generated or externally constrained identifiers |
+| `Open` means read-only | Document access mode; the verb only signals acquisition |
+| `Register` means global mutation | Identify the registry and ownership explicitly |
+| `Ensure` guarantees idempotency | State the actual behavior in the contract |
+
+## Official and Primary Sources
+
+- [Effective Go](https://go.dev/doc/effective_go)
+- [Go Wiki: Code Review Comments](https://go.dev/wiki/CodeReviewComments)
+- [Go Blog: Package Names](https://go.dev/blog/package-names)
+- [Google Go Style Guide: Decisions](https://google.github.io/styleguide/go/decisions)
+- [Google Go Style Guide: Best Practices](https://google.github.io/styleguide/go/best-practices)

@@ -1,0 +1,40 @@
+{
+  "skill_name": "golang",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "A module declares go 1.20. Review these claims without changing code: sync.OnceValue has existed since Go 1.18, and its panic behavior is the same as sync.Once.Do. State compatibility, what happens on the first panicking call, and what later calls do.",
+      "expected_output": "A concise correction that places OnceValue in Go 1.21 and distinguishes panic replay from Once.Do's completed state.",
+      "files": [],
+      "expectations": [
+        "States that sync.OnceValue was introduced in Go 1.21 and is unavailable to a module limited to Go 1.20.",
+        "States that the first panic from the function supplied to OnceValue propagates to its caller.",
+        "States that every later call to the OnceValue wrapper panics with the same value.",
+        "Distinguishes sync.Once.Do by stating that a panic marks Do complete and later Do calls neither rerun nor replay that panic."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review three proposed modernizations for a Go 1.25 service: replace omitempty with omitzero on both time.Time and []string fields; replace Add plus Done with WaitGroup.Go although the task may panic; replace a preallocated non-nil empty map-key slice with slices.Collect(maps.Keys(m)) while preserving JSON output. Say which changes are safe and identify the contracts that decide each one.",
+      "expected_output": "A contract-aware review that rejects blanket changes, explains JSON zero versus empty values, applies WaitGroup.Go's no-panic rule, and identifies nil-slice output changes.",
+      "files": [],
+      "expectations": [
+        "Explains that omitzero can omit a zero time.Time but that the tag choice depends on the required JSON contract.",
+        "Explains that omitempty omits a non-nil empty slice while omitzero alone does not, so a blanket replacement can change JSON.",
+        "Rejects WaitGroup.Go for a task that may panic because its function must not panic.",
+        "Explains that slices.Collect returns a nil slice for an empty iterator and can change JSON from an empty array to null."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A go.work contains module alpha at go 1.21 and module beta at go 1.25. You are changing only alpha. The repository has a Makefile formatting target and a configured golangci-lint command. Explain the target Go version, formatting and lint order, and whether go.mod must have exactly two require blocks.",
+      "expected_output": "Guidance tied to alpha's minimum version, project formatting before linting, and no invented require-block count.",
+      "files": [],
+      "expectations": [
+        "Uses alpha's go 1.21 directive as the compatibility target for the changed package rather than beta's version.",
+        "Runs the repository's Makefile formatting target before the configured golangci-lint command.",
+        "States that Go does not require exactly two require blocks and preserves repository or Go-command organization."
+      ]
+    }
+  ]
+}

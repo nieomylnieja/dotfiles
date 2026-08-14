@@ -579,6 +579,14 @@ return {
     end,
   },
   {
+    "DrKJeff16/project.nvim",
+    dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
+    config = function()
+      require("project").setup({})
+      require("telescope").load_extension("projects")
+    end,
+  },
+  {
     "sindrets/diffview.nvim",
     config = function()
       require("diffview").setup({

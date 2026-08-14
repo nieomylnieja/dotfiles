@@ -1,990 +1,232 @@
 ---
 name: golang
-description: Use this skill when you're working with golang code.
+description: >-
+  Use whenever reading, writing, reviewing, or modifying Go code, Go modules,
+  or Go tooling configuration.
 ---
 
 # Go
 
-Modern Go best practices, idioms, and version-aware feature usage.
-Always detect the project's Go version before writing code.
+Use idiomatic, version-compatible Go. Inspect the repository before applying
+general advice because project conventions and supported Go versions take
+precedence over this skill.
 
 Related skills:
 
-- [golang-testing](../golang-testing/SKILL.md) for writing tests
-- [golang-comments](../golang-comments/SKILL.md) for writing doc comments
+- [golang-testing](../golang-testing/SKILL.md) for tests and benchmarks
+- [golang-comments](../golang-comments/SKILL.md) for Go doc comments
+- [golang-performance](../golang-performance/SKILL.md) for measured optimization
 
-**IMPORTANT:** ALWAYS use `LSP` tool rather then grepping/reading module's cache for documentation.
-
-## Go Version Detection
+## Determine the Target Go Version
 
 <!-- markdownlint-disable-next-line MD013 -->
-!`gomod=$(go env GOMOD 2>/dev/null); if [ -n "$gomod" ] && [ "$gomod" != "/dev/null" ]; then awk '$1 == "go" { print $2; found=1; exit } END { if (!found) print "unknown" }' "$gomod"; else echo unknown; fi`
+!`gomod=$(go env GOMOD); if [ -n "$gomod" ] && [ "$gomod" != "/dev/null" ]; then awk '$1 == "go" { print $2; found=1; exit } END { if (!found) print "unknown" }' "$gomod"; else echo unknown; fi`
 
-DO NOT search for go.mod files or try to infer the version from unrelated modules.
-Use ONLY the version shown above.
+Treat the value above as an initial signal, not the complete compatibility
+contract.
 
-**If version detected (not "unknown"):**
+1. Identify the module that owns the changed package. A workspace can contain
+   modules with different `go` directives.
+2. Read that module's `go.mod`. The `go` directive declares its minimum Go
+   version, controls language semantics, and can select version-dependent
+   standard-library behavior. A `toolchain` directive suggests a toolchain; it
+   does not raise the module's language version.
+3. Check file-specific `//go:build go1.N` constraints. They can raise the
+   language version for a file.
+4. Check `go.work`, CI, build images, and release policy for older supported
+   toolchains or modules.
+5. If no target can be established, state that and ask the user before using a
+   version-sensitive feature.
 
-- Say: "This project uses Go X.XX —
-  I'll use modern Go best practices up to and including this version."
-- Do NOT list features, do NOT ask for confirmation
+When the target is known, state it briefly. Use compatible modern features when
+they improve clarity, correctness, or measured performance. Do not use a newer
+feature merely because it exists.
 
-**If version is "unknown":**
+Consult [versioned-features.md](./references/versioned-features.md) before
+introducing or recommending a feature added after Go 1.17.
 
-- Say: "Could not detect Go version in this repository."
-- Use AskUserQuestion: "Which Go version should I target?"
-  → [1.22] / [1.23] / [1.24] / [1.25] / [1.26]
+## Inspect and Verify
 
-**When writing Go code**, use ALL features from this document up to the target version:
+Prefer repository-defined commands in a `Makefile`, `justfile`, CI workflow, or
+developer guide. They can include build tags, generated-file checks, nested
+modules, and formatting rules that bare Go commands miss.
 
-- Prefer modern built-ins and packages over legacy patterns
-- Never use features from newer Go versions than the target
-- Never use outdated patterns when a modern alternative exists for the target version
+For code navigation and API questions:
 
----
+1. Use `gopls` through an available language-server tool for symbols,
+   references, diagnostics, and type information.
+2. Use `go doc` or official package documentation for API contracts.
+3. Read dependency or standard-library source when implementation details are
+   relevant.
 
-## Tooling
+Do not depend on an integration that is not available. Do not infer API
+behavior from source alone when public documentation defines the contract.
 
-Always prefer project-defined checks over bare tool invocations.
-Look for a `Makefile`, `justfile`, or similar — run `make lint`, `make check`,
-or equivalent targets if they exist.
-If no project targets are defined, fall back to the tools below directly.
+Formatting and checks:
 
-**Linting — `golangci-lint`:**
-The standard meta-linter.
-Run before committing and after making changes.
+- Use the project's formatting target first.
+- Otherwise, run `gofmt` on changed Go files. Run `goimports` only when the
+  project uses it or import organization needs it.
+- Run the project's tests and checks after changes.
+- If no project command exists, use relevant commands such as `go test ./...`,
+  `go vet ./...`, and the configured linter.
+- Treat `golangci-lint` as a linter unless its formatter command is explicitly
+  configured. A lint run does not replace formatting.
+- Run `govulncheck ./...` after dependency changes or source changes that can
+  alter vulnerable-call reachability when the tool is available.
 
-```sh
-golangci-lint run ./...
-```
+Report the exact command and error when a required check cannot run.
 
-Formatting is handled by golangci-lint too (via `gofmt`/`goimports` linters) —
-do not run `gofmt` separately unless the project explicitly requires it.
+## Dependencies and Modules
 
-**Vulnerability scanning — `govulncheck`:**
-Run after adding or updating dependencies.
+Use the standard library when it meets the requirements. Before adding a
+dependency, check [libraries.md](./references/libraries.md), repository policy,
+maintenance status, licenses, supported Go versions, and the dependency's
+transitive cost.
 
-```sh
-govulncheck ./...
-```
+Preserve the repository's `go.mod` organization. Go does not require a fixed
+number of `require` blocks. After adding, removing, or updating dependencies,
+run the repository's module-maintenance target or `go mod tidy`, then review the
+`go.mod` and `go.sum` diff for unintended changes.
 
-**Language server — `gopls`:**
-Use the LSP tool to query `gopls` for diagnostics, hover info,
-type information, and package documentation.
-Prefer this over reading source manually —
-it is more accurate, especially for complex generic or interface types.
-For package API questions, use `gopls` hover on a symbol before reaching
-for any external documentation source.
+## Structure and Style
 
-**Package documentation fallback — Context7 (last resort):**
-If `gopls` cannot answer the question
-(e.g. the package is not yet imported or the symbol is unknown),
-use `mcp__Context7__resolve-library-id` and `mcp__Context7__query-docs`
-to look up current documentation.
-This avoids hallucinated APIs and catches deprecated signatures.
+- Follow the package's established file and declaration organization. Group
+  related declarations so the public API and control flow are easy to find.
+- Prefer guard clauses when they reduce nesting. Do not replace a clear
+  `if`/`else` chain with `switch` mechanically.
+- Extract a branch only when doing so gives it a useful abstraction or makes
+  the caller materially easier to read.
+- Let `gofmt` decide ordinary layout. For a long declaration, a vertically
+  formatted parameter list is usually clearer than arbitrary wrapping.
+- For fluent call chains that span lines, use the Go-valid style with the dot
+  at the end of the preceding line.
+- Use `net.JoinHostPort` for host-and-port addresses. It handles IPv6 literals
+  correctly. Convert an integer port with `strconv.Itoa`.
 
----
+Keep comments focused on contracts, invariants, side effects, constraints, and
+non-obvious rationale. Do not ban inline comments: use them sparingly when code
+cannot express the reason. Follow the comment skills linked above.
 
-## Preferred Libraries
+## Interfaces
 
-When adding a dependency,
-check [references/libraries.md](./references/libraries.md)
-for the project's preferred library picks before reaching for an arbitrary package.
-Use the standard library if it already covers the need.
+Create an interface only when a consumer needs behavioral substitution or when
+an API represents a stable shared contract. A concrete parameter is simpler
+when no abstraction is needed.
 
----
+Prefer narrow interfaces defined near the consumer. Return a concrete type by
+default so callers retain its full API. A producer-side interface can be valid
+for multiple hidden implementations, a deliberately shared contract, or an
+implementation type that should remain hidden.
 
-## Module Management
+Use [interface-design.md](./references/interface-design.md) for the full
+decision guide.
 
-`go.mod` must always have exactly two `require` blocks:
-one for direct dependencies and one for indirect dependencies.
+## Errors and Panics
 
-```text
-require (
-    github.com/urfave/cli/v2 v2.27.0
-    golang.org/x/sync v0.7.0
-)
-
-require (
-    github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
-    golang.org/x/text v0.14.0 // indirect
-)
-```
-
-After adding, removing, or updating dependencies, run:
-
-```sh
-go mod tidy
-```
-
-`go mod tidy` does not enforce this structure — maintain it manually.
-If the file ends up with a single merged block or more than two blocks,
-adjusted it by hand.
-
----
-
-## File Layout
-
-Order declarations top-to-bottom by importance — readers should see the
-public API and key logic first, not scroll past helpers to find it.
-
-1. **Package doc comment** (if any)
-2. **Constants** (`const` blocks)
-3. **Variables** (`var` blocks)
-4. **Types** (structs, interfaces, type aliases)
-5. **Exported functions and methods** — the public API
-6. **Unexported functions and methods** — internal logic
-7. **Helper / utility functions** — small, reusable pieces
-
-Within each group, order by logical importance or call order,
-not alphabetically.
-
----
-
-## Code Style Preferences
-
-- Prefer switch statements over if/else chains.
-- Use guard clauses (early returns) over nested if/else.
-- If and if/else block has a lot of logic in it, separate each branch into a function.
-- Use `net.JoinHostPort(host, port)` instead of
-  `fmt.Sprintf("%s:%d", host, port)` (IPv6-safe).
-- When a function signature exceeds the line length limit,
-  put each argument on its own line — do not split arguments
-  into two groups to fit the limit.
-
-  ```go
-  // WRONG — split in half to fit line length:
-  func ProcessItems(ctx context.Context, items []Item,
-      opts Options, logger *slog.Logger) error {
-
-  // RIGHT — one argument per line:
-  func ProcessItems(
-      ctx context.Context,
-      items []Item,
-      opts Options,
-      logger *slog.Logger,
-  ) error {
-  ```
-
-### Fluent Interface (Method Chaining)
-
-Fluent APIs (builder pattern, zerolog, etc.) — place each chained method
-on its own line with the **dot at the end of the preceding line**.
+After checking that `err` is non-nil, add useful operation or resource context.
+Preserve the error chain when callers should be able to inspect the underlying
+error:
 
 ```go
-// WRONG — entire chain on one line:
-log.Info().Int("matched", matched).Int("expected", totalExpected).Msg("Verifying alerts")
-
-// RIGHT — one method per line, dot at end:
-log.Info().
-    Int("matched", matched).
-    Int("expected", totalExpected).
-    Msg("Verifying alerts")
+return fmt.Errorf("open config %q: %w", path, err)
 ```
 
-Short chains (2 calls or fewer) may stay on one line when they fit comfortably:
+Use `errors.Is` and `errors.As` (or `errors.AsType` on Go 1.26+) instead of
+matching error text. Handle an error close to the operation unless a deliberate
+aggregation or cleanup pattern requires otherwise. Never discard an error
+silently.
+
+Wrapping with `%w` exposes the underlying error through `errors.Is` and
+`errors.As`, which can become part of a public API contract. Use `%v` or a
+package-defined error when the abstraction should hide that error identity.
+
+Do not add `github.com/pkg/errors` or `golang.org/x/xerrors` solely for wrapping
+in modern Go; `%w`, `errors.Is`, `errors.As`, and `errors.Join` cover the
+standard cases. Preserve existing third-party use when compatibility or
+required stack-capture behavior justifies it.
+
+Return errors for expected failures and failures callers can handle. Panic is
+appropriate only for a documented programmer-contract violation or an internal
+invariant that makes continued execution invalid. A library is not categorically
+forbidden from panicking, but runtime input and environmental failures should
+normally be errors.
+
+## API and Naming
+
+- Design useful zero values when doing so does not hide required setup.
+- Use named results when they clarify otherwise ambiguous values or support a
+  necessary deferred update. Avoid naked returns in long functions.
+- Use directional channel types at API boundaries when only send or receive is
+  permitted.
+- Pass `context.Context` as the first parameter to operations that may block or
+  be canceled. Do not store it in a struct by default; a rare exception needs a
+  documented lifetime reason.
+- Avoid catch-all packages such as `utils` or `common`. Name a package for the
+  cohesive capability it provides.
+- Consult [naming-patterns.md](./references/naming-patterns.md) instead of
+  applying naming slogans mechanically.
+
+## Concurrency
+
+Use `errgroup.WithContext` when sibling tasks should stop after one fails and
+the tasks can observe cancellation. It reports the first non-nil error, and
+`Wait` still waits for every task to return. Bound concurrency with `SetLimit`
+or a worker pool when task count or cost is not tightly bounded. Use
+`sync.WaitGroup` when tasks do not return errors or manage errors independently.
+On Go 1.25+, `WaitGroup.Go` can remove bookkeeping only when its function will
+not panic; its contract says the function must not panic.
+
+Loop variables declared by the loop have per-iteration scope in files compiled
+with Go 1.22 or later language semantics. The owning module's `go` directive
+normally selects those semantics, but a file-level `//go:build go1.N`
+constraint can raise them for that file. Preexisting variables assigned by the
+loop remain shared. Under older semantics, capture a copy before a closure
+retains a declared loop variable.
+
+Default to `sync.Mutex`. Consider `sync.RWMutex` only after a representative
+benchmark or profile shows read-lock concurrency helps. Read/write ratios alone
+do not prove it is faster. Never try to upgrade an `RLock` to `Lock`; release
+the read lock, acquire the write lock, and recheck the protected state.
+
+Place a mutex immediately before the fields it protects when that layout makes
+the invariant clear.
+
+## Collections and Types
+
+Choose slice construction from the output contract:
+
+- Use `make([]T, n)` and indexed assignment for a fixed one-to-one result when
+  every element is written.
+- Use `make([]T, 0, n)` and `append` for filtered, conditional, or variable-size
+  output.
+
+Both forms can perform one backing-array allocation. The important difference
+is length semantics, not a universal performance rule.
+
+Name a complex map type when that improves signatures:
 
 ```go
-log.Debug().Msg("starting")
+type ProjectAlertStatuses map[ProjectName]map[AlertID]AlertStatus
 ```
 
-### Comments
-
-Do not add inline comments to code.
-Write self-documenting code — if a comment is needed to explain *what*,
-the code should probably be rewritten instead.
-
-Only add inline comments for:
-
-- Non-obvious side effects that cannot be expressed in code
-- Rationale or constraints that are not evident from the code itself
-  (e.g. a workaround for an upstream bug, a performance trade-off decision)
-
-For functions, types, methods, consts, and vars:
-follow the general guidance from
-[code-comments](../code-comments/SKILL.md) and the Go-specific conventions from
-[golang-comments](../golang-comments/SKILL.md).
-
----
-
-## Interface Design
-
-When defining or reviewing interfaces,
-consult [references/interface-design.md](./references/interface-design.md)
-for the full rules on consumer-side vs producer-side placement.
-
-Short version: define interfaces in the consumer package, not the producer.
-The producer returns concrete types.
-Producer-side interfaces are only justified in narrow cases
-(multiple unexported implementations, interface-only standard packages,
-or types that exist solely to implement the interface).
-
----
-
-## Go Idioms
-
-**Accept interfaces, return structs.**
-Function parameters should be interfaces (e.g., `io.Reader`),
-return types should be concrete structs.
-See [Interface Design](./references/interface-design.md)
-for where to define those interfaces.
-
-**Wrap errors with context.**
-Use `fmt.Errorf("failed X: %w", err)` to add context
-while preserving the error chain.
-Never discard errors silently.
-Do NOT use `github.com/pkg/errors` or `golang.org/x/xerrors` —
-both predate Go 1.13's built-in wrapping and are obsolete.
-Avoid wrapping with a message like "doing X", explicitly say what failed.
+Use defined key and value types when the compiler should distinguish concepts:
 
 ```go
-// WRONG — pkg/errors:
-return errors.Wrap(err, "open config")
-return errors.WithMessage(err, "open config")
-
-// WRONG — x/xerrors (no Wrap; uses Errorf with %w, but still obsolete):
-return xerrors.Errorf("open config: %w", err)
-
-// RIGHT — standard library since Go 1.13:
-return fmt.Errorf("open config: %w", err)
+type ProjectName string
+type AlertID string
+type AlertStatus string
 ```
 
-The `%w` verb makes the error unwrappable via `errors.Is` and `errors.As`.
-
-**Handle errors immediately.**
-Check `err != nil` right after the call —
-don't defer error checks or accumulate them.
-
-**Zero values should be useful.**
-Design structs so the zero value is a valid, usable default
-(like `sync.Mutex`, `bytes.Buffer`).
-
-**Don't panic in libraries.**
-Reserve `panic` for truly unrecoverable programmer errors.
-Libraries should return errors.
-
-**Keep packages focused.**
-One package = one purpose.
-Avoid `utils`, `helpers`, `common` packages.
-
-**Name returns only when it aids documentation.**
-Named returns clutter code when used just for naked returns.
-Use them when the return types need disambiguation
-(e.g., `(n int, err error)`).
-
-**Naming conventions:**
-
-When naming functions, types, methods, or variables,
-always consult [references/naming-patterns.md](./references/naming-patterns.md)
-and follow the matching pattern.
-
-Quick summary:
-
-- Local variables: short (`r`, `w`, `ctx`, `buf`)
-- Exported functions/types: descriptive (`ReadConfig`, `HTTPClient`)
-- Interfaces: method name + `-er` suffix (`Reader`, `Stringer`, `Closer`)
-- No `Get` prefix on getters (`Name()` not `GetName()`)
-- Acronyms: all caps (`HTTP`, `ID`, `URL`) — not `Http`, `Id`, `Url`
-- Constructors: `New` prefix (`NewReader`), never `Create`
-- String-to-type: `Parse` (`ParseInt`), never `From`
-- Panic wrappers: `Must` prefix (`MustCompile`)
-
-**Channel direction.**
-Specify direction in function signatures:
-`func producer() <-chan int`, `func consumer(ch <-chan int)`.
-
-**Context propagation.**
-Pass `context.Context` as the first parameter.
-Never store it in a struct.
-
-**Use `errgroup` for fail-fast concurrent work.**
-When spawning a group of goroutines where one failure should cancel the rest,
-use `golang.org/x/sync/errgroup` instead of `sync.WaitGroup` + channels.
-`errgroup.WithContext` cancels the shared context on the first error,
-so all goroutines can observe it via `ctx.Done()`.
-
-```go
-g, ctx := errgroup.WithContext(ctx)
-for _, item := range items {
-    item := item
-    g.Go(func() error {
-        return process(ctx, item) // returns on ctx cancel
-    })
-}
-if err := g.Wait(); err != nil {
-    return err // first non-nil error
-}
-```
-
-Use plain `sync.WaitGroup` (or `wg.Go` in Go 1.25+) only when errors
-are not expected or are handled inside each goroutine.
-
-**Pre-initialise slices with `append`, not index assignment.**
-When the final length is known, use `make([]T, 0, n)` + `append`,
-not `make([]T, n)` + index-based filling.
-
-```go
-// WRONG — allocate n zero-valued elements, then overwrite by index:
-result := make([]string, len(items))
-for i, item := range items {
-    result[i] = transform(item)
-}
-
-// RIGHT — allocate capacity only, fill with append:
-result := make([]string, 0, len(items))
-for _, item := range items {
-    result = append(result, transform(item))
-}
-```
-
-Why: `make([]T, n)` creates a slice already full of zero values.
-If the loop body conditionally skips elements or returns early,
-you end up with trailing zero values that silently corrupt results.
-`append` with zero length and defined capacity avoids this class of bug
-while still performing a single allocation.
-
-**Use type aliases to give maps semantic meaning.**
-When a map type like `map[string]map[string]string` is passed between functions,
-the keys and values lose their meaning at every call site.
-Define a named type for the map and type aliases for its keys and values:
-
-```go
-type projectName = string
-type alertUUID = string
-type alertStatus = string
-
-type ProjectAlertStatuses = map[projectName]map[alertUUID]alertStatus
-```
-
-This makes function signatures self-documenting
-and eliminates the need for comments explaining what each `string` represents.
-
-```go
-// WRONG — caller must guess what each string means:
-func Check(statuses map[string]map[string]string) error { ... }
-
-// RIGHT — intent is clear from the types:
-func Check(statuses ProjectAlertStatuses) error { ... }
-```
-
-Apply this when:
-
-- A map type appears in more than one function signature.
-- The map has two or more levels of nesting.
-- The key/value types are all primitive (e.g. `string`, `int`) and their
-  meaning is unclear.
-
-Do not over-apply — a simple `map[string]bool` used in one place does not need a type alias.
-
-**Struct field ordering.**
-Group related fields.
-Place `sync.Mutex` or `sync.RWMutex` directly above the fields it protects.
-
-**`sync.RWMutex` — only when reads dominate.**
-Default to `sync.Mutex`. Switch to `sync.RWMutex` only when profiling shows
-read contention and reads are overwhelmingly more frequent than writes (~90%+).
-`RWMutex` has higher internal overhead; for balanced or write-heavy workloads
-it is slower than a plain `Mutex`.
-
-```go
-type Cache struct {
-    mu    sync.RWMutex
-    items map[string]string
-}
-
-func (c *Cache) Get(key string) (string, bool) {
-    c.mu.RLock()
-    defer c.mu.RUnlock()
-    return c.items[key]
-}
-
-func (c *Cache) Set(key, value string) {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    c.items[key] = value
-}
-```
-
-Never upgrade a read lock to a write lock without releasing first —
-it always deadlocks. Release `RUnlock`, then call `Lock`, then re-validate state.
-
----
-
-## Modern Go Features by Version
-
-### Go 1.18+
-
-**`any` keyword:**
-Use `any` instead of `interface{}`.
-
-**`strings.Cut` / `bytes.Cut`:**
-
-```go
-before, after, found := strings.Cut(s, "=")
-```
-
-Replaces `strings.Index` + manual slicing.
-
-**Generics:**
-Use type parameters where they eliminate repetitive code across types.
-Don't use generics when a concrete type or interface works just as well.
-
-Never specify type parameters explicitly when the compiler can infer them
-from the arguments — which it almost always can for function calls.
-
-```go
-// WRONG — redundant, the compiler knows:
-slices.Contains[string](items, "foo")
-slices.SortFunc[User](users, func(a, b User) int { ... })
-result := max[int](a, b)
-
-// RIGHT — let the compiler infer:
-slices.Contains(items, "foo")
-slices.SortFunc(users, func(a, b User) int { ... })
-result := max(a, b)
-```
-
-Explicit type parameters are only needed when there are no arguments
-to infer from, or when the inferred type would be wrong:
-
-```go
-// Necessary — no argument to infer T from:
-make([]T, 0)
-reflect.TypeFor[MyStruct]()
-sync.OnceValue(func() *Config { ... })
-```
-
-**`errors.Join`:**
-
-```go
-return errors.Join(err1, err2, err3)
-```
-
-### Go 1.19+
-
-**`fmt.Appendf`:**
-
-```go
-buf = fmt.Appendf(buf, "x=%d", x)
-```
-
-Instead of `[]byte(fmt.Sprintf(...))`.
-
-**Type-safe atomics:**
-
-```go
-var flag atomic.Bool
-flag.Store(true)
-if flag.Load() { ... }
-```
-
-Instead of `atomic.StoreInt32` / `atomic.LoadInt32`.
-
-### Go 1.20+
-
-**`strings.CutPrefix` / `strings.CutSuffix`:**
-
-```go
-if rest, ok := strings.CutPrefix(s, "Bearer "); ok {
-    token = rest
-}
-```
-
-**`context.WithCancelCause`:**
-
-```go
-ctx, cancel := context.WithCancelCause(parent)
-cancel(fmt.Errorf("timed out waiting for response"))
-// later: context.Cause(ctx) returns the error
-```
-
-**`errors.Join`:**
-
-```go
-err := errors.Join(validateName(n), validateAge(a), validateEmail(e))
-```
-
-### Go 1.21+
-
-**Built-in `min` / `max` / `clear`:**
-
-```go
-smallest := min(a, b, c)
-largest := max(x, y)
-clear(myMap)    // delete all entries
-clear(mySlice)  // zero all elements
-```
-
-DO NOT write custom `min`/`max` helper functions.
-
-**`slices` package:**
-
-- `slices.Contains(items, x)` — not manual loops
-- `slices.Sort(items)` — not `sort.Slice`
-- `slices.SortFunc(items, func(a, b T) int { return cmp.Compare(a.X, b.X) })`
-- `slices.Index(items, x)` — returns index or -1
-- `slices.Compact(items)` — remove consecutive duplicates
-- `slices.Clone(s)`, `slices.Reverse(items)`, `slices.Max(items)`, `slices.Min(items)`
-
-**`maps` package:**
-
-- `maps.Clone(m)` — not manual iteration
-- `maps.Copy(dst, src)`
-- `maps.DeleteFunc(m, func(k K, v V) bool { ... })`
-
-**`sync.OnceFunc` / `sync.OnceValue`:**
-
-```go
-loadConfig := sync.OnceValue(func() *Config {
-    return parseConfig()
-})
-cfg := loadConfig()
-```
-
-Instead of `sync.Once` + wrapper.
-
-**`slog` (structured logging):**
-
-```go
-slog.Info("request handled",
-    slog.String("method", r.Method),
-    slog.Int("status", code),
-    slog.Duration("latency", elapsed),
-)
-```
-
-**`context.AfterFunc`:**
-
-```go
-stop := context.AfterFunc(ctx, func() { cleanup() })
-defer stop()
-```
-
-### Go 1.22+
-
-**Range over integers:**
-
-```go
-for i := range 10 {
-    fmt.Println(i) // 0..9
-}
-```
-
-Instead of `for i := 0; i < 10; i++`.
-
-**Loop variable scoping fix:**
-Each iteration gets its own copy — no more `v := v` workaround needed.
-
-```go
-for _, item := range items {
-    go process(item) // safe, each goroutine gets its own copy
-}
-```
-
-**`cmp.Or` — first non-zero value:**
-
-```go
-name := cmp.Or(os.Getenv("APP_NAME"), cfg.Name, "default")
-```
-
-Instead of cascading if/else or ternary-like patterns.
-
-**Enhanced `http.ServeMux` — method + path params:**
-
-```go
-mux.HandleFunc("GET /api/users/{id}", func(w http.ResponseWriter, r *http.Request) {
-    id := r.PathValue("id")
-    // ...
-})
-mux.HandleFunc("POST /api/users", createUser)
-mux.HandleFunc("DELETE /api/users/{id}", deleteUser)
-```
-
-**`reflect.TypeFor`:**
-
-```go
-typ := reflect.TypeFor[MyStruct]()
-```
-
-Instead of `reflect.TypeOf((*MyStruct)(nil)).Elem()`.
-
-**`math/rand/v2`:**
-Use `rand/v2` for new code. The `v1` top-level `Seed()` is now a no-op.
-
-### Go 1.23+
-
-**Range over functions (iterators):**
-
-```go
-func Backward[E any](s []E) iter.Seq2[int, E] {
-    return func(yield func(int, E) bool) {
-        for i := len(s) - 1; i >= 0; i-- {
-            if !yield(i, s[i]) {
-                return
-            }
-        }
-    }
-}
-
-for i, v := range Backward(mySlice) {
-    fmt.Println(i, v)
-}
-```
-
-**`maps.Keys` / `maps.Values` return iterators:**
-
-```go
-for k := range maps.Keys(m) {
-    process(k)
-}
-keys := slices.Collect(maps.Keys(m))
-sortedKeys := slices.Sorted(maps.Keys(m))
-```
-
-Instead of manual `for k := range m { keys = append(keys, k) }`.
-
-**`slices.Collect` — materialize iterator to slice:**
-
-```go
-items := slices.Collect(someIterator)
-```
-
-**`unique` package — value interning:**
-
-```go
-h := unique.Make("frequently-used-string")
-// h.Value() returns the string; handles are pointer-comparable
-```
-
-**Timer/Ticker GC improvement:**
-`time.Tick` is now safe to use freely —
-unstopped tickers are garbage collected.
-No longer a source of leaks.
-
-### Go 1.24+
-
-**`omitzero` JSON struct tag:**
-
-```go
-type Config struct {
-    Timeout  time.Duration `json:"timeout,omitzero"`
-    Deadline time.Time     `json:"deadline,omitzero"`
-    Tags     []string      `json:"tags,omitzero"`
-}
-```
-
-ALWAYS use `omitzero` for `time.Time`, `time.Duration`, structs, slices, maps.
-The `omitempty` tag does not work correctly for these types.
-
-**`strings.SplitSeq` / `strings.FieldsSeq` — iterator-based splitting:**
-
-```go
-for part := range strings.SplitSeq(s, ",") {
-    process(part)
-}
-```
-
-Use `SplitSeq`/`FieldsSeq` when iterating in a for-range loop.
-Also: `bytes.SplitSeq`, `bytes.FieldsSeq`.
-
-**Tool directives in `go.mod`:**
-
-```text
-tool golang.org/x/tools/cmd/stringer
-```
-
-Replaces the `tools.go` pattern for tracking tool dependencies.
-
-**`os.Root` — directory-scoped filesystem access:**
-
-```go
-root, err := os.OpenRoot("/srv/data")
-f, err := root.Open("file.txt") // cannot escape /srv/data
-```
-
-**`crypto/cipher.NewGCMWithRandomNonce`:**
-AES-GCM with automatic nonce generation — eliminates nonce management.
-
-### Go 1.25+
-
-**`wg.Go()` — simplified goroutine spawning:**
-
-```go
-var wg sync.WaitGroup
-for _, item := range items {
-    wg.Go(func() {
-        process(item)
-    })
-}
-wg.Wait()
-```
-
-ALWAYS use `wg.Go()` instead of
-`wg.Add(1)` + `go func() { defer wg.Done(); ... }()`.
-
-**`net/http.CrossOriginProtection` — token-less CSRF:**
-
-```go
-csrf := http.NewCrossOriginProtection()
-csrf.AddTrustedOrigin("https://app.example.com")
-handler := csrf.Handler(mux)
-```
-
-**`runtime/trace.FlightRecorder` — continuous low-overhead tracing:**
-
-```go
-rec := trace.NewFlightRecorder(trace.FlightRecorderConfig{
-    MinAge:   5 * time.Second,
-    MaxBytes: 3 << 20,
-})
-rec.Start()
-defer rec.Stop()
-// snapshot on interesting events:
-rec.WriteTo(file)
-```
-
-**Container-aware GOMAXPROCS:**
-Runtime auto-adjusts to cgroup CPU limits on Linux.
-No code changes needed.
-
-**`encoding/json/v2` (experimental):**
-Enable with `GOEXPERIMENT=jsonv2`.
-Faster decoding, case-sensitive matching, streaming support.
-
-**`reflect.TypeAssert[T]`:**
-
-```go
-person, ok := reflect.TypeAssert[Person](val)
-```
-
-Allocation-free alternative to `val.Interface().(T)`.
-
-### Go 1.26+
-
-**`new(expr)` — pointer to any value:**
-
-```go
-cfg := Config{
-    Timeout: new(30),        // *int
-    Debug:   new(true),      // *bool
-    Label:   new("prod"),    // *string
-}
-
-req := Request{
-    Attempts: new(10),
-    Deadline: new(time.Now().Add(5 * time.Minute)),
-}
-```
-
-DO NOT write `ptrTo()`, `intPtr()`, `strPtr()` helper functions.
-DO NOT use `x := val; &x` patterns.
-Use `new(val)` directly.
-
-**`errors.AsType[T]` — type-safe error matching:**
-
-```go
-if pathErr, ok := errors.AsType[*os.PathError](err); ok {
-    fmt.Println("path:", pathErr.Path)
-}
-
-if connErr, ok := errors.AsType[*net.OpError](err); ok {
-    fmt.Println("network op failed:", connErr.Op)
-}
-```
-
-ALWAYS use `errors.AsType` instead of
-`var target *T; errors.As(err, &target)`.
-
-**`slog.NewMultiHandler` — fan-out logging:**
-
-```go
-multi := slog.NewMultiHandler(
-    slog.NewTextHandler(os.Stdout, nil),
-    slog.NewJSONHandler(logFile, nil),
-)
-logger := slog.New(multi)
-```
-
-**Self-referential generic type constraints:**
-
-```go
-type Adder[A Adder[A]] interface {
-    Add(A) A
-}
-```
-
-**`go fix` modernizers:**
-Run `go fix ./...` after upgrading the toolchain.
-Available modernizers include:
-`minmax`, `rangeint`, `forvar`, `any`, `stringscut`, `fmtappendf`,
-`mapsloop`, `newexpr`, `errorsastype`, `hostport`.
-
-**Reader-less cryptography:**
-Crypto functions ignore the `rand` parameter
-and always use secure randomness:
-
-```go
-key, err := ecdsa.GenerateKey(elliptic.P256(), nil)
-```
-
-**`bytes.Buffer.Peek(n)`:**
-
-```go
-sample, err := buf.Peek(5) // read without consuming
-```
-
-**`reflect` iterator methods:**
-
-```go
-for f := range reflect.TypeFor[MyStruct]().Fields() {
-    fmt.Println(f.Name, f.Type)
-}
-```
-
----
-
-## Common LLM Anti-Patterns
-
-These are patterns LLMs frequently generate that have modern replacements.
-DO NOT generate these outdated patterns
-when the project's Go version supports the alternative.
-
-**1. Custom `min`/`max` helpers (fixed in 1.21+):**
-
-```go
-// WRONG:
-func min(a, b int) int { if a < b { return a }; return b }
-// RIGHT: use built-in min(a, b)
-```
-
-**2. `sort.Slice` instead of `slices.Sort` (fixed in 1.21+):**
-
-```go
-// WRONG:
-sort.Slice(items, func(i, j int) bool { return items[i] < items[j] })
-// RIGHT:
-slices.Sort(items)
-```
-
-**3. Loop variable capture workaround (fixed in 1.22+):**
-
-```go
-// WRONG (unnecessary since 1.22):
-for _, v := range items {
-    v := v // shadow variable — no longer needed
-    go process(v)
-}
-// RIGHT:
-for _, v := range items {
-    go process(v)
-}
-```
-
-**4. Three-clause for loop for simple counting (fixed in 1.22+):**
-
-```go
-// WRONG:
-for i := 0; i < 10; i++ { ... }
-// RIGHT:
-for i := range 10 { ... }
-```
-
-**5. `interface{}` instead of `any` (fixed in 1.18+):**
-
-```go
-// WRONG:
-func process(v interface{}) { ... }
-// RIGHT:
-func process(v any) { ... }
-```
-
-**6. Manual map key collection (fixed in 1.23+):**
-
-```go
-// WRONG:
-keys := make([]string, 0, len(m))
-for k := range m {
-    keys = append(keys, k)
-}
-// RIGHT:
-keys := slices.Collect(maps.Keys(m))
-```
-
-**7. `omitempty` for time/struct/slice types (fixed in 1.24+):**
-
-```go
-// WRONG:
-Timeout time.Duration `json:"timeout,omitempty"` // doesn't work correctly
-// RIGHT:
-Timeout time.Duration `json:"timeout,omitzero"`
-```
-
-**8. WaitGroup boilerplate (fixed in 1.25+):**
-
-```go
-// WRONG:
-wg.Add(1)
-go func() {
-    defer wg.Done()
-    doWork()
-}()
-// RIGHT:
-wg.Go(func() { doWork() })
-```
-
-**9. Pointer-to-value helper functions (fixed in 1.26+):**
-
-```go
-// WRONG:
-func ptr[T any](v T) *T { return &v }
-cfg := Config{Retries: ptr(3)}
-// RIGHT:
-cfg := Config{Retries: new(3)}
-```
-
-**10. `errors.As` with pre-declared variable (fixed in 1.26+):**
-
-```go
-// WRONG:
-var target *MyError
-if errors.As(err, &target) { ... }
-// RIGHT:
-if target, ok := errors.AsType[*MyError](err); ok { ... }
-```
-
-**11. `fmt.Sprintf("%s:%d", host, port)` for network addresses (all versions):**
-
-```go
-// WRONG — breaks with IPv6:
-addr := fmt.Sprintf("%s:%d", host, port)
-// RIGHT:
-addr := net.JoinHostPort(host, strconv.Itoa(port))
-```
-
-**12. `ReverseProxy.Director` (deprecated in 1.26+):**
-
-```go
-// WRONG:
-proxy := &httputil.ReverseProxy{Director: func(req *http.Request) { ... }}
-// RIGHT:
-proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) { ... }}
-```
-
-**13. Passing `rand.Reader` to crypto functions (fixed in 1.26+):**
-
-```go
-// WRONG:
-key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-// RIGHT:
-key, err := ecdsa.GenerateKey(elliptic.P256(), nil)
-```
-
-**14. `errors.Wrap` from `pkg/errors` / `xerrors.Errorf` from `x/xerrors` (all versions):**
-
-```go
-// WRONG — obsolete third-party packages:
-return errors.Wrap(err, "open config")
-return xerrors.Errorf("open config: %w", err)
-// RIGHT — standard library since Go 1.13:
-return fmt.Errorf("open config: %w", err)
-```
+A type alias such as `type ProjectName = string` adds a name in source but no
+type distinction. Do not claim that aliases enforce key semantics. Named types
+also do not replace documentation for allowed values, ownership, mutability, or
+concurrency.
+
+## Version-Aware Modernization
+
+[versioned-features.md](./references/versioned-features.md) records the first Go
+release for selected language and standard-library features, plus important
+qualifications. Check it before replacing an older pattern. A newer construct
+is not automatically better in every context; preserve behavior, readability,
+and the module's target version.
