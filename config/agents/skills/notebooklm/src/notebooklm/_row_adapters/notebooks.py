@@ -1,12 +1,20 @@
 """Notebook row adapters for ``batchexecute`` notebook-scoped RPCs.
 
-Currently centralises the positional knowledge of the
-``GeneratePromptSuggestions`` (``otmP3b`` / ``SUGGEST_PROMPTS``) reply: the
-envelope unwrap (:func:`unwrap_prompt_suggestions`) and the per-row title /
-prompt reads (:class:`PromptSuggestionRow`). These back
-:meth:`NotebooksAPI.suggest_prompts`.
+Centralises the positional knowledge of the ``Project`` message returned by
+notebook reads/creates and of the ``GeneratePromptSuggestions``
+(``otmP3b`` / ``SUGGEST_PROMPTS``) reply.
 
 Position contract (pinned by ``tests/unit/test_notebooks_row_adapter.py``):
+
+* :class:`ProjectRow` — one decoded ``Project`` message:
+
+  =====  ============================================================
+  Index  Meaning
+  =====  ============================================================
+  3      notebook emoji
+  9      ``PremiumFeatureInfo``
+  11     ``ChatSession`` rows (CREATE response only)
+  =====  ============================================================
 
 * :class:`PromptSuggestionRow` — one suggestion row:
 
@@ -28,8 +36,77 @@ from ..rpc import RPCMethod, safe_index
 
 __all__ = [
     "PromptSuggestionRow",
+    "ProjectRow",
     "unwrap_prompt_suggestions",
 ]
+
+
+@dataclass(frozen=True)
+class ProjectRow:
+    """Best-effort typed view over one decoded ``Project`` message.
+
+    ``Notebook.from_api_response`` deliberately tolerates short rows because it
+    also maps whole notebook listings: one partial row must not discard its
+    siblings. These newly surfaced fields follow that contract. Missing or
+    malformed optional leaves degrade to ``None``/``[]``; the load-bearing
+    title/id/metadata handling remains owned by ``Notebook``.
+    """
+
+    _raw: Any = field(repr=False)
+
+    _EMOJI_POS: ClassVar[int] = 3
+    _PREMIUM_FEATURE_INFO_POS: ClassVar[int] = 9
+    _CHAT_SESSIONS_POS: ClassVar[int] = 11
+
+    @property
+    def emoji(self) -> str | None:
+        """Notebook emoji (``Project.emoji``), or ``None`` when unstated."""
+        if not isinstance(self._raw, list) or len(self._raw) <= self._EMOJI_POS:
+            return None
+        value = self._raw[self._EMOJI_POS]
+        return value if isinstance(value, str) else None
+
+    @property
+    def premium_feature_flags(self) -> tuple[bool | None, bool | None, bool | None] | None:
+        """The three ``PremiumFeatureInfo`` flags, preserving unknown leaves.
+
+        The mobile schema names the slots, but this positional adapter stays
+        domain-type free and returns them in wire order. A present short block
+        remains distinguishable from an absent block via ``None`` leaves.
+        """
+        if not isinstance(self._raw, list) or len(self._raw) <= self._PREMIUM_FEATURE_INFO_POS:
+            return None
+        block = self._raw[self._PREMIUM_FEATURE_INFO_POS]
+        if not isinstance(block, list):
+            return None
+
+        def _flag(position: int) -> bool | None:
+            if len(block) <= position:
+                return None
+            value = block[position]
+            return value if isinstance(value, bool) else None
+
+        return (_flag(0), _flag(1), _flag(2))
+
+    @property
+    def chat_session_ids(self) -> list[str]:
+        """IDs from ``Project.chatSessions`` (populated on CREATE only).
+
+        Each session is the single-field row ``[chatSessionId]``. Invalid rows
+        are skipped independently so one malformed optional session does not
+        make the created notebook unusable.
+        """
+        if not isinstance(self._raw, list) or len(self._raw) <= self._CHAT_SESSIONS_POS:
+            return []
+        rows = self._raw[self._CHAT_SESSIONS_POS]
+        if not isinstance(rows, list):
+            return []
+        return [
+            row[0]
+            for row in rows
+            if isinstance(row, list) and row and isinstance(row[0], str) and row[0]
+        ]
+
 
 # A single leading markdown *bullet* marker (``-``/``*``/``+``) plus its trailing
 # space. The backend sometimes frames a suggestion as a markdown list item, so a

@@ -361,7 +361,7 @@ tests/integration/test_side_effects_idempotency.py::test_delete_notebook_retries
 tests/integration/test_side_effects_idempotency.py::test_delete_source_classified_idempotent_set_op # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
 tests/integration/test_side_effects_idempotency.py::test_delete_source_retries_remain_enabled # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
 tests/integration/test_side_effects_idempotency.py::test_notebooks_create_probe_propagates_network_error # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
-tests/integration/test_side_effects_idempotency.py::test_notebooks_create_probe_swallows_non_network_exception # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
+tests/integration/test_side_effects_idempotency.py::test_notebooks_create_probe_propagates_non_network_exception # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
 tests/integration/test_side_effects_idempotency.py::test_refresh_source_classified_at_least_once_accepted # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
 tests/integration/test_side_effects_idempotency.py::test_refresh_source_emits_rate_limited_warn # existing mock-only integration exception; migrate per test-suite taxonomy cleanup
 tests/integration/test_side_effects_idempotency.py::test_share_notebook_classified_probe_then_create # existing mock-only integration exception; migrate per test-suite taxonomy cleanup

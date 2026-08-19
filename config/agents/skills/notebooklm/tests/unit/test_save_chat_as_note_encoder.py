@@ -358,6 +358,52 @@ class TestBuildSaveChatAsNoteParamsBehavior:
         assert inner_offsets[0] == 0
         assert inner_offsets[1] == 11
 
+    def test_local_offsets_count_utf16_units_not_python_characters(self):
+        """Regression (#2120): TailwindDoc offsets are UTF-16 code units.
+
+        Every range in this payload lives in the backend's coordinate space,
+        which counts UTF-16 units — so one emoji in the cited text is two
+        units and one Python character. Using ``len()`` here ends the local
+        wrapper a unit short per astral character, misaligning the saved
+        note's hover anchoring against text the server measured differently.
+
+        Latent before #2120 and newly reachable after it: ``cited_text`` now
+        spans the whole cited fragment rather than its first block, so it is
+        far likelier to contain one.
+        """
+        cited_text = "\U0001f52c hello"  # 7 Python chars, 8 UTF-16 units
+        ref = ChatReference(
+            source_id="src-1",
+            citation_number=1,
+            cited_text=cited_text,
+            start_char=0,
+            end_char=8,  # the server's own width, in UTF-16 units
+            chunk_id="chunk-1",
+        )
+        params = build_save_chat_as_note_params("nb-id", "X [1].", [ref], "Title")
+        passage_group = params[3][0][4][0]
+        assert len(cited_text) == 7
+        assert passage_group[0][1] == 8
+        assert passage_group[0][2][0][0][1] == 8
+
+    def test_marker_positions_count_utf16_units(self):
+        """The answer-side anchors share that coordinate space (#2120)."""
+        ref = ChatReference(
+            source_id="src-1",
+            citation_number=1,
+            cited_text="text",
+            start_char=0,
+            end_char=4,
+            chunk_id="chunk-1",
+        )
+        # Clean answer "AB<emoji>." is 4 Python characters and 5 UTF-16 units;
+        # the marker sits after "AB<emoji>", 3 characters but 4 units in.
+        params = build_save_chat_as_note_params("nb-id", "AB\U0001f52c [1].", [ref], "Title")
+        body = params[5][0]
+        answer_group, chunk_anchors = body[0], body[1]
+        assert answer_group[0][1] == 5
+        assert chunk_anchors[0][1] == [None, 0, 4]
+
     def test_empty_cited_text_collapses_span(self):
         """Regression: when ref.cited_text is empty, span must collapse to
         [0, 0] rather than emitting an invalid [None, start, 0] where

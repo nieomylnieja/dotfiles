@@ -249,6 +249,8 @@ async def test_retry_inherits_parent_request_id():
         *,
         disable_internal_retries: bool = False,
         operation_variant: str | None = None,
+        read_timeout: float | None = None,
+        raise_on_null_status: bool = False,
         _refresh_budget=None,
         _retry_deadline=None,
     ):

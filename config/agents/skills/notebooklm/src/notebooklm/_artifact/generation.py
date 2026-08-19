@@ -363,6 +363,9 @@ class ArtifactGenerationService:
             params,
             source_path=f"/notebook/{notebook_id}",
             allow_null=True,
+            # See ``_call_generate``: a server-stated rejection reason beats the
+            # client's "feature unavailable" guess (#2188).
+            raise_on_null_status=True,
         )
         if result is None:
             logger.warning("REVISE_SLIDE returned null result for artifact %s", artifact_id)
@@ -379,7 +382,10 @@ class ArtifactGenerationService:
         first. The same ``artifact_id`` is preserved and returned as the task
         id, so existing ``poll_status`` / ``wait_for_completion`` flows keep
         working — an accepted retry comes back as
-        ``GenerationStatus(status="in_progress")``.
+        ``GenerationStatus(status="pending")``: the response row carries wire
+        code 1 (``ARTIFACT_STATUS_INITIALIZED``), i.e. re-queued but not yet
+        picked up, advancing to ``"in_progress"`` on a later poll. Before #2127
+        that code was mislabelled ``"in_progress"``.
 
         Follows the ADR-0019 "async kickoff" contract: a synchronous server
         refusal (``USER_DISPLAYABLE_ERROR`` — rate limit, quota, or a
@@ -405,6 +411,9 @@ class ArtifactGenerationService:
             params,
             source_path=f"/notebook/{notebook_id}",
             allow_null=True,
+            # See ``_call_generate``: a server-stated rejection reason beats the
+            # client's "feature unavailable" guess (#2188).
+            raise_on_null_status=True,
         )
         if result is None:
             logger.warning("RETRY_ARTIFACT returned null result for artifact %s", artifact_id)
@@ -567,6 +576,15 @@ class ArtifactGenerationService:
             source_path=f"/notebook/{notebook_id}",
             allow_null=True,
             operation_variant=None,
+            # ``allow_null=True`` keeps the "no task row" case decodable so the
+            # ``ArtifactFeatureUnavailableError`` below can name the artifact
+            # type. ``raise_on_null_status=True`` stops that guess from
+            # overwriting a reason the server DID give: live-verified
+            # 2026-08-13, a source-less notebook answers
+            # ``[["wrb.fr","R7cb6c",null,null,null,[3],"generic"]]`` — an
+            # explicit INVALID_ARGUMENT that used to be reported as
+            # "Audio generation is unavailable" (#2188).
+            raise_on_null_status=True,
         )
         if result is None and null_result_artifact_type is not None:
             raise ArtifactFeatureUnavailableError(

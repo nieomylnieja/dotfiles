@@ -22,7 +22,7 @@ from ._session_helpers import (
     _account_exists,
     _chromium_fanout_setup,
     _install_chromium_fanout_patches,
-    _multiaccount_rookiepy_mock,
+    _multiaccount_rookie_cookies_mock,
 )
 
 
@@ -295,7 +295,7 @@ class TestChromiumFanoutAllAccounts:
             return profiles if browser_name.lower() == "chrome" else []
 
         with (
-            patch.dict("sys.modules", {"rookiepy": MagicMock()}),
+            patch.dict("sys.modules", {"rookie_cookies": MagicMock()}),
             patch.object(
                 chromium_profiles,
                 "discover_chromium_profiles",
@@ -576,7 +576,7 @@ class TestChromiumFanoutBoundaryConditions:
             )
         ]
 
-        mock_rk = _multiaccount_rookiepy_mock()
+        mock_rk = _multiaccount_rookie_cookies_mock()
 
         async def _enum(*args, **kwargs):
             from notebooklm.auth import Account
@@ -584,7 +584,7 @@ class TestChromiumFanoutBoundaryConditions:
             return [Account(authuser=0, email="alice@example.com", is_default=True)]
 
         with (
-            patch.dict("sys.modules", {"rookiepy": mock_rk}),
+            patch.dict("sys.modules", {"rookie_cookies": mock_rk}),
             patch.object(
                 chromium_profiles,
                 "discover_chromium_profiles",
@@ -637,7 +637,7 @@ class TestChromiumFanoutBoundaryConditions:
             return cookies[profile.directory_name]
 
         with (
-            patch.dict("sys.modules", {"rookiepy": MagicMock()}),
+            patch.dict("sys.modules", {"rookie_cookies": MagicMock()}),
             patch.object(
                 chromium_profiles,
                 "discover_chromium_profiles",

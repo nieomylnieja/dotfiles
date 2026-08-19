@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from notebooklm._types.notebooks import Notebook
+from notebooklm.types import SharePermission
 
 from .fakes import FakeClient
 
@@ -15,6 +16,57 @@ def test_list_returns_notebooks(authed_client: TestClient, fake_client: FakeClie
     assert resp.status_code == 200
     titles = [n["title"] for n in resp.json()["notebooks"]]
     assert titles == ["First"]
+
+
+def test_list_projects_role_and_role_label(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    """REST rows carry the caller's role plus its agent-readable label (#2125).
+
+    A bare ``to_jsonable`` pass would ship ``role: 3`` with nothing to decode
+    it against, so the routes go through ``_app.views.notebook_view``.
+    """
+    fake_client.notebooks_store["nb-v"] = Notebook(
+        id="nb-v", title="Read only", role=SharePermission.VIEWER
+    )
+    fake_client.notebooks_store["nb-o"] = Notebook(
+        id="nb-o", title="Mine", role=SharePermission.OWNER
+    )
+    rows = {n["id"]: n for n in authed_client.get("/v1/notebooks").json()["notebooks"]}
+
+    assert rows["nb-v"]["role"] == SharePermission.VIEWER.value
+    assert rows["nb-v"]["role_label"] == "viewer"
+    assert rows["nb-v"]["is_owner"] is False
+    assert rows["nb-o"]["role_label"] == "owner"
+    assert rows["nb-o"]["is_owner"] is True
+
+
+def test_list_unstated_role_stays_null_for_machines(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    """An unstated role must NOT be optimistically reported as "owner" on the wire.
+
+    The CLI's Access column deliberately degrades to "Owner" to match
+    ``is_owner``; machine-readable surfaces stay honest and emit ``null`` so an
+    agent is never told a role the backend did not state.
+    """
+    fake_client.notebooks_store["nb-?"] = Notebook(id="nb-?", title="No role stated")
+    row = authed_client.get("/v1/notebooks").json()["notebooks"][0]
+
+    assert row["role"] is None
+    assert row["role_label"] is None
+    assert row["is_owner"] is True
+
+
+def test_get_projects_role_label(authed_client: TestClient, fake_client: FakeClient) -> None:
+    fake_client.notebooks_store["nb-e"] = Notebook(
+        id="nb-e", title="Editable", role=SharePermission.EDITOR
+    )
+    body = authed_client.get("/v1/notebooks/nb-e").json()
+
+    assert body["role"] == SharePermission.EDITOR.value
+    assert body["role_label"] == "editor"
+    assert body["is_owner"] is False
 
 
 def test_list_default_is_unbounded_no_meta(

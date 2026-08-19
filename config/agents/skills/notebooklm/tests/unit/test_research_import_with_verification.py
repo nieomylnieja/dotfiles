@@ -14,6 +14,8 @@ delegate — its tests cover only the wiring (still in ``test_helpers.py``).
 from __future__ import annotations
 
 import asyncio
+import logging
+from itertools import chain, repeat
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,6 +23,61 @@ import pytest
 import notebooklm._research as _research_mod
 from notebooklm._research import ResearchAPI
 from notebooklm.exceptions import NetworkError, RPCError, RPCTimeoutError
+
+
+class _RecordingRpc:
+    """A minimal injected ``RpcCaller`` that records each call's read timeout.
+
+    Constructor injection rather than assigning an ``AsyncMock`` onto a
+    duck-typed fake's RPC attribute — ADR-0007 forbids exactly that. Queued
+    outcomes are replayed in order.
+
+    Two details keep the double honest rather than merely convenient:
+
+    * a queued :class:`RPCTimeoutError` gets its ``timeout_seconds`` from the
+      window this call was actually handed, exactly as the real executor
+      derives it (``_rpc_executor.py``). Hardcoding it would hide a defect
+      where the clamp reaches the wire but the raised error still reports the
+      unclamped window;
+    * ``advance`` moves the injected clock *while the call is in flight*, so a
+      retry is late because time passed during a failed attempt — the real
+      causal chain — rather than because a positional clock stub said so.
+    """
+
+    def __init__(self, outcomes: list[object], clock: dict[str, float] | None = None) -> None:
+        self._outcomes = list(outcomes)
+        self._clock = clock
+        self.read_timeouts: list[float | None] = []
+
+    async def rpc_call(
+        self,
+        method: object,
+        params: object,
+        source_path: str = "/",
+        allow_null: bool = False,
+        **kwargs: object,
+    ) -> object:
+        read_timeout = kwargs.get("read_timeout")
+        self.read_timeouts.append(read_timeout)  # type: ignore[arg-type]
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, _Advance):
+            if self._clock is not None:
+                self._clock["now"] += outcome.seconds
+            outcome = outcome.then
+        if isinstance(outcome, RPCTimeoutError):
+            # Mirror the executor: the error reports the window actually used.
+            outcome = RPCTimeoutError(str(outcome), timeout_seconds=read_timeout)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class _Advance:
+    """Queue entry: advance the injected clock, then produce ``then``."""
+
+    def __init__(self, seconds: float, then: object) -> None:
+        self.seconds = seconds
+        self.then = then
 
 
 def _make_research() -> tuple[ResearchAPI, MagicMock, MagicMock]:
@@ -87,14 +144,16 @@ class TestImportSourcesWithVerification:
             side_effect=RPCTimeoutError("Timed out", timeout_seconds=30.0)
         )
 
-        # time.monotonic is read once at start, then on each timeout. Two values
-        # cover the snapshot path plus the timeout-handling path (elapsed
-        # check). Past-budget on the second read forces the raise.
+        # time.monotonic is read at start, then once per attempt (the #2205
+        # read-timeout clamp) and again on each timeout. The first two reads sit
+        # at t=0 so the attempt runs on its full window; every read after that is
+        # past budget, forcing the raise. Chained-repeat rather than a fixed list
+        # so the test pins the *behavior*, not the number of clock reads.
         with (
             patch.object(
                 _research_mod.time,
                 "monotonic",
-                side_effect=[0.0, 1801.0],
+                side_effect=chain([0.0, 0.0], repeat(1801.0)),
             ),
             patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
             pytest.raises(RPCTimeoutError),
@@ -107,6 +166,111 @@ class TestImportSourcesWithVerification:
             )
 
         mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_late_retry_read_timeout_is_clamped_to_the_remaining_budget(self):
+        """#2205: one attempt must not outlive the loop's own ``max_elapsed``.
+
+        The per-attempt read window is computed from batch size alone, so
+        without a clamp a retry started 1750 s into a 1800 s budget could still
+        run its full window and blow ~4 minutes past the deadline. Asserted on
+        the ``read_timeout`` handed to the RPC layer, not on the plumbing kwarg.
+        """
+        clock = {"now": 0.0}
+        fake_rpc = _RecordingRpc(
+            [
+                # The first attempt burns 1750 s of the budget, then times out.
+                _Advance(1750.0, RPCTimeoutError("Timed out")),
+                [[[["src_1"], "Source 1"]]],
+            ],
+            clock=clock,
+        )
+        mock_source_lister = MagicMock()
+        mock_source_lister.list = AsyncMock(return_value=[])
+        research = ResearchAPI(fake_rpc, source_lister=mock_source_lister)
+
+        with (
+            patch.object(_research_mod.time, "monotonic", side_effect=lambda: clock["now"]),
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock),
+        ):
+            imported = await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+                max_elapsed=1800,
+            )
+
+        assert imported == [{"id": "src_1", "title": "Source 1"}]
+        first_attempt, retry_attempt = fake_rpc.read_timeouts
+        # First attempt: the full batch-scaled window (60 + 3 * 1 source).
+        assert first_attempt == 63.0
+        # Retry: clamped to the 50 s left of max_elapsed instead.
+        assert retry_attempt == 50.0
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_retry_too_short_to_observe_its_own_result(self, caplog):
+        """#2205: an unviable remaining budget ends the loop instead of clamping.
+
+        Clamping a retry down to the last few seconds of ``max_elapsed`` looks
+        tidy but still SENDS a ``NON_IDEMPOTENT_NO_RETRY`` IMPORT_RESEARCH whose
+        result the client cannot wait for — the server may commit it anyway and
+        duplicate the sources. Running it unclamped instead would overshoot the
+        deadline the clamp exists to enforce. Both are worse than stopping.
+        """
+        clock = {"now": 0.0}
+        fake_rpc = _RecordingRpc(
+            [
+                # 1796 s of an 1800 s budget gone: 4 s left — positive (so the
+                # unguarded clamp would have dispatched) but under the floor.
+                _Advance(1796.0, RPCTimeoutError("Timed out")),
+                [[[["src_1"], "Source 1"]]],  # never reached
+            ],
+            clock=clock,
+        )
+        mock_source_lister = MagicMock()
+        mock_source_lister.list = AsyncMock(return_value=[])
+        research = ResearchAPI(fake_rpc, source_lister=mock_source_lister)
+
+        with (
+            patch.object(_research_mod.time, "monotonic", side_effect=lambda: clock["now"]),
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock),
+            caplog.at_level(logging.WARNING, logger="notebooklm._research"),
+            pytest.raises(RPCTimeoutError),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+                max_elapsed=1800,
+            )
+
+        # Exactly one attempt was sent — the retry was never dispatched.
+        assert fake_rpc.read_timeouts == [63.0]
+        assert "minimum viable attempt window" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_first_attempt_runs_even_with_no_budget_at_all(self):
+        """``max_elapsed=0`` still means "try once", not "do nothing".
+
+        The viability gate applies to retries only; degrading the first attempt
+        into a zero-second window would turn a documented one-shot idiom into a
+        guaranteed instant timeout.
+        """
+        fake_rpc = _RecordingRpc([[[["src_1"], "Source 1"]]])
+        mock_source_lister = MagicMock()
+        mock_source_lister.list = AsyncMock(return_value=[])
+        research = ResearchAPI(fake_rpc, source_lister=mock_source_lister)
+
+        imported = await research.import_sources_with_verification(
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+            max_elapsed=0,
+        )
+
+        assert imported == [{"id": "src_1", "title": "Source 1"}]
+        # Unclamped: the natural batch-scaled window, not 0.
+        assert fake_rpc.read_timeouts == [63.0]
 
     @pytest.mark.asyncio
     async def test_does_not_retry_non_timeout_error(self):
@@ -122,6 +286,214 @@ class TestImportSourcesWithVerification:
                 "nb_123",
                 "task_123",
                 [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert research.import_sources.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_recovers_failed_precondition_via_verified_success(self):
+        """Regression for #2187: a retry-time FAILED_PRECONDITION (gRPC 9) is
+        the server rejecting a second IMPORT_RESEARCH against a task it
+        already partially committed from a prior (client-timed-out) attempt
+        (documented in #1926 item F2b). When ``sources.list`` verifies every
+        requested URL already landed, this must resolve as success exactly
+        like the equivalent RPCTimeoutError case
+        (``test_skips_retry_when_server_state_shows_import_succeeded``)
+        instead of crashing the call.
+        """
+        baseline_src = MagicMock(id="src_pre", title="Pre-existing", url="https://pre.example.com")
+        new_src = MagicMock(id="src_new", title="Source 1", url="https://example.com")
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(
+            side_effect=[
+                [baseline_src],  # snapshot before import
+                [baseline_src, new_src],  # probe after rejection — URL is now there
+            ]
+        )
+        research.import_sources = AsyncMock(
+            side_effect=RPCError(
+                "The server rejected this request (failed precondition).", rpc_code=9
+            )
+        )
+
+        with patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep:
+            imported = await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert imported == [{"id": "src_new", "title": "Source 1"}]
+        # Single import attempt — no blind retry against the rejected task_id.
+        assert research.import_sources.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_does_not_blindly_retry_unverified_failed_precondition(self):
+        """Codex review finding for #2187: unlike RPCTimeoutError (where the
+        request may have partially applied before the response was lost),
+        FAILED_PRECONDITION means the server rejected THIS attempt's payload
+        outright — nothing from it committed. So when ``sources.list`` can't
+        verify the requested URLs already landed, retrying a filtered subset
+        against the same rejected task_id is unfounded speculation, not
+        evidence-based recovery. It must surface immediately instead of
+        looping through the retry/backoff budget.
+        """
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(return_value=[])  # nothing verified as new
+        research.import_sources = AsyncMock(
+            side_effect=RPCError(
+                "The server rejected this request (failed precondition).", rpc_code=9
+            )
+        )
+
+        with (
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+            pytest.raises(RPCError, match="failed precondition"),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert research.import_sources.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_timeout_then_failed_precondition_raises_without_third_attempt(self):
+        """Codex review finding for #2187: a timeout can legitimately filter
+        down to a smaller retry payload (the committed subset is dropped);
+        if THAT retry then comes back FAILED_PRECONDITION and the follow-up
+        probe can't verify the remainder landed, the loop must surface the
+        error rather than attempting a third, still-unfounded retry.
+        """
+        imported_src = MagicMock(id="src_1", title="Source 1", url="https://one.example.com")
+        sources = [
+            {"url": "https://one.example.com", "title": "Source 1"},
+            {"url": "https://two.example.com", "title": "Source 2"},
+        ]
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(
+            side_effect=[
+                [],  # baseline
+                [imported_src],  # post-timeout probe — 1 of 2 is visible
+                [imported_src],  # post-FAILED_PRECONDITION probe — no further progress
+            ]
+        )
+        research.import_sources = AsyncMock(
+            side_effect=[
+                RPCTimeoutError("Timed out", timeout_seconds=30.0),
+                RPCError("The server rejected this request (failed precondition).", rpc_code=9),
+            ]
+        )
+
+        with (
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+            pytest.raises(RPCError, match="failed precondition"),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                sources,
+                initial_delay=5,
+            )
+
+        # First (full) attempt, then one filtered retry — no third attempt.
+        assert research.import_sources.await_count == 2
+        mock_sleep.assert_awaited_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_does_not_retry_rpc_error_with_different_code(self):
+        """Only the documented FAILED_PRECONDITION (9) shares the recovery
+        path — any other rpc_code (or none) must surface immediately, same as
+        ``test_does_not_retry_non_timeout_error`` but specifically covering
+        a same-type RPCError with an unrelated status.
+        """
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(return_value=[])
+        research.import_sources = AsyncMock(side_effect=RPCError("Unauthenticated", rpc_code=16))
+
+        with (
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+            pytest.raises(RPCError, match="Unauthenticated"),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert research.import_sources.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_failed_precondition_reraises_even_when_probe_itself_raises(self):
+        """Companion to ``test_falls_back_to_retry_when_post_timeout_probe_raises``:
+        for RPCTimeoutError, a failed post-error probe falls back to the
+        legacy (blind) retry. For FAILED_PRECONDITION there is no legacy
+        retry to fall back to — a failed probe just means we never got the
+        verification evidence needed, so the original error must still
+        surface immediately rather than triggering a blind retry.
+        """
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(
+            side_effect=[
+                [],  # baseline
+                RPCError("probe down", rpc_code=14),  # post-error probe fails
+            ]
+        )
+        research.import_sources = AsyncMock(
+            side_effect=RPCError(
+                "The server rejected this request (failed precondition).", rpc_code=9
+            )
+        )
+
+        with (
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+            pytest.raises(RPCError, match="failed precondition"),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [{"url": "https://example.com", "title": "Source 1"}],
+            )
+
+        assert research.import_sources.await_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_report_only_failed_precondition_does_not_get_retry_allowance(self):
+        """Companion to ``test_report_only_import_bounded_retries_on_persistent_timeout``:
+        report-only imports (no URLs) have no verification path at all, so
+        RPCTimeoutError gets one bounded retry allowance there. FAILED_PRECONDITION
+        skips the probe block entirely (``requested_urls_norm`` is empty) and must
+        fail on the very first attempt — it never reaches that allowance.
+        """
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(return_value=[])
+        research.import_sources = AsyncMock(
+            side_effect=RPCError(
+                "The server rejected this request (failed precondition).", rpc_code=9
+            )
+        )
+
+        with (
+            patch.object(_research_mod.asyncio, "sleep", new_callable=AsyncMock) as mock_sleep,
+            pytest.raises(RPCError, match="failed precondition"),
+        ):
+            await research.import_sources_with_verification(
+                "nb_123",
+                "task_123",
+                [
+                    {
+                        "title": "Research Report",
+                        "report_markdown": "# Findings\n...",
+                        "result_type": 5,
+                    }
+                ],
+                initial_delay=1,
             )
 
         assert research.import_sources.await_count == 1
@@ -474,7 +846,7 @@ class TestImportSourcesWithVerification:
         assert research.import_sources.await_count == 2
         assert mock_source_lister.list.await_count == 3
         assert all(
-            awaited_call.kwargs.get("strict") is True
+            awaited_call.kwargs.get("strict") is False
             for awaited_call in mock_source_lister.list.await_args_list
         )
         assert research.import_sources.await_args_list[0].args[2] == sources
@@ -483,6 +855,35 @@ class TestImportSourcesWithVerification:
             {"url": "https://three.example.com", "title": "Source 3"},
         ]
         mock_sleep.assert_awaited_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_reconciliation_snapshots_tolerate_duplicate_row_collisions(self):
+        """Review regression: research probes must keep tolerant row semantics.
+
+        ``strict=True`` now rejects conflicting duplicate IDs for exact-count
+        callers. Research import recovery instead needs the first normalized
+        occurrence so a backend duplicate collision cannot disable the
+        idempotency baseline or turn a committed timeout into a blind retry.
+        """
+        new_src = MagicMock(id="src_new", title="Source 1", url="https://example.com")
+        research, _, mock_source_lister = _make_research()
+        mock_source_lister.list = AsyncMock(side_effect=[[], [new_src]])
+        research.import_sources = AsyncMock(
+            side_effect=RPCTimeoutError("Timed out", timeout_seconds=30.0)
+        )
+
+        imported = await research.import_sources_with_verification(
+            "nb_123",
+            "task_123",
+            [{"url": "https://example.com", "title": "Source 1"}],
+        )
+
+        assert imported == [{"id": "src_new", "title": "Source 1"}]
+        assert research.import_sources.await_count == 1
+        assert [call.kwargs for call in mock_source_lister.list.await_args_list] == [
+            {"strict": False},
+            {"strict": False},
+        ]
 
     @pytest.mark.asyncio
     async def test_all_requested_urls_already_present_skips_import_entirely(self):

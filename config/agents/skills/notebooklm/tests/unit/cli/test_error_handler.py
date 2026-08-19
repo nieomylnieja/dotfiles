@@ -32,6 +32,15 @@ from notebooklm.exceptions import (
 from notebooklm.types import GenerationStatus
 
 
+def _partial_upload(cause: Exception, *, source_id: str, stage: str) -> Exception:
+    """Mirror ``raise_partial_upload_failure()``: attach recovery context directly
+    to the real cause rather than wrapping it in a new exception type.
+    """
+    cause.source_id = source_id  # type: ignore[attr-defined]
+    cause.stage = stage  # type: ignore[attr-defined]
+    return cause
+
+
 class TestHandleErrorsExitCodes:
     """Test that exceptions produce correct exit codes."""
 
@@ -115,6 +124,99 @@ class TestHandleErrorsJsonOutput:
         assert data["error"] is True
         assert data["code"] == "RATE_LIMITED"
         assert "retry_after" not in data
+
+    @pytest.mark.parametrize(
+        ("cause", "expected_code"),
+        [
+            (RateLimitError("Too many requests", retry_after=30), "RATE_LIMITED"),
+            (AuthError("Session expired"), "AUTH_ERROR"),
+            (NetworkError("Connection reset"), "NETWORK_ERROR"),
+            (ValidationError("File type rejected"), "VALIDATION_ERROR"),
+        ],
+    )
+    def test_partial_upload_error_keeps_its_cause_category(self, capsys, cause, expected_code):
+        """A partial upload must not flatten to NOTEBOOKLM_ERROR.
+
+        The recovery context rides on the real cause as plain attributes rather
+        than a wrapper type, so the exception lands in whichever typed branch
+        already matched it — keeping its category and, with it, the re-auth hint /
+        retry hint / ``retry_after`` field.
+        """
+        with pytest.raises(SystemExit), handle_errors(json_output=True):
+            raise _partial_upload(cause, source_id="src_123", stage="upload_finalize")
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["code"] == expected_code
+        assert data["code"] != "NOTEBOOKLM_ERROR"
+
+    def test_partial_upload_error_preserves_retry_after(self, capsys):
+        """The cause-specific extras are untouched, not just the code."""
+        with pytest.raises(SystemExit), handle_errors(json_output=True):
+            raise _partial_upload(
+                RateLimitError("Too many requests", retry_after=30),
+                source_id="src_123",
+                stage="start_session",
+            )
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["code"] == "RATE_LIMITED"
+        assert data["retry_after"] == 30
+
+    @pytest.mark.parametrize(
+        ("cause", "expected_code"),
+        [
+            (ValidationError("File type rejected"), "VALIDATION_ERROR"),
+            (NetworkError("Connection reset"), "NETWORK_ERROR"),
+            (RateLimitError("Too many requests", retry_after=30), "RATE_LIMITED"),
+        ],
+    )
+    def test_partial_upload_json_keeps_category_and_recovery_together(
+        self, capsys, cause, expected_code
+    ):
+        """The typed branch's projection and the recovery context must coexist.
+
+        The category / ``retry_after`` projection comes from the typed branch; the
+        retained ``source_id`` / ``stage`` come from the attached attributes. Both
+        have to survive in the same envelope, or ``source add`` reports *why* it
+        failed without saying *what it left behind*.
+        """
+        with pytest.raises(SystemExit), handle_errors(json_output=True):
+            raise _partial_upload(cause, source_id="src_123", stage="upload_finalize")
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["code"] == expected_code
+        assert data["source_id"] == "src_123"
+        assert data["stage"] == "upload_finalize"
+        if isinstance(cause, RateLimitError):
+            assert data["retry_after"] == 30
+
+    def test_partial_upload_text_names_the_retained_source(self, capsys):
+        """Text mode must be actionable: which row was left, and how to drop it."""
+        with pytest.raises(SystemExit), handle_errors(json_output=False):
+            raise _partial_upload(
+                AuthError("Session expired"), source_id="src_123", stage="upload_finalize"
+            )
+
+        err = capsys.readouterr().err
+        assert "src_123" in err
+        assert "upload_finalize" in err
+        assert "notebooklm source delete src_123" in err
+        # The cause's own projection (here: the re-auth hint) still has to show.
+        assert "notebooklm login" in err
+        # ``stage`` is a location, not proof of transfer — never claim bytes moved.
+        assert "uploaded" not in err
+
+    def test_ordinary_error_gets_no_retained_source_context(self, capsys):
+        """The recovery block is opt-in: an error with no attached ``source_id``
+        must emit exactly the envelope it always did.
+        """
+        with pytest.raises(SystemExit), handle_errors(json_output=True):
+            raise AuthError("Session expired")
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["code"] == "AUTH_ERROR"
+        assert "source_id" not in data
+        assert "stage" not in data
 
     def test_rpc_error_verbose_includes_method_id(self, capsys):
         """RPCError with verbose=True should include method_id in JSON."""
@@ -558,3 +660,67 @@ class TestEmitCancelledAndExit:
         data = json.loads(captured.out)
         assert data["task_id"] == "task_abc"
         assert data["resume_hint"] == "notebooklm artifact poll task_abc"
+
+
+def test_unconfirmed_create_overrides_the_typed_branch_retry_advice(capsys):
+    """The CLI must not tell a user to retry an unresolved create (#2220).
+
+    ``handle_errors`` dispatches on exception TYPE, and a probe re-raises its
+    transport/auth failure unchanged — so a marked ``RateLimitError`` lands in
+    the rate-limit branch and is told "Retry after Ns", a marked ``AuthError``
+    is told to re-login and retry, a marked ``NetworkError`` to try again. Each
+    is the duplicate the marker exists to prevent. The CLI has its own
+    ``except`` ladder rather than routing through ``_app.errors.classify``, so
+    the classifier fix does not reach it.
+
+    The machine-readable ``code`` is overridden too, not merely annotated: a
+    script keying on ``RATE_LIMITED`` would otherwise back off and retry
+    exactly as the message tells it not to.
+    """
+    from notebooklm._idempotency import mark_unconfirmed
+
+    for error in (
+        RateLimitError("Too many requests", retry_after=30),
+        AuthError("Token expired"),
+        NetworkError("Connection failed"),
+    ):
+        with pytest.raises(SystemExit), handle_errors(json_output=True):
+            raise mark_unconfirmed(error)
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["code"] == "UNCONFIRMED_WRITE", f"{type(error).__name__} kept its own code"
+        assert data["unconfirmed"] is True
+        # The branch's own text carries the advice ("Retry after 30s"), so it
+        # must be REPLACED, not merely annotated — and ``retry_after`` is an
+        # instruction in machine-readable form, so it must not survive either.
+        # ``_output_error`` serializes ``extra`` but NOT ``hint``, which is why
+        # the hint is carried in ``extra`` for JSON.
+        assert "Retry after" not in data["message"]
+        assert "retry_after" not in data
+        assert "retrying blind can create a duplicate" in data["hint"]
+
+
+def test_unconfirmed_create_note_reaches_human_output(capsys):
+    """Text mode gets the same correction, appended rather than replacing."""
+    from notebooklm._idempotency import mark_unconfirmed
+
+    with pytest.raises(SystemExit), handle_errors():
+        raise mark_unconfirmed(NetworkError("Connection failed"))
+
+    out = capsys.readouterr()
+    combined = (out.out + out.err).lower()
+    assert "retrying blind can create a duplicate" in combined
+    # Once, not twice: text mode prints the hint after the message, so setting
+    # both would repeat the whole paragraph.
+    assert combined.count("retrying blind can create a duplicate") == 1
+    assert "could not be confirmed" in combined
+
+
+def test_ordinary_errors_keep_their_typed_branch_code(capsys):
+    """The override is opt-in — unmarked failures keep their own guidance."""
+    with pytest.raises(SystemExit), handle_errors(json_output=True):
+        raise RateLimitError("Too many requests", retry_after=30)
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["code"] == "RATE_LIMITED"
+    assert "unconfirmed" not in data

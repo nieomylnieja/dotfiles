@@ -258,6 +258,124 @@ def test_source_add_error_with_transient_cause_stays_fatal() -> None:
         assert batch_item_is_fatal(e) is True, f"code {code} must abort the batch"
 
 
+def test_unconfirmed_source_add_error_is_fatal_and_not_retriable() -> None:
+    """An UNCONFIRMED create must not be isolated as a per-item input error (#2220).
+
+    The probe could not determine whether the create committed, so the write may
+    be live. Two classifications are actively harmful here, and the plain
+    ``SourceAddError`` shape lands on both depending on the cause:
+
+    * ``SOURCE_ADD`` is documented "non-fatal per-item", so a batch add isolates
+      the item and continues — turning one unconfirmed write into one per
+      remaining item against a drifted backend — and its hint says "fix the
+      input and retry" (REST 422), inviting the manual re-add that duplicates.
+    * ``SERVER`` is *retriable* with the hint "retry after a short delay", which
+      the marker must override even though the probe's own failure can carry a
+      transient ``rpc_code`` that would otherwise select it.
+
+    The second case is the one that would regress silently: without the marker
+    it depends on whether the decoder happened to attach a code.
+    """
+    from notebooklm._app.source_batch import batch_item_is_fatal
+    from notebooklm._idempotency import mark_unconfirmed
+
+    for cause in (
+        # The realistic drift shape: the strict list decoder raises bare.
+        exc.RPCError("Could not list sources for nb: API response structure changed"),
+        # ...and the shape that would otherwise be classified SERVER/retriable.
+        exc.RPCError("transient", rpc_code=14),
+    ):
+        e = mark_unconfirmed(exc.SourceAddError("http://x", cause=cause))
+        result = classify(e)
+        assert result.category is ErrorCategory.RPC
+        assert result.category is not ErrorCategory.SOURCE_ADD
+        assert result.retriable is False, "must never advertise a retry"
+        assert batch_item_is_fatal(e) is True, "must abort the batch, not isolate"
+    # No hint may contradict the message's "do not blindly retry".
+    assert CATEGORY_HINTS[ErrorCategory.RPC] is None
+
+
+@pytest.mark.parametrize(
+    "transport_exc",
+    [
+        exc.ServerError("probe 503"),
+        exc.RateLimitError("probe 429"),
+        exc.NetworkError("probe connection reset"),
+        exc.AuthError("probe auth expired"),
+    ],
+    ids=["server", "rate_limited", "network", "auth"],
+)
+def test_unconfirmed_marker_overrides_a_retriable_transport_category(transport_exc) -> None:
+    """The probe's *transport* branch is unconfirmable too (#2220 review).
+
+    The probes re-raise transport failures unchanged rather than wrapping them,
+    so the marker rides on a ``ServerError`` / ``RateLimitError`` /
+    ``NetworkError`` / ``AuthError``. Three of those are retriable with the hint
+    "retry after a short delay" — and a caller acting on that retries the ADD,
+    not the probe, producing exactly the duplicate this change prevents. The
+    create's outcome being unknown has to dominate the transport type.
+
+    Without the marker these classify as SERVER / RATE_LIMITED / NETWORK / AUTH,
+    so this is the assertion that would fail if the ``_unconfirmed(exc)`` call
+    were dropped from any probe's transport branch.
+    """
+    from notebooklm._app.source_batch import batch_item_is_fatal
+    from notebooklm._idempotency import mark_unconfirmed
+
+    plain = classify(transport_exc)
+    marked = classify(mark_unconfirmed(transport_exc))
+
+    assert marked.category is ErrorCategory.RPC
+    assert marked.retriable is False
+    assert batch_item_is_fatal(transport_exc) is True
+    # The unmarked classification is genuinely different — otherwise this test
+    # would pass for reasons unrelated to the marker.
+    assert plain.category is not ErrorCategory.RPC
+
+
+def test_unmarked_transport_errors_keep_their_own_category() -> None:
+    """The marker is opt-in; ordinary transport failures are untouched."""
+    assert classify(exc.ServerError("5xx")).category is ErrorCategory.SERVER
+    assert classify(exc.ServerError("5xx")).retriable is True
+    assert classify(exc.AuthError("expired")).category is ErrorCategory.AUTH
+
+
+def test_unmarked_source_add_error_is_still_a_per_item_input_failure() -> None:
+    """The marker is the only thing that diverts; ordinary adds are unaffected."""
+    from notebooklm._app.source_batch import batch_item_is_fatal
+
+    e = exc.SourceAddError("http://x", cause=exc.RPCError("bad url", rpc_code=3))
+    assert classify(e).category is ErrorCategory.SOURCE_ADD
+    assert batch_item_is_fatal(e) is False
+
+
+@pytest.mark.parametrize(
+    ("cause", "category", "retriable"),
+    [
+        (exc.NetworkError("offline"), ErrorCategory.NETWORK, True),
+        (exc.ServerError("unavailable"), ErrorCategory.SERVER, True),
+        (exc.AuthError("expired"), ErrorCategory.AUTH, False),
+        (exc.RateLimitError("slow down"), ErrorCategory.RATE_LIMITED, True),
+        (exc.ValidationError("rejected file"), ErrorCategory.VALIDATION, False),
+    ],
+)
+def test_partial_upload_recovery_attributes_do_not_change_classification(
+    cause: Exception, category: ErrorCategory, retriable: bool
+) -> None:
+    """``raise_partial_upload_failure()`` attaches ``source_id``/``stage`` directly
+    to the real cause rather than wrapping it in a new type — confirm that doing
+    so does not perturb ``_category_for``'s isinstance dispatch for any of the
+    five typed causes a post-registration upload failure can be.
+    """
+    cause.source_id = "source-1"  # type: ignore[attr-defined]
+    cause.stage = "upload_finalize"  # type: ignore[attr-defined]
+
+    result = classify(cause)
+
+    assert result.category is category
+    assert result.retriable is retriable
+
+
 def test_source_mutation_error_keeps_cli_attributes() -> None:
     """Re-basing onto NotebookLMError must not drop the CLI-read attributes."""
     err = SourceMutationError(

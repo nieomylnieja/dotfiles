@@ -30,16 +30,22 @@ import pytest
 from notebooklm._auth.browser_capture import (
     BrowserCapturePlan,
     accepted_login_hosts,
-    run_browser_capture,
-    url_matches_base_host,
-)
-from notebooklm._auth.login_wait_trace import (
     log_observed_navigations,
+    run_browser_capture,
     safe_page_url,
     trace_url,
+    url_matches_base_host,
 )
 
-TRACE_LOGGER = "notebooklm._auth.login_wait_trace"
+# The tracing used to live in ``_auth/login_wait_trace.py``, a leaf that existed
+# only to keep the capture core under the ADR-0008 line cap. ADR-0033 PR 4.1
+# absorbed it into ``browser_capture``, which is now both the definition site and
+# the logger these records carry — a logger follows its defining module, so the
+# two names below are deliberately the same string. They are kept as separate
+# constants because the assertions they gate mean different things: TRACE_LOGGER
+# marks "emitted by the tracing helpers", CAPTURE_LOGGER "emitted by the capture
+# core around the wait".
+TRACE_LOGGER = "notebooklm._auth.browser_capture"
 CAPTURE_LOGGER = "notebooklm._auth.browser_capture"
 
 

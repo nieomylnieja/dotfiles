@@ -1,5 +1,6 @@
 """Unit tests for types module dataclasses and parsing."""
 
+import dataclasses
 import os
 import pickle
 import time
@@ -13,14 +14,17 @@ from notebooklm.types import (
     Artifact,
     ArtifactType,
     AskResult,
+    ChatGoal,
     ChatMode,
     ChatReference,
+    ChatResponseLength,
     ConversationTurn,
     GenerationStatus,
     Note,
     Notebook,
     NotebookDescription,
     ReportSuggestion,
+    SharePermission,
     Source,
     SourceFulltext,
     SourceType,
@@ -322,6 +326,34 @@ def test_representative_public_dataclasses_pickle_round_trip():
         assert pickle.loads(pickle.dumps(enum_member)) is enum_member
 
 
+def _notebook_meta(*, user_role=1, has_sharing=False):
+    """Build a ``data[5]`` metadata block in the live 16-slot shape.
+
+    Copied from a real ``LIST_NOTEBOOKS`` response (see
+    ``tests/cassettes/notebooks_list.yaml``): slot 0 is ``userRole``, slot 1 is
+    the "has any sharing" flag, slot 5 is the last-modified instant, slot 8 the
+    creation instant and slot 12 ``isPublic``.
+    """
+    return [
+        user_role,
+        has_sharing,
+        True,
+        None,
+        None,
+        [1768311605, 661578000],
+        1,
+        False,
+        [1768174413, 819385000],
+        None,
+        None,
+        None,
+        has_sharing,
+        True,
+        1,
+        False,
+    ]
+
+
 class TestNotebook:
     def test_from_api_response_basic(self):
         """Test parsing basic notebook data."""
@@ -332,6 +364,66 @@ class TestNotebook:
         assert notebook.title == "My Notebook"
         assert notebook.sources_count == 0
         assert notebook.is_owner is True
+        assert notebook.emoji == "📓"
+
+    def test_from_api_response_decodes_project_metadata(self):
+        data = [
+            "Project Metadata",
+            None,
+            "nb_project",
+            "🧬",
+            None,
+            None,
+            None,
+            [[2, "You are a science tutor"], [4]],
+            [False],
+            [True, True, False],
+            None,
+            [["session-1"], ["session-2"]],
+        ]
+
+        notebook = Notebook.from_api_response(data, include_chat_settings=True)
+
+        assert notebook.emoji == "🧬"
+        assert notebook.premium_features is not None
+        assert notebook.premium_features.can_edit_advanced_settings is True
+        assert notebook.premium_features.can_edit_guidebook_config is True
+        assert notebook.premium_features.can_view_analytics is False
+        assert [session.id for session in notebook.chat_sessions] == ["session-1", "session-2"]
+        assert notebook.chat_settings is not None
+        assert notebook.chat_settings.goal is ChatGoal.CUSTOM
+        assert notebook.chat_settings.response_length is ChatResponseLength.LONGER
+        assert notebook.chat_settings.custom_prompt == "You are a science tutor"
+
+    def test_from_api_response_null_chat_config_is_default(self):
+        data = ["Defaults", None, "nb_default", None, None, None, None, None]
+        notebook = Notebook.from_api_response(data, include_chat_settings=True)
+
+        assert notebook.chat_settings is not None
+        assert notebook.chat_settings.goal is ChatGoal.DEFAULT
+        assert notebook.chat_settings.response_length is ChatResponseLength.DEFAULT
+        assert notebook.chat_settings.custom_prompt is None
+
+    def test_list_projection_does_not_claim_default_chat_settings(self):
+        list_data = ["Configured", None, "nb-1", None, None, None, None, None]
+        get_data = [
+            "Configured",
+            None,
+            "nb-1",
+            None,
+            None,
+            None,
+            None,
+            [[2, "Configured persona"], [4]],
+        ]
+
+        listed = Notebook.from_api_response(list_data)
+        fetched = Notebook.from_api_response(get_data, include_chat_settings=True)
+
+        assert listed.chat_settings is None
+        assert fetched.chat_settings is not None
+        assert fetched.chat_settings.goal is ChatGoal.CUSTOM
+        assert fetched.chat_settings.custom_prompt == "Configured persona"
 
     def test_from_api_response_counts_sources(self):
         """Test parsing notebook source count from embedded source entries."""
@@ -351,19 +443,19 @@ class TestNotebook:
         """Test parsing notebook with timestamp.
 
         ``created_at`` is read from ``meta[8]`` (the creation slot), so the
-        creation epoch is placed there. ``meta[5]`` carries the now-distinct
-        last-modified slot.
+        creation epoch is placed there. ``meta[5]`` carries the distinct
+        ``lastViewedTime`` slot.
         """
         created_ts = 1704067200  # 2024-01-01 00:00:00 UTC
-        modified_ts = 1704153600  # 2024-01-02 00:00:00 UTC
+        viewed_ts = 1704153600  # 2024-01-02 00:00:00 UTC
         data = [
             "Timestamped Notebook",
             [],
             "nb_456",
             "📘",
             None,
-            # meta[5] = modified slot, meta[8] = creation slot
-            [None, None, None, None, None, [modified_ts, 0], None, None, [created_ts, 0]],
+            # meta[5] = lastViewedTime slot, meta[8] = creation slot
+            [None, None, None, None, None, [viewed_ts, 0], None, None, [created_ts, 0]],
         ]
         notebook = Notebook.from_api_response(data)
 
@@ -371,44 +463,47 @@ class TestNotebook:
         assert notebook.created_at is not None
         # Check timestamp value rather than year (timezone-independent)
         assert notebook.created_at.timestamp() == created_ts
-        assert notebook.modified_at is not None
-        assert notebook.modified_at.timestamp() == modified_ts
+        assert notebook.last_viewed_at is not None
+        assert notebook.last_viewed_at.timestamp() == viewed_ts
+        # The deprecated alias mirrors it (#2126).
+        assert notebook.modified_at == notebook.last_viewed_at
 
-    def test_from_api_response_created_modified_not_swapped(self):
-        """``created_at`` is ``meta[8]`` and ``modified_at`` is ``meta[5]``.
+    def test_from_api_response_created_and_viewed_not_swapped(self):
+        """``created_at`` is ``meta[8]`` and ``last_viewed_at`` is ``meta[5]``.
 
         Regression pin for the swapped-slots bug: the metadata block exposes the
-        creation instant at ``data[5][8][0]`` (pinned across edits) and the
-        last-modified instant at ``data[5][5][0]`` (advances on each edit). The
-        pre-fix code read ``meta[5]`` for ``created_at`` and so surfaced the
-        last-modified time as the creation time.
+        creation instant at ``data[5][8][0]`` (pinned across create / share /
+        rename / read) and ``lastViewedTime`` at ``data[5][5][0]``. The pre-fix
+        code read ``meta[5]`` for ``created_at`` and so surfaced a view time as
+        the creation time.
         """
         created_ts = 1767921609  # 2026-01-09 — earlier (true creation)
-        modified_ts = 1768963937  # 2026-01-21 — later (last edit)
+        viewed_ts = 1768963937  # 2026-01-21 — later (last view)
         data = [
             "Swap Probe Notebook",
             [],
             "nb_swap",
             "📓",
             None,
-            [None, None, None, None, None, [modified_ts, 1], None, None, [created_ts, 2]],
+            [None, None, None, None, None, [viewed_ts, 1], None, None, [created_ts, 2]],
         ]
         notebook = Notebook.from_api_response(data)
 
         # created_at == the meta[8] instant (NOT meta[5])
         assert notebook.created_at is not None
         assert notebook.created_at.timestamp() == created_ts
-        # modified_at == the meta[5] instant
-        assert notebook.modified_at is not None
-        assert notebook.modified_at.timestamp() == modified_ts
-        # The two are distinct and ordered created < modified (sanity).
-        assert notebook.created_at < notebook.modified_at
+        # last_viewed_at == the meta[5] instant
+        assert notebook.last_viewed_at is not None
+        assert notebook.last_viewed_at.timestamp() == viewed_ts
+        assert notebook.modified_at == notebook.last_viewed_at
+        # The two are distinct and ordered created < viewed (sanity).
+        assert notebook.created_at < notebook.last_viewed_at
 
     def test_from_api_response_short_meta_leaves_both_timestamps_none(self):
         """A ``meta`` block too short to carry the slots soft-degrades to None.
 
         ``meta[8]`` is absent (len 6) so ``created_at`` is None; ``meta[5]`` is
-        also degraded here (None payload) so ``modified_at`` is None too.
+        also degraded here (None payload) so ``last_viewed_at`` is None too.
         """
         data = [
             "Short Meta Notebook",
@@ -421,29 +516,31 @@ class TestNotebook:
         notebook = Notebook.from_api_response(data)
 
         assert notebook.created_at is None
+        assert notebook.last_viewed_at is None
         assert notebook.modified_at is None
 
-    def test_from_api_response_short_meta_keeps_modified_but_not_created(self):
+    def test_from_api_response_short_meta_keeps_viewed_but_not_created(self):
         """A ``meta`` block carrying ``meta[5]`` but too short for ``meta[8]``.
 
         Locks the length-guard policy: ``created_at`` (``meta[8]``) soft-degrades
         to None rather than falling back to ``meta[5]`` (which would re-introduce
-        the swap bug), while ``modified_at`` (``meta[5]``) is still populated.
+        the swap bug), while ``last_viewed_at`` (``meta[5]``) is still populated.
         """
-        modified_ts = 1768311605
+        viewed_ts = 1768311605
         data = [
-            "Modified-Only Notebook",
+            "View-Only Notebook",
             [],
-            "nb_modonly",
+            "nb_viewonly",
             "📓",
             None,
-            [None, None, None, None, None, [modified_ts, 0]],  # len 6: meta[5] set, meta[8] absent
+            [None, None, None, None, None, [viewed_ts, 0]],  # len 6: meta[5] set, meta[8] absent
         ]
         notebook = Notebook.from_api_response(data)
 
         assert notebook.created_at is None
-        assert notebook.modified_at is not None
-        assert notebook.modified_at.timestamp() == modified_ts
+        assert notebook.last_viewed_at is not None
+        assert notebook.last_viewed_at.timestamp() == viewed_ts
+        assert notebook.modified_at == notebook.last_viewed_at
 
     def test_from_api_response_missing_meta_leaves_both_timestamps_none(self):
         """No metadata block at all → both timestamps None."""
@@ -451,6 +548,7 @@ class TestNotebook:
         notebook = Notebook.from_api_response(data)
 
         assert notebook.created_at is None
+        assert notebook.last_viewed_at is None
         assert notebook.modified_at is None
 
     def test_from_api_response_strips_thought_prefix(self):
@@ -460,19 +558,173 @@ class TestNotebook:
 
         assert notebook.title == "Actual Title"
 
-    def test_from_api_response_shared_notebook(self):
-        """Test parsing shared notebook (is_owner=False)."""
+    @pytest.mark.parametrize(
+        ("user_role", "has_sharing", "expected_role", "expected_is_owner"),
+        [
+            # Owner of a private notebook — the pre-#2125 code got this right.
+            (1, False, SharePermission.OWNER, True),
+            # Owner who shared the notebook with a colleague. The old code read
+            # the has-sharing slot and reported is_owner=False here; this is the
+            # headline regression #2125 fixes.
+            (1, True, SharePermission.OWNER, True),
+            # Collaborator with edit rights (proto WRITER).
+            (2, True, SharePermission.EDITOR, False),
+            # Collaborator with read-only rights (proto READER). Observed live
+            # in tests/cassettes/notebooks_list.yaml ("Jane Austen").
+            (3, True, SharePermission.VIEWER, False),
+        ],
+    )
+    def test_from_api_response_decodes_user_role(
+        self, user_role, has_sharing, expected_role, expected_is_owner
+    ):
+        """``meta[0]`` (``userRole``) drives ``role`` and therefore ``is_owner``.
+
+        The metadata block is the full 16-slot shape captured from a live
+        ``LIST_NOTEBOOKS`` response, so the positional descents are exercised
+        against a realistic row rather than a hand-shortened one.
+        """
         data = [
-            "Shared Notebook",
+            "A Notebook",
             [],
-            "nb_shared",
+            "nb_role",
             "📓",
             None,
-            [None, True],  # data[5][1] = True means shared
+            _notebook_meta(user_role=user_role, has_sharing=has_sharing),
         ]
+
         notebook = Notebook.from_api_response(data)
 
+        assert notebook.role is expected_role
+        assert notebook.is_owner is expected_is_owner
+
+    @pytest.mark.parametrize("raw_role", [None, 0, 4, 99, True, False, "1", []])
+    def test_from_api_response_unmapped_role_degrades_to_none(self, raw_role):
+        """Absent / unrecognized ``userRole`` codes report an unknown role.
+
+        ``is_owner`` keeps its historical optimistic default so a malformed row
+        soft-degrades instead of mislabelling every entry. ``True``/``False`` are
+        included because ``bool`` is an ``int`` subclass — the neighbouring
+        has-sharing slot's shape must not be misread as ``OWNER``.
+        """
+        data = [
+            "A Notebook",
+            [],
+            "nb_role",
+            "📓",
+            None,
+            _notebook_meta(user_role=raw_role),
+        ]
+
+        notebook = Notebook.from_api_response(data)
+
+        assert notebook.role is None
+        assert notebook.is_owner is True
+
+    @pytest.mark.parametrize("raw_role", [0, 4, 99, True, False, "1", []])
+    def test_from_api_response_unmapped_role_warns(self, caplog, raw_role):
+        """A present-but-unmapped ``userRole`` is drift, so it degrades LOUDLY.
+
+        This WARNING is the tripwire for the repo's #1 breakage class (Google
+        changing the wire shape). ``True``/``False`` matter most: ``bool`` is an
+        ``int`` subclass, so a slot slip onto the neighbouring has-sharing flag
+        would otherwise decode as a confident ``OWNER`` (#1485 policy).
+        """
+        import logging
+
+        data = ["A Notebook", [], "nb_role", "📓", None, _notebook_meta(user_role=raw_role)]
+        with caplog.at_level(logging.WARNING, logger="notebooklm"):
+            notebook = Notebook.from_api_response(data)
+
+        assert notebook.role is None
+        assert any(
+            r.levelno == logging.WARNING and "userRole slot unmapped" in r.message
+            for r in caplog.records
+        ), f"no drift WARNING for raw_role={raw_role!r}"
+
+    def test_from_api_response_absent_role_is_silent(self, caplog):
+        """A ``None`` slot / missing meta block is absence, not drift — no WARNING."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="notebooklm"):
+            null_slot = Notebook.from_api_response(
+                ["A Notebook", [], "nb_role", "📓", None, _notebook_meta(user_role=None)]
+            )
+            no_meta = Notebook.from_api_response(["No Meta", [], "nb_nometa", "📓"])
+
+        assert null_slot.role is None
+        assert no_meta.role is None
+        assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+    def test_from_api_response_ignores_has_sharing_slot(self):
+        """``meta[1]`` no longer participates in the ownership decision.
+
+        Pre-#2125 this slot *was* the ownership signal, so pinning both
+        polarities against a fixed OWNER role is the regression guard.
+        """
+        roles = {
+            has_sharing: Notebook.from_api_response(
+                [
+                    "A Notebook",
+                    [],
+                    "nb_role",
+                    "📓",
+                    None,
+                    _notebook_meta(user_role=1, has_sharing=has_sharing),
+                ]
+            )
+            for has_sharing in (True, False)
+        }
+
+        assert roles[True].role is roles[False].role is SharePermission.OWNER
+        assert roles[True].is_owner is roles[False].is_owner is True
+
+    def test_is_owner_is_derived_from_role_on_construction(self):
+        """``Notebook(role=..., is_owner=...)`` cannot hold an inconsistent pair.
+
+        ``is_owner`` stays a dataclass *field* (the MCP/REST serializer emits
+        fields only), so the invariant is enforced in ``__post_init__`` rather
+        than by turning it into a property.
+        """
+        assert Notebook(id="a", title="t", role=SharePermission.OWNER).is_owner is True
+        assert Notebook(id="a", title="t", role=SharePermission.EDITOR).is_owner is False
+        assert Notebook(id="a", title="t", role=SharePermission.VIEWER).is_owner is False
+        # A contradictory explicit boolean is corrected, not preserved.
+        assert (
+            Notebook(id="a", title="t", role=SharePermission.VIEWER, is_owner=True).is_owner
+            is False
+        )
+
+    def test_is_owner_tracks_role_reassigned_after_construction(self):
+        """``Notebook`` is mutated in place elsewhere, so the invariant must survive it.
+
+        ``_app.notebooks._backfill_created_timestamps`` already assigns to a
+        live ``Notebook``, so a construction-only hook would let ``is_owner`` go
+        stale the moment anyone assigned ``role``.
+        """
+        notebook = Notebook(id="a", title="t", role=SharePermission.OWNER)
+        assert notebook.is_owner is True
+
+        notebook.role = SharePermission.VIEWER
         assert notebook.is_owner is False
+
+        notebook.role = SharePermission.OWNER
+        assert notebook.is_owner is True
+
+        # Clearing the role leaves the last derived value rather than guessing.
+        notebook.role = None
+        assert notebook.is_owner is True
+
+    def test_is_owner_is_untouched_when_role_is_unknown(self):
+        """With no role stated, the caller's explicit ``is_owner`` still wins."""
+        assert Notebook(id="a", title="t").is_owner is True
+        assert Notebook(id="a", title="t", is_owner=False).is_owner is False
+
+    def test_from_api_response_missing_meta_block_reports_unknown_role(self):
+        """A row with no metadata block states no role, and stays is_owner=True."""
+        notebook = Notebook.from_api_response(["No Meta", [], "nb_nometa", "📓"])
+
+        assert notebook.role is None
+        assert notebook.is_owner is True
 
     def test_from_api_response_empty_data(self):
         """Test parsing with minimal data."""
@@ -486,8 +738,8 @@ class TestNotebook:
     def test_from_api_response_invalid_timestamp(self):
         """Test parsing with invalid timestamp data.
 
-        ``created_at`` reads ``meta[8]`` and ``modified_at`` reads ``meta[5]``;
-        both invalid payloads soft-degrade to ``None``.
+        ``created_at`` reads ``meta[8]`` and ``last_viewed_at`` reads
+        ``meta[5]``; both invalid payloads soft-degrade to ``None``.
         """
         data = [
             "Notebook",
@@ -500,6 +752,7 @@ class TestNotebook:
         notebook = Notebook.from_api_response(data)
 
         assert notebook.created_at is None
+        assert notebook.last_viewed_at is None
         assert notebook.modified_at is None
 
     def test_from_api_response_out_of_range_timestamp(self):
@@ -513,12 +766,13 @@ class TestNotebook:
             [None, None, None, None, None, [1704067200, 0], None, None, [1704067200, 0]],
         ]
 
-        # Both the creation slot (meta[8]) and modified slot (meta[5]) overflow.
+        # Both the creation slot (meta[8]) and lastViewedTime slot (meta[5]) overflow.
         data[5][8][0] = float("inf")
         data[5][5][0] = float("inf")
         notebook = Notebook.from_api_response(data)
 
         assert notebook.created_at is None
+        assert notebook.last_viewed_at is None
         assert notebook.modified_at is None
 
     def test_from_api_response_non_string_title(self):
@@ -802,6 +1056,7 @@ class TestSource:
             (3, SourceType.PDF),
             (4, SourceType.PASTED_TEXT),
             (5, SourceType.WEB_PAGE),
+            (6, SourceType.POWERPOINT),
             (8, SourceType.MARKDOWN),
             (9, SourceType.YOUTUBE),
             (10, SourceType.MEDIA),
@@ -827,6 +1082,34 @@ class TestSource:
         assert source.kind == expected_kind
         # Also verify str comparison works
         assert source.kind == expected_kind.value
+
+    def test_pptx_row_decodes_without_unknown_type_warning(self):
+        """A constructed row matching #2137 decodes to POWERPOINT, no warning (#2137).
+
+        Constructed, not captured: the slots come from the field values #2137
+        reports (``type_code=6``; the PowerPoint MIME at ``metadata[19]``). The
+        MIME is included because the wire carries it and it must NOT re-route
+        the code the way the overloaded ``14`` does.
+
+        ``UnknownTypeWarning`` is emitted on ``.kind`` access, not at
+        construction, so the property is evaluated INSIDE the filter — and the
+        warn-once set is cleared first, otherwise a stale entry would suppress
+        the warning and hide a regression.
+        """
+        from notebooklm.types import _warned_source_types
+
+        pptx_mime = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        metadata: list = [None] * 20
+        metadata[4] = 6
+        metadata[19] = pptx_mime
+        data = [[[["src_pptx"], "Deck.pptx", metadata]]]
+
+        _warned_source_types.discard(6)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UnknownTypeWarning)
+            kind = Source.from_api_response(data).kind
+
+        assert kind is SourceType.POWERPOINT
 
     def test_from_api_response_empty_data_raises(self):
         """Test that empty data raises ValueError."""
@@ -884,19 +1167,21 @@ class TestSource:
         assert source.status == SourceStatus.ERROR
         assert source.is_error is True
 
-    def test_from_api_response_status_defaults_ready_without_block(self):
-        """A row without a status block keeps the historical READY default."""
+    def test_from_api_response_status_is_unknown_without_block(self):
+        """A row without a status block must not assert that the source is ready."""
         from notebooklm.rpc.types import SourceStatus
 
         # Medium-nested entry with no status block at index 3.
         data = [[["src_no_status"], "No Status", [None, None, None, None, 5]]]
         source = Source.from_api_response(data)
 
-        assert source.status == SourceStatus.READY
+        assert source.status == SourceStatus.UNKNOWN
+        assert source.is_ready is False
 
-        # Flat shape also defaults to READY.
+        # Flat shapes without a status block fail closed too.
         flat = Source.from_api_response(["src_flat", "Flat"])
-        assert flat.status == SourceStatus.READY
+        assert flat.status == SourceStatus.UNKNOWN
+        assert flat.is_ready is False
 
     def test_from_api_response_matches_listing_path(self):
         """``from_api_response`` and the ``GET_NOTEBOOK`` listing path produce
@@ -1156,6 +1441,12 @@ class TestSourceTypeCompatMapping:
         assert SourceType.EPUB in _SOURCE_TYPE_COMPAT_MAP
         assert _SOURCE_TYPE_COMPAT_MAP[SourceType.EPUB] == "text_file"
 
+    def test_powerpoint_maps_to_text_file(self):
+        """POWERPOINT uses the legacy ``text_file`` compatibility label (#2137)."""
+        from notebooklm.types import _SOURCE_TYPE_COMPAT_MAP
+
+        assert _SOURCE_TYPE_COMPAT_MAP[SourceType.POWERPOINT] == "text_file"
+
 
 class TestSourceKindProperty:
     """Tests for the Source.kind property."""
@@ -1178,6 +1469,14 @@ class TestSourceKindProperty:
         """Test that kind returns UNKNOWN for None type code."""
         source = Source(id="x", _type_code=None)
         assert source.kind == SourceType.UNKNOWN
+
+    def test_kind_unknown_for_wire_unknown_type_code_without_warning(self):
+        """Backend enum value 0 is UNKNOWN/unset, not schema drift (#2138)."""
+        source = Source(id="x", _type_code=0)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UnknownTypeWarning)
+            assert source.kind is SourceType.UNKNOWN
 
     def test_kind_unknown_for_unrecognized_type_code(self):
         """Test that kind returns UNKNOWN for unrecognized type codes."""
@@ -1501,33 +1800,64 @@ class TestArtifact:
     def test_is_completed_property(self):
         """Test is_completed property."""
         completed = Artifact.from_api_response(["id", "title", 1, None, 3])
-        processing = Artifact.from_api_response(["id", "title", 1, None, 1])
+        processing = Artifact.from_api_response(["id", "title", 1, None, 2])
 
         assert completed.is_completed is True
         assert processing.is_completed is False
 
     def test_is_processing_property(self):
-        """Test is_processing property."""
-        processing = Artifact.from_api_response(["id", "title", 1, None, 1])
+        """is_processing is code 2 (ARTIFACT_STATUS_PROCESSING) — #2127."""
+        processing = Artifact.from_api_response(["id", "title", 1, None, 2])
+        pending = Artifact.from_api_response(["id", "title", 1, None, 1])
         completed = Artifact.from_api_response(["id", "title", 1, None, 3])
 
         assert processing.is_processing is True
+        assert pending.is_processing is False
         assert completed.is_processing is False
 
     def test_is_pending_property(self):
-        """Test is_pending property for status=2 (transitional state)."""
-        pending = Artifact.from_api_response(["id", "title", 1, None, 2])
-        processing = Artifact.from_api_response(["id", "title", 1, None, 1])
+        """is_pending is code 1 (ARTIFACT_STATUS_INITIALIZED) — #2127."""
+        pending = Artifact.from_api_response(["id", "title", 1, None, 1])
+        processing = Artifact.from_api_response(["id", "title", 1, None, 2])
         completed = Artifact.from_api_response(["id", "title", 1, None, 3])
 
         assert pending.is_pending is True
         assert processing.is_pending is False
         assert completed.is_pending is False
 
+    def test_predicate_table_for_every_status_code(self):
+        """Every code's full ``is_*`` answer set, pinned as a table (#2127).
+
+        A bare "the two are mutually exclusive" check would survive the very
+        transposition this issue fixed — swapping 1 and 2 keeps them exclusive.
+        Pinning the whole tuple per code makes the table transposition-sensitive
+        instead: before the fix, code 1 answered ``is_processing`` and code 2
+        answered ``is_pending``.
+        """
+        # code -> (is_pending, is_processing, is_completed, is_failed)
+        expected = {
+            0: (False, False, False, False),  # UNKNOWN
+            1: (True, False, False, False),  # INITIALIZED -> queued
+            2: (False, True, False, False),  # PROCESSING -> generating
+            3: (False, False, True, False),  # READY
+            4: (False, False, False, True),  # FAILED
+            5: (False, False, False, False),  # SUGGESTED
+            6: (False, False, False, False),  # PENDING_REVIEW
+        }
+        for code, answers in expected.items():
+            artifact = Artifact.from_api_response(["id", "title", 1, None, code])
+            actual = (
+                artifact.is_pending,
+                artifact.is_processing,
+                artifact.is_completed,
+                artifact.is_failed,
+            )
+            assert actual == answers, f"code {code}"
+
     def test_is_failed_property(self):
         """Test is_failed property for status=4 (generation failed)."""
         failed = Artifact.from_api_response(["id", "title", 1, None, 4])
-        processing = Artifact.from_api_response(["id", "title", 1, None, 1])
+        processing = Artifact.from_api_response(["id", "title", 1, None, 2])
         completed = Artifact.from_api_response(["id", "title", 1, None, 3])
 
         assert failed.is_failed is True
@@ -1535,18 +1865,20 @@ class TestArtifact:
         assert completed.is_failed is False
 
     def test_status_str_property(self):
-        """Test status_str property returns correct human-readable strings."""
-        processing = Artifact.from_api_response(["id", "title", 1, None, 1])
-        pending = Artifact.from_api_response(["id", "title", 1, None, 2])
-        completed = Artifact.from_api_response(["id", "title", 1, None, 3])
-        failed = Artifact.from_api_response(["id", "title", 1, None, 4])
-        unknown = Artifact.from_api_response(["id", "title", 1, None, 99])
-
-        assert processing.status_str == "in_progress"
-        assert pending.status_str == "pending"
-        assert completed.status_str == "completed"
-        assert failed.status_str == "failed"
-        assert unknown.status_str == "unknown"
+        """status_str covers every backend ArtifactStatus code (#2127)."""
+        expected = {
+            0: "unknown",
+            1: "pending",
+            2: "in_progress",
+            3: "completed",
+            4: "failed",
+            5: "suggested",
+            6: "pending_review",
+            99: "unknown",  # unrecognized codes fail closed
+        }
+        for code, status_str in expected.items():
+            artifact = Artifact.from_api_response(["id", "title", 1, None, code])
+            assert artifact.status_str == status_str, f"code {code}"
 
     def test_report_subtype_briefing_doc(self):
         """Test report_subtype for briefing doc."""
@@ -1957,11 +2289,20 @@ class TestChatReference:
         with pytest.raises(ValueError, match="start_char/end_char"):
             ChatReference(source_id="x", end_char=5)
 
-    def test_paired_offset_invariant_answer_pair_half_populated(self):
-        """answer_start_char without answer_end_char (or vice versa) must raise."""
-        with pytest.raises(ValueError, match="answer_start_char"):
+    def test_paired_offset_invariant_fragment_pair_half_populated(self):
+        """A half-populated fragment range must raise, under either name.
+
+        The deprecated ``answer_*`` keywords are reconciled onto the canonical
+        ``fragment_*`` pair before validation (#2120), so both spellings fail
+        with the canonical name in the message.
+        """
+        with pytest.raises(ValueError, match="fragment_start_char/fragment_end_char"):
+            ChatReference(source_id="x", fragment_start_char=5)
+        with pytest.raises(ValueError, match="fragment_start_char/fragment_end_char"):
+            ChatReference(source_id="x", fragment_end_char=5)
+        with pytest.raises(ValueError, match="fragment_start_char/fragment_end_char"):
             ChatReference(source_id="x", answer_start_char=5)
-        with pytest.raises(ValueError, match="answer_start_char"):
+        with pytest.raises(ValueError, match="fragment_start_char/fragment_end_char"):
             ChatReference(source_id="x", answer_end_char=5)
 
     def test_paired_offset_invariant_inverted_source_range(self):
@@ -1969,10 +2310,19 @@ class TestChatReference:
         with pytest.raises(ValueError, match="> end_char"):
             ChatReference(source_id="x", start_char=10, end_char=5)
 
-    def test_paired_offset_invariant_inverted_answer_range(self):
-        """answer_start_char > answer_end_char must raise."""
-        with pytest.raises(ValueError, match="> answer_end_char"):
+    def test_paired_offset_invariant_inverted_fragment_range(self):
+        """fragment_start_char > fragment_end_char must raise."""
+        with pytest.raises(ValueError, match="> fragment_end_char"):
+            ChatReference(source_id="x", fragment_start_char=10, fragment_end_char=5)
+        with pytest.raises(ValueError, match="> fragment_end_char"):
             ChatReference(source_id="x", answer_start_char=10, answer_end_char=5)
+
+    def test_paired_offset_invariant_answer_doc_pair(self):
+        """The new answer-document range is validated as its own pair (#2120)."""
+        with pytest.raises(ValueError, match="answer_anchor_start/answer_anchor_end"):
+            ChatReference(source_id="x", answer_anchor_start=5)
+        with pytest.raises(ValueError, match="> answer_anchor_end"):
+            ChatReference(source_id="x", answer_anchor_start=10, answer_anchor_end=5)
 
     def test_paired_offset_invariant_valid_constructions(self):
         """All-None pairs, both pairs populated, and zero-width ranges all accepted."""
@@ -1980,20 +2330,26 @@ class TestChatReference:
         ChatReference(source_id="x")
         # Source pair populated.
         ChatReference(source_id="x", start_char=5, end_char=10)
-        # Answer pair populated.
+        # Fragment pair populated (under either name).
+        ChatReference(source_id="x", fragment_start_char=0, fragment_end_char=3)
         ChatReference(source_id="x", answer_start_char=0, answer_end_char=3)
-        # Both pairs populated.
+        # All three pairs populated.
         ChatReference(
             source_id="x",
             start_char=5,
             end_char=10,
-            answer_start_char=0,
-            answer_end_char=3,
+            fragment_start_char=0,
+            fragment_end_char=3,
+            answer_anchor_start=1,
+            answer_anchor_end=2,
         )
         # Zero-width ranges (start == end) are valid: many citations are
-        # structural anchors that resolve to single-position ranges.
+        # structural anchors that resolve to single-position ranges, and the
+        # answer-side anchor is zero-width whenever it marks an insertion
+        # point rather than a span (#2120).
         ChatReference(source_id="x", start_char=5, end_char=5)
-        ChatReference(source_id="x", answer_start_char=0, answer_end_char=0)
+        ChatReference(source_id="x", fragment_start_char=0, fragment_end_char=0)
+        ChatReference(source_id="x", answer_anchor_start=7, answer_anchor_end=7)
 
 
 class TestSourceFulltext:
@@ -2202,6 +2558,7 @@ class TestNotebookMetadata:
             created_at=datetime(2024, 1, 1, 12, 0),
             is_owner=True,
             modified_at=datetime(2024, 1, 2, 9, 30),
+            role=SharePermission.OWNER,
         )
         metadata = NotebookMetadata(
             notebook=notebook,
@@ -2216,8 +2573,10 @@ class TestNotebookMetadata:
             "id": "nb_123",
             "title": "Test Notebook",
             "created_at": "2024-01-01T12:00:00",
+            "last_viewed_at": "2024-01-02T09:30:00",
             "modified_at": "2024-01-02T09:30:00",
             "is_owner": True,
+            "role": "owner",
             "sources": [
                 {"type": "pdf", "title": "test.pdf", "url": None},
                 {"type": "web_page", "title": "Example", "url": "https://example.com"},
@@ -2236,14 +2595,16 @@ class TestNotebookMetadata:
             created_at=datetime(2024, 2, 1),
             is_owner=False,
             modified_at=datetime(2024, 3, 1),
+            role=SharePermission.VIEWER,
         )
         metadata = NotebookMetadata(notebook=notebook)
 
         assert metadata.id == "nb_456"
         assert metadata.title == "Proxy Test"
         assert metadata.created_at == datetime(2024, 2, 1)
-        assert metadata.modified_at == datetime(2024, 3, 1)
+        assert metadata.last_viewed_at == datetime(2024, 3, 1)
         assert metadata.is_owner is False
+        assert metadata.role is SharePermission.VIEWER
 
     def test_to_dict_with_none_created_at(self):
         """Test serialization when created_at is None."""
@@ -2254,6 +2615,8 @@ class TestNotebookMetadata:
 
         result = metadata.to_dict()
         assert result["created_at"] is None
+        # An unknown role serializes as ``null``, not the "unknown" label.
+        assert result["role"] is None
 
     def test_empty_sources_list(self):
         """Test metadata with empty sources list."""
@@ -2264,3 +2627,275 @@ class TestNotebookMetadata:
 
         assert len(metadata.sources) == 0
         assert metadata.to_dict()["sources"] == []
+
+
+class TestLastViewedAtAlias:
+    """``modified_at`` -> ``last_viewed_at`` rename and its runway (#2126).
+
+    The wire slot ``meta[5]`` is ``ProjectMetadata.lastViewedTime``, not a
+    modification time. These tests pin the two halves of the deprecation runway
+    that ``docs/deprecations.md`` promises:
+
+    * ``Notebook.modified_at`` stays a *field* and stays silent — a runtime
+      warning on a dataclass field would also fire from ``repr``, ``__eq__``,
+      ``dataclasses.replace`` and ``to_jsonable``.
+    * ``NotebookMetadata.modified_at`` is a *property*, so it warns exactly once
+      per caller access and honors ``NOTEBOOKLM_QUIET_DEPRECATIONS``.
+    """
+
+    def test_canonical_field_mirrors_into_the_alias(self):
+        """Setting only ``last_viewed_at`` populates the legacy ``modified_at``."""
+        viewed = datetime(2026, 8, 12, 10, 0)
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=viewed)
+
+        assert nb.last_viewed_at == viewed
+        assert nb.modified_at == viewed
+
+    def test_legacy_kwarg_still_seeds_the_canonical_field(self):
+        """A pre-rename caller passing ``modified_at=`` keeps working."""
+        viewed = datetime(2026, 8, 12, 10, 0)
+        nb = Notebook(id="nb_1", title="N", modified_at=viewed)
+
+        assert nb.last_viewed_at == viewed
+        assert nb.modified_at == viewed
+
+    def test_legacy_positional_construction_is_unchanged(self):
+        """``last_viewed_at`` was appended last, so old positional args still land."""
+        created = datetime(2026, 8, 1)
+        viewed = datetime(2026, 8, 12)
+        nb = Notebook("nb_1", "N", created, 3, True, viewed)
+
+        assert nb.created_at == created
+        assert nb.sources_count == 3
+        assert nb.last_viewed_at == viewed
+        assert nb.modified_at == viewed
+
+    def test_both_names_none_when_neither_supplied(self):
+        """The mirror never fabricates a timestamp."""
+        nb = Notebook(id="nb_1", title="N")
+
+        assert nb.last_viewed_at is None
+        assert nb.modified_at is None
+
+    def test_in_place_assignment_keeps_the_alias_in_step(self):
+        """``__setattr__`` mirrors post-construction writes (the backfill path)."""
+        nb = Notebook(id="nb_1", title="N")
+        assert nb.modified_at is None
+
+        # ``_app.notebooks._backfill_create_timestamps`` writes exactly this way.
+        nb.last_viewed_at = datetime(2026, 8, 12, 10, 0)
+
+        assert nb.modified_at == datetime(2026, 8, 12, 10, 0)
+
+    def test_legacy_in_place_write_round_trips(self):
+        """A legacy caller writing the OLD name must not silently diverge.
+
+        Without the reverse mirror, ``nb.modified_at = B`` left
+        ``last_viewed_at`` at its old value, and the object then serialized two
+        different answers: ``to_jsonable`` (all fields) reported ``B`` while the
+        CLI's ``notebook_viewed_keys`` (canonical field only) reported the
+        pre-write value.
+        """
+        from notebooklm._app.serialize import to_jsonable
+        from notebooklm._app.views import notebook_viewed_keys
+
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2020, 1, 1))
+        nb.modified_at = datetime(2026, 8, 12, 10, 0)
+
+        assert nb.last_viewed_at == datetime(2026, 8, 12, 10, 0)
+        assert to_jsonable(nb)["last_viewed_at"] == to_jsonable(nb)["modified_at"]
+        assert notebook_viewed_keys(nb)["modified_at"] == "2026-08-12T10:00:00"
+
+    def test_replace_on_the_canonical_field_carries_the_alias(self):
+        """``dataclasses.replace`` keeps the pair in step (the documented path)."""
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2020, 1, 1))
+
+        replaced = dataclasses.replace(nb, last_viewed_at=datetime(2026, 8, 12))
+
+        assert replaced.last_viewed_at == datetime(2026, 8, 12)
+        assert replaced.modified_at == datetime(2026, 8, 12)
+
+    def test_role_invariant_survives_the_alias_mirror(self):
+        """The #2125 ``role`` -> ``is_owner`` hook still fires (shared __setattr__)."""
+        nb = Notebook(id="nb_1", title="N", role=SharePermission.VIEWER)
+        assert nb.is_owner is False
+
+        nb.role = SharePermission.OWNER
+        assert nb.is_owner is True
+
+    def test_pre_rename_pickle_restores_with_the_names_in_agreement(self):
+        """An old pickle must not restore into the "names disagree" state.
+
+        Unpickling bypasses ``__init__``/``__post_init__``/``__setattr__``, so a
+        pickle written before the rename carries ``modified_at`` and no
+        ``last_viewed_at`` key. It does NOT raise — ``last_viewed_at`` is a
+        dataclass field with a ``None`` class default, so the lookup silently
+        falls through to the class. That silence is the hazard: the caller sees
+        a populated legacy name beside a ``None`` canonical one. ``__setstate__``
+        seeds the canonical field so the alias runway holds here too.
+        """
+        nb = Notebook(id="nb_1", title="N", modified_at=datetime(2026, 8, 12))
+        # Simulate the pre-#2126 payload: the field simply did not exist then.
+        del nb.__dict__["last_viewed_at"]
+
+        restored = pickle.loads(pickle.dumps(nb))
+
+        assert restored.last_viewed_at == datetime(2026, 8, 12)
+        assert restored.modified_at == restored.last_viewed_at
+
+    def test_pre_chat_sessions_pickle_restores_with_an_empty_list(self):
+        """A pre-#2133 pickle gets the default-factory field it never stored."""
+        nb = Notebook(id="nb_1", title="N")
+        del nb.__dict__["chat_sessions"]
+
+        restored = pickle.loads(pickle.dumps(nb))
+
+        assert restored.chat_sessions == []
+        assert repr(restored)
+        assert dataclasses.asdict(restored)["chat_sessions"] == []
+
+    def test_current_pickle_round_trip_is_unchanged(self):
+        """The ordinary round trip keeps equality — ``__setstate__`` is additive."""
+        nb = Notebook(
+            id="nb_1",
+            title="N",
+            last_viewed_at=datetime(2026, 8, 12),
+            role=SharePermission.VIEWER,
+        )
+
+        restored = pickle.loads(pickle.dumps(nb))
+
+        assert restored == nb
+        assert restored.role is SharePermission.VIEWER
+        assert restored.is_owner is False
+
+    def test_notebook_field_access_does_not_warn(self):
+        """``Notebook.modified_at`` is a docs-only deprecation (a dataclass field)."""
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12))
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            assert nb.modified_at == nb.last_viewed_at
+            repr(nb)
+            assert nb == Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12))
+
+    def test_serializer_emits_both_keys(self):
+        """``to_jsonable`` carries the new key and the legacy alias, same value."""
+        from notebooklm._app.serialize import to_jsonable
+
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12, 10, 0))
+        payload = to_jsonable(nb)
+
+        assert payload["last_viewed_at"] == "2026-08-12T10:00:00"
+        assert payload["modified_at"] == payload["last_viewed_at"]
+
+    def test_metadata_property_warns_and_returns_the_value(self):
+        """``NotebookMetadata.modified_at`` warns, naming the replacement."""
+        from notebooklm.types import NotebookMetadata
+
+        viewed = datetime(2026, 8, 12, 10, 0)
+        metadata = NotebookMetadata(notebook=Notebook(id="nb_1", title="N", last_viewed_at=viewed))
+
+        with pytest.warns(DeprecationWarning, match="last_viewed_at") as record:
+            assert metadata.modified_at == viewed
+
+        assert "lastViewedTime" in str(record[0].message)
+        assert "v1.0" in str(record[0].message)
+
+    def test_metadata_property_warning_honors_the_quiet_gate(self):
+        """ADR-0018: every project deprecation obeys NOTEBOOKLM_QUIET_DEPRECATIONS."""
+        from notebooklm.types import NotebookMetadata
+
+        metadata = NotebookMetadata(
+            notebook=Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12))
+        )
+
+        with (
+            patch.dict(os.environ, {"NOTEBOOKLM_QUIET_DEPRECATIONS": "1"}),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter("error", DeprecationWarning)
+            assert metadata.modified_at is not None
+
+    def test_replace_on_the_legacy_name_is_a_documented_no_op(self):
+        """``replace(nb, modified_at=X)`` cannot win — pinned, because it is odd.
+
+        ``dataclasses.replace`` re-passes every field from the source instance,
+        so the canonical ``last_viewed_at`` is supplied too and (being assigned
+        last) takes precedence. ``docs/deprecations.md`` and ``__post_init__``
+        both document this; without a pin, a refactor that made ``modified_at``
+        authoritative would silently flip which argument wins.
+        """
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2020, 1, 1))
+
+        replaced = dataclasses.replace(nb, modified_at=datetime(2026, 8, 12))
+
+        assert replaced.last_viewed_at == datetime(2020, 1, 1)
+        assert replaced.modified_at == datetime(2020, 1, 1)
+
+    def test_canonical_name_wins_when_both_are_supplied(self):
+        """The tie-break of the whole runway: ``last_viewed_at`` is authoritative."""
+        nb = Notebook(
+            id="nb_1",
+            title="N",
+            modified_at=datetime(2020, 1, 1),
+            last_viewed_at=datetime(2026, 8, 12),
+        )
+
+        assert nb.last_viewed_at == datetime(2026, 8, 12)
+        assert nb.modified_at == datetime(2026, 8, 12)
+
+    def test_clearing_one_name_leaves_the_other_stale_by_design(self):
+        """Characterization: both mirrors are guarded on ``value is not None``.
+
+        That guard is load-bearing, not an oversight — an unguarded mirror would
+        let ``__init__``'s ``last_viewed_at=None`` default wipe out a legacy
+        ``Notebook(..., modified_at=X)`` argument, because ``__init__`` assigns
+        ``modified_at`` first. Clearing a decoded timestamp is not something any
+        caller does, so the hole is accepted; this test exists so that anyone who
+        "fixes" the guard sees *this* fail with the reason, rather than
+        ``test_legacy_kwarg_still_seeds_the_canonical_field`` failing obscurely.
+        """
+        nb = Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12))
+
+        nb.last_viewed_at = None
+
+        assert nb.last_viewed_at is None
+        assert nb.modified_at == datetime(2026, 8, 12)  # deliberately not mirrored
+
+    def test_metadata_serialization_never_warns_through_to_jsonable(self):
+        """The MCP ``notebook_describe`` path must not warn either.
+
+        ``to_dict()`` is the CLI/REST path; ``mcp/tools/notebooks.py`` reaches
+        ``NotebookMetadata`` through ``to_jsonable`` instead. The
+        "only a caller who *types* the old name gets a warning" claim has to hold
+        on both, and ``to_jsonable``'s fields-only rule is what makes it hold —
+        so pin it here rather than depending on that rule never changing.
+        """
+        from notebooklm._app.serialize import to_jsonable
+        from notebooklm.types import NotebookMetadata
+
+        metadata = NotebookMetadata(
+            notebook=Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12))
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            payload = to_jsonable(metadata)
+
+        assert payload["notebook"]["last_viewed_at"] == payload["notebook"]["modified_at"]
+
+    def test_metadata_to_dict_emits_both_keys_without_warning(self):
+        """Serializing reads the canonical field, so it never warns."""
+        from notebooklm.types import NotebookMetadata
+
+        metadata = NotebookMetadata(
+            notebook=Notebook(id="nb_1", title="N", last_viewed_at=datetime(2026, 8, 12, 10, 0))
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            payload = metadata.to_dict()
+
+        assert payload["last_viewed_at"] == "2026-08-12T10:00:00"
+        assert payload["modified_at"] == payload["last_viewed_at"]

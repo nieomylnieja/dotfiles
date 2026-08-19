@@ -32,6 +32,7 @@ from .decoder import (  # noqa: F401
 from .encoder import build_request_body, encode_rpc_request, nest_source_ids  # noqa: F401
 from .overrides import resolve_rpc_id
 from .types import (  # noqa: F401
+    ARTIFACT_STATUS_SUGGESTED_WIRE_NAME,
     BATCHEXECUTE_URL,
     FLASHCARDS_VARIANT,
     INTERACTIVE_MIND_MAP_VARIANT,
@@ -46,6 +47,7 @@ from .types import (  # noqa: F401
     ChatResponseLength,
     DriveMimeType,
     ExportType,
+    GrpcStatusCode,
     InfographicDetail,
     InfographicOrientation,
     InfographicStyle,
@@ -61,6 +63,7 @@ from .types import (  # noqa: F401
     get_batchexecute_url,
     get_query_url,
     get_upload_url,
+    normalize_grpc_status,
 )
 
 # Blessed public power-user surface only; see the banner comment above for why

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from .._row_adapters.chat import SavedChatNoteRow
 from .._row_adapters.notes import NoteRow
+from .._types.documents import utf16_len
 from ..rpc import RPCMethod
 from ..types import Note
 
@@ -31,9 +32,13 @@ logger = logging.getLogger(__name__)
 class SaveChatNoteRpc(Protocol):
     """RPC surface needed to persist a saved-from-chat note.
 
-    Mirrors the dispatch shape :class:`RpcCaller` exposes; a concrete
-    :class:`notebooklm._rpc_executor.RpcExecutor` (or any structural
-    equivalent in tests) satisfies this protocol.
+    Mirrors the SUBSET of the :class:`RpcCaller` dispatch shape this call site
+    uses; a concrete :class:`notebooklm._rpc_executor.RpcExecutor` (or any
+    structural equivalent in tests) satisfies it. The keyword-only options
+    ``RpcCaller`` also carries — ``disable_internal_retries`` / ``read_timeout``
+    / ``raise_on_null_status`` — are deliberately absent because saving a chat
+    note passes none of them; widen this before opting the call site into any
+    of them.
     """
 
     async def rpc_call(
@@ -93,21 +98,26 @@ def _build_source_passage_descriptor(ref: ChatReference) -> list[Any]:
     the server accepts ``chunk_id`` here and citation anchors still work.
     """
     cited_text = ref.cited_text or ""
-    # Source-document span (slot [3]) is absolute in the source's char
-    # offsets. Text-wrapper offsets (slot [4]) are LOCAL to cited_text —
-    # they always start at 0 and end at len(cited_text). The captured
-    # fixture has start_char=0 + end_char==len(cited_text), masking this
-    # in the golden test; real chat refs commonly have non-zero source
-    # offsets, so the two ``end`` values diverge.
+    # Source-document span (slot [3]) is absolute in the source's coordinate
+    # space. Text-wrapper offsets (slot [4]) are LOCAL to cited_text — they
+    # always start at 0 and end at its width. Both are UTF-16 code units, which
+    # is why the width comes from ``utf16_len`` and never ``len`` (#2120). The
+    # captured fixture has start_char=0 and end_char equal to that width,
+    # masking the distinction in the golden test; real chat refs commonly have
+    # non-zero source offsets, so the two ``end`` values diverge.
     if cited_text:
         source_start = ref.start_char if ref.start_char is not None else 0
-        source_end = ref.end_char if ref.end_char is not None else len(cited_text)
+        source_end = ref.end_char if ref.end_char is not None else utf16_len(cited_text)
     else:
         # Empty cited_text: collapse the source span to [0, 0] to avoid
         # emitting an invalid ``[None, start, 0]`` when start>0.
         source_start = 0
         source_end = 0
-    local_end = len(cited_text)
+    # UTF-16 code units, like every other TailwindDoc offset (#2120). Reachable
+    # now that ``cited_text`` spans the whole fragment rather than its first
+    # block: a single emoji anywhere in it would end this local range one unit
+    # short and misalign — or get the server to reject — the saved note.
+    local_end = utf16_len(cited_text)
     # Use explicit `is not None` check so an empty-string passage_id
     # (falsy but explicitly set by a caller) doesn't silently fall
     # through to chunk_id.
@@ -129,7 +139,9 @@ def _strip_citation_markers(answer_text: str) -> tuple[str, list[tuple[int, int]
     Returns the cleaned text plus a list of ``(citation_number,
     position_in_clean_text)`` tuples in marker-appearance order. The
     position is where the marker WAS in the clean text — i.e. the
-    exclusive end of the text the marker was anchoring.
+    exclusive end of the text the marker was anchoring — counted in **UTF-16
+    code units**, because that is the unit the TailwindDoc ranges these
+    positions are written into use (#2120).
 
     Example::
 
@@ -146,7 +158,7 @@ def _strip_citation_markers(answer_text: str) -> tuple[str, list[tuple[int, int]
     for match in _CITATION_MARKER_RE.finditer(answer_text):
         chunk = answer_text[last_end : match.start()]
         clean_parts.append(chunk)
-        clean_offset += len(chunk)
+        clean_offset += utf16_len(chunk)
         positions.append((int(match.group(1)), clean_offset))
         last_end = match.end()
     clean_parts.append(answer_text[last_end:])
@@ -237,7 +249,7 @@ def build_save_chat_as_note_params(
     source_passages = [descriptors[c] for c in seen_chunks]
 
     # Cleaned-answer passage group.
-    answer_segments = _build_passage_group(clean_answer, len(clean_answer))
+    answer_segments = _build_passage_group(clean_answer, utf16_len(clean_answer))
 
     # Per-marker chunk anchors. Cumulative-span heuristic: each [N] anchors
     # clean_text[0..position_of_marker]. This matches the single-citation

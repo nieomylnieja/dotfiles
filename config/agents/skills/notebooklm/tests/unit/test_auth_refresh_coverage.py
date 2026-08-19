@@ -261,18 +261,22 @@ class TestSettleCallbackCancel:
             started.set()
             await asyncio.sleep(10)
 
-        monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", _slow_refresh)
+        # Injected, not monkeypatched (plan §7 deps record).
+        deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=_slow_refresh)
 
         async def _drive():
             await _auth_refresh._coalesced_run_refresh_cmd(
-                str(storage.expanduser().resolve()), storage.expanduser().resolve(), None
+                str(storage.expanduser().resolve()),
+                storage.expanduser().resolve(),
+                None,
+                deps=deps,
             )
 
         task = asyncio.create_task(_drive())
         await started.wait()
         # Cancel the leader task directly so ``_mirror`` runs the
         # ``t.cancelled()`` branch (bridge.set_exception(CancelledError)).
-        inflight = list(_single_flight._LEADER_TASKS)
+        inflight = list(_single_flight.SingleFlight.process_default()._leader_tasks)
         assert inflight, "expected an in-flight leader task"
         for t in inflight:
             t.cancel()
@@ -306,7 +310,7 @@ class TestFetchTokensCancelPropagation:
         self._common_patches(monkeypatch, storage)
         path_key = str(storage.expanduser().resolve())
 
-        async def fake_coalesced(key, resolved_storage_path, profile):
+        async def fake_coalesced(key, resolved_storage_path, profile, *, deps=None):
             raise asyncio.CancelledError()
 
         monkeypatch.setattr(_auth_refresh, "_coalesced_run_refresh_cmd", fake_coalesced)
@@ -334,7 +338,7 @@ class TestPostRefreshRetryRouteKwargs:
             calls.append(route_kwargs)
             return "csrf_after", "sess_after"
 
-        async def fake_coalesced(refresh_key, resolved_storage_path, profile):
+        async def fake_coalesced(refresh_key, resolved_storage_path, profile, *, deps=None):
             return None
 
         def fake_build_jar(path):

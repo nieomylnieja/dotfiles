@@ -110,6 +110,8 @@ def test_rpc_caller_signature_matches_legacy_session_rpc_call() -> None:
         "_is_retry",
         "disable_internal_retries",
         "operation_variant",
+        "read_timeout",
+        "raise_on_null_status",
     ]
     assert sig.parameters["source_path"].default == "/"
     assert sig.parameters["allow_null"].default is False
@@ -118,6 +120,16 @@ def test_rpc_caller_signature_matches_legacy_session_rpc_call() -> None:
     assert sig.parameters["disable_internal_retries"].default is False
     assert sig.parameters["operation_variant"].kind is inspect.Parameter.KEYWORD_ONLY
     assert sig.parameters["operation_variant"].default is None
+    # #2187: per-call read-timeout override (mirrors the chat-transport
+    # precedent) so IMPORT_RESEARCH can get a batch-scaled budget without
+    # lowering the client-wide default for every other RPC.
+    assert sig.parameters["read_timeout"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["read_timeout"].default is None
+    # #2188: opt-in strictness for ``allow_null`` callers — a null result the
+    # server tagged with a non-OK google.rpc.Status raises instead of decoding
+    # to None, so an artifact rejection reports the server's reason.
+    assert sig.parameters["raise_on_null_status"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert sig.parameters["raise_on_null_status"].default is False
 
 
 def test_kernel_protocol_signatures_are_pinned() -> None:

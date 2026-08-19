@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from urllib.parse import urlsplit
 
 from ..exceptions import ValidationError
-from ..types import Source
+from ..types import _PATH_SHAPED_FILE_EXTENSIONS, Source
 from ..urls import is_youtube_url
 
 if TYPE_CHECKING:
@@ -143,23 +143,13 @@ class SourceAddPlan:
     warnings: tuple[str, ...] = ()
 
 
-_PATH_SHAPED_EXTENSIONS = frozenset(
-    {
-        ".pdf",
-        ".txt",
-        ".md",
-        ".markdown",
-        ".html",
-        ".htm",
-        ".doc",
-        ".docx",
-        ".rtf",
-        ".odt",
-        ".csv",
-        ".tsv",
-        ".epub",
-    }
-)
+#: Extensions that make an argument *look* path-shaped. Not declared here: this is
+#: the derived set owned by ``notebooklm._types.sources`` alongside the source
+#: type-code map, so a newly supported file type gains its spelling with its decode
+#: entry instead of drifting behind it (#2202). Routed through the public ``types``
+#: facade because the ``_app`` boundary lint forbids importing the private
+#: ``_types`` sibling directly.
+_PATH_SHAPED_EXTENSIONS = _PATH_SHAPED_FILE_EXTENSIONS
 
 
 #: Schemes accepted by ``source add`` when content is URL-shaped. Any other
@@ -284,7 +274,15 @@ def validate_url(url: str, *, allow_internal: bool) -> None:
 
 
 def looks_like_path(content: str) -> bool:
-    """Return True if ``content`` is path-shaped (slash OR known extension)."""
+    """Return True if ``content`` is path-shaped (slash OR known extension).
+
+    Note what this does NOT decide: :func:`build_source_add_plan` tests
+    ``Path(content).exists()`` first, so an argument naming a real file is
+    uploaded whatever its extension. This predicate runs only on the
+    does-not-exist branch, where it chooses between warning the user that their
+    file-shaped argument is about to be ingested as inline text and doing that
+    silently.
+    """
     if "/" in content or "\\" in content:
         return True
     suffix = Path(content).suffix.lower()

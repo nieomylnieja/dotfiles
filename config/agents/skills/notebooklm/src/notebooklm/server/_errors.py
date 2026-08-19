@@ -38,6 +38,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .._app.errors import (
     CATEGORY_HINTS,
+    UNCONFIRMED_HINT,
     ClassifiedError,
     ErrorCategory,
     classify,
@@ -219,6 +220,12 @@ def _project_classified(exc: BaseException, classified: ClassifiedError) -> dict
         "retriable": classified.retriable,
     }
     hint = CATEGORY_HINTS.get(category)
+    # An UNCONFIRMED create (#2220) is forced to the RPC category (HTTP 502),
+    # whose hint is None — so without this the caller gets an opaque message and
+    # ``retriable: false`` with nothing saying a source may already exist.
+    if getattr(exc, "unconfirmed", False):
+        body["unconfirmed"] = True
+        hint = UNCONFIRMED_HINT
     # A failed *name* lookup may carry near-miss candidates (issue #1787); surface
     # them and swap the generic NOT_FOUND hint for a "Did you mean …" one.
     candidates = list(getattr(exc, "candidates", ()) or ())

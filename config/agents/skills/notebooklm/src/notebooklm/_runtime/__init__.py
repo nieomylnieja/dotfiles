@@ -9,15 +9,24 @@ references keep resolving; importers may also reach submodules directly
 from . import auth, config, contracts, helpers, init, lifecycle, transport
 from .auth import AuthRefreshCoordinator
 from .config import (
+    AUTO_READ_TIMEOUT,
     CORE_LOGGER_NAME,
     DEFAULT_CHAT_RESPONSE_MAX_BYTES,
     DEFAULT_CHAT_TIMEOUT,
     DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_BASE_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_MAX_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_PER_SOURCE_TIMEOUT,
     DEFAULT_KEEPALIVE_MIN_INTERVAL,
     DEFAULT_MAX_CONCURRENT_RPCS,
     DEFAULT_MAX_CONCURRENT_UPLOADS,
     DEFAULT_TIMEOUT,
+    MIN_IMPORT_RESEARCH_ATTEMPT_TIMEOUT,
+    assert_resolved_read_timeout,
+    compose_builtin_read_timeout,
     normalize_max_concurrent_uploads,
+    resolve_chat_read_timeout,
+    validate_read_timeout_kwarg,
 )
 from .contracts import Kernel, LoopGuard, RpcCaller
 from .helpers import (
@@ -42,7 +51,6 @@ from .lifecycle import (
     CookieRotator,
     CookieSaver,
     _default_cookie_rotator,
-    _default_cookie_saver,
 )
 from .transport import RuntimeTransport
 
@@ -55,15 +63,24 @@ __all__ = [
     "lifecycle",
     "transport",
     "AuthRefreshCoordinator",
+    "AUTO_READ_TIMEOUT",
     "CORE_LOGGER_NAME",
     "DEFAULT_CHAT_RESPONSE_MAX_BYTES",
     "DEFAULT_CHAT_TIMEOUT",
     "DEFAULT_CONNECT_TIMEOUT",
+    "DEFAULT_IMPORT_RESEARCH_BASE_TIMEOUT",
+    "DEFAULT_IMPORT_RESEARCH_MAX_TIMEOUT",
+    "DEFAULT_IMPORT_RESEARCH_PER_SOURCE_TIMEOUT",
     "DEFAULT_KEEPALIVE_MIN_INTERVAL",
     "DEFAULT_MAX_CONCURRENT_RPCS",
     "DEFAULT_MAX_CONCURRENT_UPLOADS",
     "DEFAULT_TIMEOUT",
+    "MIN_IMPORT_RESEARCH_ATTEMPT_TIMEOUT",
+    "assert_resolved_read_timeout",
+    "compose_builtin_read_timeout",
     "normalize_max_concurrent_uploads",
+    "resolve_chat_read_timeout",
+    "validate_read_timeout_kwarg",
     "Kernel",
     "LoopGuard",
     "RpcCaller",
@@ -84,6 +101,5 @@ __all__ = [
     "CookieRotator",
     "CookieSaver",
     "_default_cookie_rotator",
-    "_default_cookie_saver",
     "RuntimeTransport",
 ]

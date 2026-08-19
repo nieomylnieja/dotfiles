@@ -31,7 +31,7 @@ import httpx
 import pytest
 
 import notebooklm._runtime.helpers as _runtime_helpers
-from notebooklm import NetworkError, NotebookLMClient
+from notebooklm import NetworkError, NotebookLMClient, RPCError
 from notebooklm._idempotency import IDEMPOTENCY_REGISTRY, IdempotencyPolicy
 from notebooklm.rpc import RPCMethod
 from tests._fixtures.kernel_test_helpers import install_http_client_for_test
@@ -457,16 +457,22 @@ async def test_notebooks_create_probe_propagates_network_error(
     )
 
 
-async def test_notebooks_create_probe_swallows_non_network_exception(
+async def test_notebooks_create_probe_propagates_non_network_exception(
     auth_tokens,
 ) -> None:
-    """A non-network exception (decoding error, unexpected RPC failure)
-    during the probe MUST still be swallowed → return ``None`` →
-    ``idempotent_create`` retries the create.
+    """A non-network probe failure aborts the create instead of retrying (#2220).
 
-    This pins the *contract* that the P1-2 fix surgically widened the
-    propagation only for ``NetworkError``: random other failures inside
-    the probe path stay best-effort, matching the original intent.
+    **This test was inverted by #2220.** It previously pinned the opposite
+    contract — that only ``NetworkError`` propagates and every other probe
+    failure stays "best-effort", swallowed into ``None`` so the create is
+    re-issued. That best-effort reading is the bug: ``None`` is not a neutral
+    "don't know", it is the specific claim *"no matching notebook exists"*,
+    which ``idempotent_create`` acts on by repeating a create that runs with
+    internal retries disabled precisely because repeating it can duplicate.
+
+    A decoding error means the probe could not look, not that it looked and
+    found nothing. So the create must fire once, and the caller must be told
+    the outcome is unknown.
     """
     list_call_count = 0
     create_call_count = 0
@@ -492,8 +498,8 @@ async def test_notebooks_create_probe_swallows_non_network_exception(
             create_call_count += 1
             if create_call_count == 1:
                 return httpx.Response(502, text="bad gateway")
-            # Second create succeeds — ``idempotent_create`` got the
-            # swallowed-None probe back and retried per contract.
+            # A second create would succeed if one were issued. It must not be:
+            # this response is the duplicate the assertion below rules out.
             return httpx.Response(
                 200,
                 text=_wrb_response(
@@ -513,12 +519,18 @@ async def test_notebooks_create_probe_swallows_non_network_exception(
     transport = httpx.MockTransport(handler)
     client = _make_client_with_transport(transport, auth_tokens)
     try:
-        notebook = await client.notebooks.create(title)
+        with pytest.raises(RPCError, match="Cannot confirm notebook"):
+            await client.notebooks.create(title)
     finally:
         await client._collaborators.kernel.get_http_client().aclose()
 
-    assert notebook.id == nb_id_after_retry
-    assert create_call_count == 2, (
-        f"expected 2 CREATE_NOTEBOOK calls (initial + retry after non-network "
-        f"probe failure), got {create_call_count}"
+    # The load-bearing assertion. Restore the probe's ``return None`` and this
+    # becomes 2 — a second notebook created on the strength of a probe that
+    # never managed to look.
+    assert create_call_count == 1, (
+        f"expected 1 CREATE_NOTEBOOK call (the probe could not confirm, so no "
+        f"retry was permitted), got {create_call_count}"
     )
+    # Baseline + the one probe that failed; no second probe, since the retry
+    # loop aborted rather than continuing.
+    assert list_call_count == 2, f"expected 2 LIST_NOTEBOOKS, got {list_call_count}"

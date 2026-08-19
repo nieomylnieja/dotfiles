@@ -341,6 +341,19 @@ def test_cdp_malformed_cookie_value_never_logged(tmp_path: Path, caplog) -> None
     assert any("non-str domain" in r.message for r in caplog.records)
     # ...but its value never appears in any log record.
     assert sentinel not in caplog.text
+    # ...and it was flagged on the documented operator-facing logger. ADR-0030
+    # c-PR5 requires these warnings to reach ``notebooklm.auth`` rather than a
+    # private per-module child, and the relocation of this filter into the
+    # persistence module made that a live risk: a logger bound to ``__name__``
+    # follows its defining module, so a future move would silently re-home these
+    # records. Nothing asserted the name before, so such a move would have gone
+    # green — this test captured at the root and only ever matched on message
+    # text.
+    assert all(
+        record.name == "notebooklm.auth"
+        for record in caplog.records
+        if "storage_state cookie" in record.message
+    ), "filter warnings must stay on the documented notebooklm.auth logger (ADR-0030)"
 
 
 def test_safe_cookie_shape_is_value_free() -> None:

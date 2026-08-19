@@ -3,20 +3,31 @@
 Extracted from ``_research.py`` (ADR-0008 module-size ratchet) so the
 ``ResearchAPI.import_sources`` / ``import_sources_with_verification`` machinery
 — URL normalization for import verification, the report-source predicate, the
-imported-entry / merge helpers, and the #1961 idempotency pre-filter + its
-``already_present`` side-channel carrier — lives in one cohesive place. These
-are re-imported by ``_research.py`` and remain reachable as
+imported-entry / merge helpers, the #1961 idempotency pre-filter + its
+``already_present`` side-channel carrier, and the #2187 batch-scaled read
+timeout + retry-time FAILED_PRECONDITION predicate — lives in one cohesive
+place. These are re-imported by ``_research.py`` and remain reachable as
 ``notebooklm._research.<name>`` for callers/tests that reference them there.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
 
+from ._runtime.config import (
+    AUTO_READ_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_BASE_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_MAX_TIMEOUT,
+    DEFAULT_IMPORT_RESEARCH_PER_SOURCE_TIMEOUT,
+    DEFAULT_TIMEOUT,
+    compose_builtin_read_timeout,
+)
 from ._types.research import ResearchSource, ResearchSourceInput
-from .exceptions import ResearchTaskMismatchError, ValidationError
+from .exceptions import ResearchTaskMismatchError, RPCError, ValidationError
+from .rpc import GrpcStatusCode, normalize_grpc_status
 
 if TYPE_CHECKING:
     from .types import Source
@@ -160,6 +171,136 @@ def _imported_result(
     return _ImportedResearchSources(imported, already_present)
 
 
+@dataclass
+class _ImportProbeOutcome:
+    """Result of reconciling ``sources.list`` against a failed IMPORT_RESEARCH call.
+
+    ``fully_verified_entries`` is ``None`` unless every outstanding requested
+    source (URL or no-URL) is confirmed present — a non-``None`` value
+    (including an empty list) means the caller should return success. The
+    remaining fields describe the retry-continuation state: whether anything
+    was filtered, and the (possibly unchanged) inputs to retry with.
+
+    When the pre-import baseline snapshot failed (``baseline_ids is None``),
+    "confirmed present" widens from "present among *new* sources" to "present
+    among *all current* sources" for the filtered-to-empty path — i.e. every
+    remaining requested URL merely already existing in the notebook (not
+    necessarily committed by this call) counts as verified. This mirrors the
+    pre-existing RPCTimeoutError behavior for a failed snapshot; it is not new
+    to the FAILED_PRECONDITION case.
+    """
+
+    fully_verified_entries: list[dict[str, str]] | None
+    newly_verified: list[dict[str, str]] = field(default_factory=list)
+    filtered: bool = False
+    removed_count: int = 0
+    source_inputs: list[ResearchSourceInput] = field(default_factory=list)
+    source_models: list[ResearchSource] = field(default_factory=list)
+    requested_urls_norm: set[str] = field(default_factory=set)
+    requested_no_url_count: int = 0
+
+
+def _reconcile_import_probe(
+    *,
+    current: Sequence[Source],
+    baseline_ids: set[str] | None,
+    requested_urls_norm: set[str],
+    requested_no_url_count: int,
+    source_inputs: list[ResearchSourceInput],
+    source_models: list[ResearchSource],
+    already_verified_ids: set[str],
+    allow_duplicate: bool,
+) -> _ImportProbeOutcome:
+    """Reconcile a post-failure ``sources.list`` snapshot against what was requested.
+
+    Pure computation extracted from ``import_sources_with_verification``'s
+    retry loop (ADR-0008 module-size ratchet) — no I/O, no logging, no
+    exception-type awareness. The caller (which knows whether the triggering
+    exception was ``RPCTimeoutError`` or the #2187 FAILED_PRECONDITION case)
+    decides what to log and whether a non-fully-verified outcome is safe to
+    retry from.
+    """
+    new_sources = (
+        [src for src in current if src.id not in baseline_ids] if baseline_ids is not None else []
+    )
+    new_urls_norm = {_normalize_import_verification_url(src.url) for src in new_sources if src.url}
+    current_urls_norm = {_normalize_import_verification_url(src.url) for src in current if src.url}
+    committed_urls_norm = requested_urls_norm & new_urls_norm
+
+    # Every URL landing is treated as the whole batch verified — including any
+    # no-URL (report) entries — on the assumption reports commit first
+    # server-side (see ``drop_no_url_entries`` below), so a URL landing implies
+    # the report did too. Pre-existing assumption, unchanged by #2187; noted
+    # here since this path now also resolves FAILED_PRECONDITION, not just
+    # RPCTimeoutError (claude review).
+    if baseline_ids is not None and requested_urls_norm.issubset(new_urls_norm):
+        entries: list[dict[str, str]] = []
+        remaining_no_url = requested_no_url_count
+        for src in new_sources:
+            if src.url and _normalize_import_verification_url(src.url) in requested_urls_norm:
+                entries.append(_imported_source_entry(src))
+            elif not src.url and remaining_no_url > 0:
+                entries.append(_imported_source_entry(src))
+                remaining_no_url -= 1
+        return _ImportProbeOutcome(fully_verified_entries=entries)
+
+    source_norms = [
+        (source_input, source, _source_import_verification_url(source))
+        for source_input, source in zip(source_inputs, source_models, strict=True)
+    ]
+    # Filter for retry: drop already-present URLs. Also, when *any* URL
+    # committed, drop no-URL entries (deep-research reports are appended
+    # FIRST in the IMPORT_RESEARCH payload, so a newly-observed URL implies
+    # the report committed too — without this guard each retry duplicates it
+    # server-side). Pre-existing URLs only de-dupe URL entries. When no URL
+    # committed, keep no-URL entries (report fate unknown; the caller's
+    # report-only attempt cap bounds the worst case).
+    drop_no_url_entries = bool(committed_urls_norm)
+    # Drop-for-retry anchor: normally a URL already present in the notebook
+    # (baseline OR committed by this call) is dropped to avoid duplicate
+    # inflation. But under ``allow_duplicate`` the caller explicitly opted to
+    # re-add baseline URLs, so anchor on the post-baseline ``new_urls_norm`` —
+    # only URLs THIS attempt committed are dropped; a pre-existing baseline
+    # URL is still retried and re-added, not silently treated as "already
+    # done" (#1961 codex review). #1934 safety holds in both modes: a URL
+    # committed by this attempt is never retried.
+    retry_present_urls = new_urls_norm if allow_duplicate else current_urls_norm
+    filtered_source_pairs = [
+        (source_input, source)
+        for source_input, source, url in source_norms
+        if url not in retry_present_urls and not (drop_no_url_entries and url is None)
+    ]
+
+    if len(filtered_source_pairs) == len(source_models):
+        return _ImportProbeOutcome(
+            fully_verified_entries=None,
+            source_inputs=source_inputs,
+            source_models=source_models,
+            requested_urls_norm=requested_urls_norm,
+            requested_no_url_count=requested_no_url_count,
+        )
+
+    newly_verified = [
+        _imported_source_entry(src)
+        for src in new_sources
+        if src.url
+        and _normalize_import_verification_url(src.url) in committed_urls_norm
+        and src.id not in already_verified_ids
+    ]
+    filtered_source_inputs = [source_input for source_input, _ in filtered_source_pairs]
+    filtered_source_models = [source for _, source in filtered_source_pairs]
+    return _ImportProbeOutcome(
+        fully_verified_entries=[] if not filtered_source_models else None,
+        newly_verified=newly_verified,
+        filtered=True,
+        removed_count=len(source_models) - len(filtered_source_pairs),
+        source_inputs=filtered_source_inputs,
+        source_models=filtered_source_models,
+        requested_urls_norm=_requested_import_verification_urls(filtered_source_models),
+        requested_no_url_count=_no_import_verification_url_entry_count(filtered_source_models),
+    )
+
+
 def _partition_requested_sources(
     source_inputs: list[ResearchSourceInput],
     source_models: list[ResearchSource],
@@ -205,3 +346,95 @@ def _partition_requested_sources(
         new_inputs.append(source_input)
         new_models.append(source)
     return new_inputs, new_models, already_present
+
+
+def _import_research_read_timeout(
+    source_count: int,
+    *,
+    base_timeout: float | None = DEFAULT_TIMEOUT,
+    override: float | None = AUTO_READ_TIMEOUT,
+    remaining_budget: float | None = None,
+) -> float | None:
+    """Resolve IMPORT_RESEARCH's per-attempt read timeout.
+
+    Batch scaling (#2187): the server ingests every entry (fetch/parse/embed)
+    before responding to one RPC, so a large deep-research batch needs
+    materially more time than a 3-source fast-research one. The base term is a
+    floor so a tiny import still fails fast on a genuinely broken call; the max
+    is a ceiling so a pathologically large batch is still bounded rather than
+    open-ended.
+
+    Composition (#2205): the scaled window is a *default*, so it is floored at
+    the client's configured ``base_timeout`` — a caller who bought
+    ``timeout=600`` keeps 600 s here instead of being silently capped at 240 s.
+
+    ``override`` is the ``import_research_timeout`` constructor kwarg and reads
+    exactly like ``chat_timeout`` does, so the two knobs are one rule:
+
+    * :data:`AUTO_READ_TIMEOUT` (unset) — batch-scaled, floored at ``base_timeout``;
+    * a number — the caller's word, replacing both the scaling and the floor;
+    * ``None`` — inherit ``base_timeout`` verbatim (no per-RPC override).
+
+    Retry-budget clamp (#2205): ``remaining_budget`` is what is left of
+    ``import_sources_with_verification``'s ``max_elapsed`` when this attempt
+    starts, so a late retry cannot be *granted* a window larger than the budget
+    it has left — without it, a retry starting 50 s from the deadline still got
+    the full batch-scaled (or configured) window. It is applied last, so it
+    also bounds an ``override`` and an inherited (``None``) window. That caller
+    only passes a budget it has already found viable — see
+    ``MIN_IMPORT_RESEARCH_ATTEMPT_TIMEOUT``, which is what keeps this from
+    producing a uselessly small window.
+
+    What this is *not*: a wall-clock deadline for the attempt. Every timeout in
+    this client is an ``httpx`` slot, and ``read`` is an inactivity limit
+    between socket reads — connect/pool waits sit outside it, and a server that
+    keeps dribbling bytes just inside the window keeps the request alive. So
+    the clamp bounds what an attempt is *given*, not how long it can take.
+    Enforcing the latter would mean cancelling an in-flight
+    ``NON_IDEMPOTENT_NO_RETRY`` POST, trading a bounded overshoot for an
+    unbounded duplicate-source risk (#808).
+    """
+    window: float | None
+    if override is AUTO_READ_TIMEOUT:
+        window = compose_builtin_read_timeout(
+            min(
+                DEFAULT_IMPORT_RESEARCH_MAX_TIMEOUT,
+                DEFAULT_IMPORT_RESEARCH_BASE_TIMEOUT
+                + DEFAULT_IMPORT_RESEARCH_PER_SOURCE_TIMEOUT * source_count,
+            ),
+            base_timeout,
+        )
+    else:
+        window = override
+    if remaining_budget is None:
+        return window
+    return remaining_budget if window is None else min(window, remaining_budget)
+
+
+def _is_import_research_failed_precondition(exc: RPCError) -> bool:
+    """True when ``exc`` is IMPORT_RESEARCH's documented retry-time FAILED_PRECONDITION.
+
+    The server rejects an ``IMPORT_RESEARCH`` call against a ``task_id`` whose
+    state an earlier attempt against that same id already partially mutated —
+    commonly this method's own prior (client-timed-out) call within the same
+    retry loop, but not necessarily; documented backend behavior, not a novel
+    failure (issue #1926, item F2b). ``import_sources_with_verification``
+    shares its post-error ``sources.list`` probe with :class:`RPCTimeoutError`
+    for this one specific, well-understood code, but — unlike a timeout —
+    only a fully-verified success is accepted; a partial/no match re-raises
+    rather than retrying the rejected task_id. Every other ``RPCError``
+    propagates immediately without probing.
+
+    This is a pure ``rpc_code`` check with no awareness of which RPC produced
+    it — correct today because ``import_sources`` issues exactly one RPC
+    inside the guarded ``try``. A future ``import_sources`` change that adds a
+    second RPC call there would need this predicate revisited.
+
+    Note: the verification probe (like the pre-existing RPCTimeoutError one it
+    shares) confirms a matching source *exists*, not that *this* IMPORT_RESEARCH
+    call is what created it — an unrelated concurrent addition of the same URL
+    could coincidentally satisfy it. That race is inherent to ID/URL-based
+    verification and pre-dates this predicate; it is not made more likely by
+    extending verification to cover FAILED_PRECONDITION alongside timeouts.
+    """
+    return normalize_grpc_status(exc.rpc_code) is GrpcStatusCode.FAILED_PRECONDITION

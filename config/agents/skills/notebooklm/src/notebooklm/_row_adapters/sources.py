@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -10,13 +11,45 @@ from typing import Any, ClassVar
 from .._types.common import _datetime_from_timestamp
 from ..exceptions import DecodingError
 from ..rpc import RPCMethod, safe_index
-from ..rpc.types import SourceStatus
+from ..rpc.types import DriveSourceStatus, SourceStatus
+
+logger = logging.getLogger(__name__)
+
+#: Unmapped status codes already warned about, so a polled source does not
+#: re-emit the same drift line on every decode. Mirrors
+#: ``_types/sources.py::_warned_source_types``.
+_warned_status_codes: set[int] = set()
+
+#: ``(method_id, repr(value))`` pairs already warned about by
+#: :meth:`SourceRow._warn_unmapped_drive_status`, so a polled Drive source does
+#: not re-emit the same drift line on every decode. ``repr`` rather than the
+#: value itself because a drifted slot can hold an unhashable payload (e.g. a
+#: list), and because ``repr`` keeps ``3`` and ``"3"`` distinct. Capped at
+#: :data:`_MAX_DRIFT_REPR_LEN` so a pathological payload cannot retain an
+#: unbounded string.
+_warned_drive_status_codes: set[tuple[str, str]] = set()
+
+#: Cap on the rendered drift value used as a warn-once key and logged. Long
+#: enough to identify any plausible scalar or short list verbatim.
+_MAX_DRIFT_REPR_LEN: int = 120
+
+#: Backend ``DRIVE_SOURCE_STATUS_UNSPECIFIED``. Not a
+#: :class:`~notebooklm.rpc.types.DriveSourceStatus` member on purpose — it means
+#: "no claim", which is what ``None`` already means, so
+#: :attr:`SourceRow.drive_status` normalizes it rather than giving one state two
+#: representations. See ``_wire_contract.py::ENUM_GAPS``.
+_DRIVE_STATUS_UNSPECIFIED: int = 0
+
+#: ``(method_id, block_pos)`` pairs already warned about by
+#: :meth:`SourceRow._document_id_at` — one line per drifted slot, not per row.
+_warned_drive_id_slots: set[tuple[str, int]] = set()
 
 __all__ = [
     "SourceFulltextRow",
     "SourceGuideRow",
     "SourceRow",
     "SourceRowShape",
+    "unwrap_add_source_rows",
 ]
 
 
@@ -60,6 +93,80 @@ class SourceRowShape(str, Enum):
     ENTRY = "entry"
 
 
+def _looks_like_source_entry(value: Any) -> bool:
+    """Whether ``value`` resembles one already-unwrapped Source row."""
+    if not isinstance(value, list) or not value:
+        return False
+    # An entry's second field is its title. Reject a nested list here so a
+    # repeated collection of short rows (``[[id-a], [id-b]]``) is not mistaken
+    # for one entry whose id envelope happens to be the first row.
+    if len(value) > 1 and value[1] is not None and not isinstance(value[1], str):
+        return False
+    raw_id = value[0]
+    if isinstance(raw_id, str):
+        return True
+    if not isinstance(raw_id, list) or not raw_id:
+        return False
+    if isinstance(raw_id[0], str):
+        return True
+    return (
+        len(raw_id) == 3
+        and raw_id[0] is None
+        and isinstance(raw_id[2], list)
+        and bool(raw_id[2])
+        and isinstance(raw_id[2][0], str)
+    )
+
+
+def _unwrap_source_entry(value: Any) -> list[Any] | None:
+    """Unwrap one flat/medium/deep Source payload to its entry, if recognized."""
+    candidate = value
+    for _ in range(3):
+        if _looks_like_source_entry(candidate):
+            return candidate
+        if not isinstance(candidate, list) or len(candidate) != 1:
+            return None
+        candidate = candidate[0]
+    return None
+
+
+def unwrap_add_source_rows(payload: Any) -> list[list[Any]]:
+    """Extract repeated Source payloads from known ``AddSources`` envelopes.
+
+    A single result historically decodes as one medium/deep Source payload;
+    a multi-entry response may be either a flat repeated-row list or carry one
+    additional outer list. Anything else is schema drift: the general Source
+    parser intentionally degrades malformed listing rows, which is unsafe for a
+    mutating response whose returned ids are the only proof of which writes
+    committed. Recognized per-row wrappers are deliberately retained so
+    :meth:`SourceRow.from_unknown_shape` can preserve shape-dependent decoding,
+    including the legacy deeply-nested ``metadata[0]`` URL fallback.
+    """
+    if not isinstance(payload, list) or not payload:
+        raise DecodingError(
+            "Unrecognized ADD_SOURCE response envelope",
+            raw_response=repr(payload),
+            method_id=RPCMethod.ADD_SOURCE.value,
+        )
+    single = _unwrap_source_entry(payload)
+    if single is not None:
+        return [payload]
+
+    repeated = [_unwrap_source_entry(item) for item in payload]
+    if all(item is not None for item in repeated):
+        return list(payload)
+
+    if len(payload) == 1 and isinstance(payload[0], list) and payload[0]:
+        wrapped_repeated = [_unwrap_source_entry(item) for item in payload[0]]
+        if all(item is not None for item in wrapped_repeated):
+            return list(payload[0])
+    raise DecodingError(
+        "Unrecognized ADD_SOURCE response envelope",
+        raw_response=repr(payload),
+        method_id=RPCMethod.ADD_SOURCE.value,
+    )
+
+
 @dataclass(frozen=True)
 class SourceRow:
     """Typed view of a single source row.
@@ -81,9 +188,17 @@ class SourceRow:
              :attr:`id` transparently.
     1      title (str) — may be ``None`` / missing on short rows.
     2      metadata sub-list (see below).
-    3      status block; ``[3][1]`` is the
-           :class:`~notebooklm.rpc.SourceStatus` code (used by
-           ``GET_NOTEBOOK`` source-list rows).
+    3      ``Source.settings`` block (``SourceSettings``). ``[3][1]`` is the
+           :class:`~notebooklm.rpc.types.SourceStatus` ingestion code (used by
+           ``GET_NOTEBOOK`` source-list rows); ``[3][3]`` is the
+           :class:`~notebooklm.rpc.types.DriveSourceStatus` Drive-side code,
+           populated on Drive-backed rows only (see :attr:`drive_status`).
+    5      Direct download URL for the original uploaded file, when present
+           (see :attr:`download_url`).
+    6      Drive viewer URL for the uploaded file, when present (see
+           :attr:`viewer_url`).
+    7      Content blob descriptor; ``[7][2]`` is the source's true content
+           MIME type (see :attr:`content_mime`).
     =====  ============================================================
 
     **Metadata sub-list layout** (``self._raw[2]``):
@@ -91,10 +206,18 @@ class SourceRow:
     =====  ============================================================
     Index  Meaning
     =====  ============================================================
-    0      Mixed — sometimes a bare ``http(s)://...`` URL (legacy
-           shape, only honored when ``url_allow_bare_http=True``).
+    0      ``SourceMetadata.googleDocsMetadata`` — a Google-native Doc /
+           Slides block whose ``[0][0]`` is the ``documentId`` (see
+           :attr:`drive_document_id`). Legacy shapes put a bare
+           ``http(s)://...`` URL here, honored only under
+           ``url_allow_bare_http``.
+    1      Source word/size count (see :attr:`word_count`). The meaning is
+           inferred from live values because the mobile schema leaves the
+           field unnamed.
     2      timestamp block; ``[2][0]`` is the creation timestamp
            (seconds since epoch).
+    3      Revision handle ``[revision_id, [seconds, nanos]]`` (see
+           :attr:`revision_id` and :attr:`revision_timestamp`).
     4      type code (int — see
            :class:`notebooklm._types.sources.SourceType` mapping in
            ``_types/sources.py``).
@@ -102,8 +225,13 @@ class SourceRow:
     7      url block; ``[7][0]`` is the canonical source URL when
            present (takes precedence over ``metadata[5][0]`` and
            ``metadata[0]``).
-    9      Drive-file descriptor for Drive-hosted sources:
-           ``[drive_id, kind_int, mime, ""]``; ``[9][2]`` is the MIME.
+    9      ``SourceMetadata.googleDriveSourceMetadata`` — the descriptor
+           for Drive-hosted files (native Sheets and Drive PDFs alike):
+           ``[document_id, kind_int, mime, ""]``; ``[9][0]`` is the
+           ``documentId`` (see :attr:`drive_document_id`), ``[9][2]`` the
+           MIME.
+    14     Last-modified timestamp block ``[seconds, nanos]`` (see
+           :attr:`last_modified_at`).
     19     top-level MIME string for Drive-hosted sources. Used with
            ``[9][2]`` to disambiguate the type-code ``14`` overload
            (native Sheet vs Drive-hosted PDF) — see :attr:`mime`.
@@ -151,22 +279,43 @@ class SourceRow:
     _METADATA_POS: ClassVar[int] = 2
     _STATUS_BLOCK_POS: ClassVar[int] = 3
     _STATUS_INNER_POS: ClassVar[int] = 1
+    # ``SourceSettings.userDriveSourceStatus`` (tag 4) inside the same settings
+    # block the ingestion status is read from (#2111).
+    _DRIVE_STATUS_INNER_POS: ClassVar[int] = 3
+    # Source tags 6-8 are unnamed ``addUnused()`` slots in the recovered
+    # mobile schema, but are populated together on uploaded-file rows (#2112).
+    _DOWNLOAD_URL_POS: ClassVar[int] = 5
+    _VIEWER_URL_POS: ClassVar[int] = 6
+    _CONTENT_DESCRIPTOR_POS: ClassVar[int] = 7
+    _CONTENT_DESCRIPTOR_MIME_POS: ClassVar[int] = 2
 
-    # Metadata sub-list positions.
-    _META_BARE_URL_POS: ClassVar[int] = 0
+    # Metadata sub-list positions. Index 0 is googleDocsMetadata, not a URL
+    # slot (the old _META_BARE_URL_POS name meant only the legacy fallback).
+    _META_GOOGLE_DOCS_POS: ClassVar[int] = 0
+    # These three fields are also unnamed in the recovered mobile schema. Their
+    # semantics are inferred from live values and context (#2114).
+    _META_WORD_COUNT_POS: ClassVar[int] = 1
     _META_TIMESTAMP_POS: ClassVar[int] = 2
+    _META_REVISION_POS: ClassVar[int] = 3
     _META_TYPE_POS: ClassVar[int] = 4
     _META_YOUTUBE_POS: ClassVar[int] = 5
     _META_URL_POS: ClassVar[int] = 7
     # Drive-hosted sources carry the true file MIME here (#1832 live capture):
-    # the drive-file descriptor ``[drive_id, kind_int, mime, ""]`` at [9] and a
+    # the descriptor ``[document_id, kind_int, mime, ""]`` at [9] and a
     # top-level MIME string at [19]. Used to disambiguate the type_code==14
-    # overload (native Sheet vs Drive-hosted binary like a PDF), which the URL
-    # slots can't — Drive sources carry no URL (metadata[0]/[5]/[7] all null).
+    # overload (native Sheet vs Drive PDF), which the URL slots can't — Drive
+    # rows have no URL (metadata[5]/[7] null; metadata[0] is the Drive block).
     _META_DRIVE_DESCRIPTOR_POS: ClassVar[int] = 9
+    _META_LAST_MODIFIED_POS: ClassVar[int] = 14
     _META_MIME_POS: ClassVar[int] = 19
     # Position of the MIME string inside the drive-file descriptor at [9].
     _DRIVE_DESCRIPTOR_MIME_POS: ClassVar[int] = 2
+    # Drive ``documentId`` inside either Drive metadata block (#2113):
+    # GoogleDocsSourceMetadata and GoogleDriveSourceMetadata both declare it as
+    # tag 1, so one constant covers both blocks.
+    _DRIVE_DOCUMENT_ID_POS: ClassVar[int] = 0
+    _REVISION_ID_POS: ClassVar[int] = 0
+    _REVISION_TIMESTAMP_POS: ClassVar[int] = 1
 
     # Id-envelope inner positions (the three layouts at ``self._raw[0]``).
     _ID_ENVELOPE_PLAIN_POS: ClassVar[int] = 0
@@ -341,6 +490,37 @@ class SourceRow:
         """
         return bool(self.id)
 
+    def listing_shape_error(self) -> str | None:
+        """Return why this row cannot support a strict source-list snapshot.
+
+        The general row adapter intentionally degrades incomplete shapes to
+        ``None`` / ``UNKNOWN`` because non-listing RPCs may omit metadata or a
+        status block. ``GET_NOTEBOOK`` source-list rows have a stronger shape:
+        strict filtering/counting needs both the type and status discriminants
+        to be present and integer-valued. Keeping this check on the adapter
+        preserves its ownership of all positional wire knowledge.
+        """
+        metadata = self.metadata
+        if metadata is None:
+            return "metadata block is missing or malformed"
+        if len(metadata) <= self._META_TYPE_POS:
+            return "metadata type code is missing"
+        type_code = metadata[self._META_TYPE_POS]
+        if not isinstance(type_code, int) or isinstance(type_code, bool):
+            return "metadata type code is malformed"
+
+        if len(self._raw) <= self._STATUS_BLOCK_POS:
+            return "status block is missing"
+        status_block = self._raw[self._STATUS_BLOCK_POS]
+        if not isinstance(status_block, list):
+            return "status block is malformed"
+        if len(status_block) <= self._STATUS_INNER_POS:
+            return "status code is missing"
+        status_code = status_block[self._STATUS_INNER_POS]
+        if not isinstance(status_code, int) or isinstance(status_code, bool):
+            return "status code is malformed"
+        return None
+
     @property
     def title(self) -> str | None:
         """Source title — ``None`` when absent (preserves legacy contract).
@@ -376,6 +556,98 @@ class SourceRow:
             return None
         value = self._raw[self._METADATA_POS]
         return value if isinstance(value, list) else None
+
+    def _top_level_string(self, position: int) -> str | None:
+        """Return a non-empty string from a top-level source slot."""
+        if len(self._raw) <= position:
+            return None
+        value = self._raw[position]
+        return value if isinstance(value, str) and value else None
+
+    @property
+    def download_url(self) -> str | None:
+        """Direct URL for downloading the original uploaded file.
+
+        This is ``Source`` tag 6 (row index 5), populated only for source kinds
+        whose original bytes remain downloadable. The mobile schema leaves the
+        slot unnamed; the meaning is established by live URLs on the
+        ``contribution.usercontent.google.com/download`` endpoint (#2112).
+        """
+        return self._top_level_string(self._DOWNLOAD_URL_POS)
+
+    @property
+    def viewer_url(self) -> str | None:
+        """Drive viewer URL for the original uploaded file, when available.
+
+        This is the live-confirmed ``Source`` tag-7 slot (row index 6). It is
+        independent of :attr:`url`, which identifies URL/YouTube sources.
+        """
+        return self._top_level_string(self._VIEWER_URL_POS)
+
+    @property
+    def content_mime(self) -> str | None:
+        """True content MIME from the source blob descriptor, when present.
+
+        ``Source`` tag 8 carries a blob descriptor whose third element is the
+        MIME. Unlike :attr:`mime`, this is not Drive-specific and therefore
+        covers uploaded files such as Markdown sources (#2112).
+        """
+        if len(self._raw) <= self._CONTENT_DESCRIPTOR_POS:
+            return None
+        descriptor = self._raw[self._CONTENT_DESCRIPTOR_POS]
+        if not isinstance(descriptor, list) or len(descriptor) <= self._CONTENT_DESCRIPTOR_MIME_POS:
+            return None
+        value = descriptor[self._CONTENT_DESCRIPTOR_MIME_POS]
+        return value if isinstance(value, str) and value else None
+
+    @property
+    def word_count(self) -> int | None:
+        """Inferred source word/size count from ``metadata[1]``.
+
+        The field is populated on every sampled source row, but its proto name
+        was not recovered. Values and the surrounding per-source word-limit
+        contract strongly indicate a word count; callers should treat that
+        semantic label as inferred rather than schema-confirmed (#2114).
+        """
+        metadata = self.metadata
+        if metadata is None or len(metadata) <= self._META_WORD_COUNT_POS:
+            return None
+        value = metadata[self._META_WORD_COUNT_POS]
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def _revision_handle(self) -> list[Any] | None:
+        """Return the inferred ``[revision_id, timestamp]`` block."""
+        metadata = self.metadata
+        if metadata is None or len(metadata) <= self._META_REVISION_POS:
+            return None
+        value = metadata[self._META_REVISION_POS]
+        return value if isinstance(value, list) else None
+
+    @property
+    def revision_id(self) -> str | None:
+        """Opaque source revision identifier from ``metadata[3][0]``."""
+        handle = self._revision_handle()
+        if handle is None or len(handle) <= self._REVISION_ID_POS:
+            return None
+        value = handle[self._REVISION_ID_POS]
+        return value if isinstance(value, str) and value else None
+
+    @property
+    def revision_timestamp_raw(self) -> int | float | None:
+        """Raw revision timestamp seconds from ``metadata[3][1][0]``."""
+        handle = self._revision_handle()
+        if handle is None or len(handle) <= self._REVISION_TIMESTAMP_POS:
+            return None
+        return self._timestamp_raw_from_block(
+            handle[self._REVISION_TIMESTAMP_POS],
+            source="SourceRow.revision_timestamp_raw",
+        )
+
+    @property
+    def revision_timestamp(self) -> datetime | None:
+        """Revision timestamp as a timezone-aware UTC datetime."""
+        raw = self.revision_timestamp_raw
+        return _datetime_from_timestamp(raw) if raw is not None else None
 
     @property
     def type_code(self) -> int | None:
@@ -434,6 +706,63 @@ class SourceRow:
             return None
         value = descriptor[self._DRIVE_DESCRIPTOR_MIME_POS]
         return value if isinstance(value, str) and value else None
+
+    @property
+    def drive_document_id(self) -> str | None:
+        """Google Drive file id of a Drive-backed source — ``None`` otherwise.
+
+        Read from whichever Drive block the row carries: ``metadata[0][0]``
+        (``googleDocsMetadata.documentId``; corpus-observed on type codes 1/2),
+        else ``metadata[9][0]`` (``googleDriveSourceMetadata.documentId``; type
+        code 14 — Drive-hosted files, native Sheet and Drive PDF alike per the
+        #1832 overload). No corpus row populates both, so the order is an
+        arbitrary-but-pinned tie-break, not a precedence claim.
+
+        The only identity-bearing echo of the Drive ``file_id``: the URL slots
+        are empty and ``metadata[0]`` holds the Drive block, not a URL, so
+        :attr:`url` is ``None`` on every Drive row. ``sources.add_drive`` probes
+        on it (#2113); non-Drive rows return ``None`` and never match a file_id.
+        """
+        metadata = self.metadata
+        if metadata is None:
+            return None
+        return self._document_id_at(metadata, self._META_GOOGLE_DOCS_POS) or self._document_id_at(
+            metadata, self._META_DRIVE_DESCRIPTOR_POS
+        )
+
+    def _document_id_at(self, metadata: list[Any], block_pos: int) -> str | None:
+        """Read a ``documentId`` from the Drive block at ``block_pos``.
+
+        Structural absence degrades silently — a missing / non-list block just
+        means "not a Drive row". Semantic drift warns once (like the unmapped-
+        status path): a present block IS a Drive row, so a non-string / blank id
+        means the slot moved — the #2113 signature, where the probe then reports
+        "not committed" forever.
+        """
+        if len(metadata) <= block_pos:
+            return None
+        block = metadata[block_pos]
+        if not isinstance(block, list) or len(block) <= self._DRIVE_DOCUMENT_ID_POS:
+            return None
+        value = block[self._DRIVE_DOCUMENT_ID_POS]
+        # Test with ``.strip()`` but return the wire value verbatim: a blank or
+        # whitespace-only id is unmatchable (``add_drive`` rejects such a
+        # ``file_id`` outright), so it is drift, not an id. No emptiness guard
+        # below — the length check above already returned for a short block.
+        if isinstance(value, str) and value.strip():
+            return value
+        key = (self.method_id, block_pos)
+        if key not in _warned_drive_id_slots:
+            _warned_drive_id_slots.add(key)
+            logger.warning(
+                "Drive metadata block at metadata[%d] carries no usable documentId "
+                "(got %s) from RPC %s; sources.add_drive cannot dedupe these rows "
+                "— the wire shape may have changed",
+                block_pos,
+                type(value).__name__,
+                self.method_id,
+            )
+        return None
 
     @property
     def url(self) -> str | None:
@@ -516,12 +845,38 @@ class SourceRow:
         ``metadata[0]`` strings (e.g. drive ids, mime types) as URLs
         on shapes where this slot packs unrelated content.
         """
-        if not self.url_allow_bare_http or len(metadata) <= self._META_BARE_URL_POS:
+        if not self.url_allow_bare_http or len(metadata) <= self._META_GOOGLE_DOCS_POS:
             return None
-        candidate = metadata[self._META_BARE_URL_POS]
+        candidate = metadata[self._META_GOOGLE_DOCS_POS]
         if isinstance(candidate, str) and candidate.startswith("http"):
             return candidate
         return None
+
+    def _timestamp_raw_from_block(
+        self,
+        timestamp_block: Any,
+        *,
+        source: str,
+        allow_bool: bool = False,
+    ) -> int | float | None:
+        """Decode seconds from a ``[seconds, nanos]`` block.
+
+        ``allow_bool`` exists only for the legacy metadata helper, whose
+        long-standing public behavior treats booleans as integers.
+        """
+        if not isinstance(timestamp_block, list) or not timestamp_block:
+            return None
+        value = safe_index(
+            timestamp_block,
+            0,
+            method_id=self.method_id,
+            source=source,
+        )
+        return (
+            value
+            if isinstance(value, (int, float)) and (allow_bool or not isinstance(value, bool))
+            else None
+        )
 
     @property
     def created_at_raw(self) -> int | float | None:
@@ -540,16 +895,10 @@ class SourceRow:
         metadata = self.metadata
         if metadata is None or len(metadata) <= self._META_TIMESTAMP_POS:
             return None
-        timestamp_block = metadata[self._META_TIMESTAMP_POS]
-        if not isinstance(timestamp_block, list) or not timestamp_block:
-            return None
-        value = safe_index(
-            timestamp_block,
-            0,
-            method_id=self.method_id,
+        return self._timestamp_raw_from_block(
+            metadata[self._META_TIMESTAMP_POS],
             source="SourceRow.created_at_raw",
         )
-        return value if isinstance(value, (int, float)) else None
 
     @property
     def created_at(self) -> datetime | None:
@@ -558,6 +907,23 @@ class SourceRow:
         if raw is None:
             return None
         return _datetime_from_timestamp(raw)
+
+    @property
+    def last_modified_at_raw(self) -> int | float | None:
+        """Raw last-modified timestamp seconds from ``metadata[14][0]``."""
+        metadata = self.metadata
+        if metadata is None or len(metadata) <= self._META_LAST_MODIFIED_POS:
+            return None
+        return self._timestamp_raw_from_block(
+            metadata[self._META_LAST_MODIFIED_POS],
+            source="SourceRow.last_modified_at_raw",
+        )
+
+    @property
+    def last_modified_at(self) -> datetime | None:
+        """Last-modified timestamp as a timezone-aware UTC datetime."""
+        raw = self.last_modified_at_raw
+        return _datetime_from_timestamp(raw) if raw is not None else None
 
     # ---- Metadata-only entry points (legacy ``_types.sources`` helpers) --
     # ``_types/sources._extract_source_url`` / ``_extract_source_created_at``
@@ -574,9 +940,8 @@ class SourceRow:
     def _from_metadata(cls, metadata: Any) -> SourceRow:
         """Wrap a bare metadata sub-list as a row whose ``metadata`` is it.
 
-        Used only by :meth:`created_at_from_metadata` so the timestamp walk
-        reuses the strict :attr:`created_at` property unchanged. ``_raw[0]``
-        / ``_raw[1]`` are placeholders the timestamp path never reads.
+        Used only by :meth:`created_at_from_metadata`. ``_raw[0]`` / ``_raw[1]``
+        are placeholders the timestamp path never reads.
         """
         return cls(_raw=[None, None, metadata])
 
@@ -593,7 +958,17 @@ class SourceRow:
         """
         if not isinstance(metadata, list):
             return None
-        return cls._from_metadata(metadata).created_at
+        if len(metadata) <= cls._META_TIMESTAMP_POS:
+            return None
+        row = cls._from_metadata(metadata)
+        raw = row._timestamp_raw_from_block(
+            metadata[cls._META_TIMESTAMP_POS],
+            source="SourceRow.created_at_raw",
+            # The legacy public helper treated bool as an int. Preserve that
+            # compatibility here while real SourceRow properties reject it.
+            allow_bool=True,
+        )
+        return _datetime_from_timestamp(raw) if raw is not None else None
 
     @classmethod
     def url_from_metadata(cls, metadata: Any, *, allow_bare_http: bool = True) -> str | None:
@@ -635,42 +1010,134 @@ class SourceRow:
                 and isinstance(yt_data[cls._LIST_FIRST_POS], str)
             ):
                 url = yt_data[cls._LIST_FIRST_POS]
-        if not url and allow_bare_http and len(metadata) > cls._META_BARE_URL_POS:
-            candidate = metadata[cls._META_BARE_URL_POS]
+        if not url and allow_bare_http and len(metadata) > cls._META_GOOGLE_DOCS_POS:
+            candidate = metadata[cls._META_GOOGLE_DOCS_POS]
             if isinstance(candidate, str) and candidate.startswith("http"):
                 url = candidate
         return url
+
+    def _settings_block(self) -> list[Any] | None:
+        """The ``Source.settings`` sub-list at ``self._raw[3]``, or ``None``.
+
+        ``None`` when the slot is absent or not a list — several valid
+        non-listing response shapes omit the block entirely, so both callers
+        (:attr:`status` and :attr:`drive_status`) fail closed on it without
+        warning.
+        """
+        if len(self._raw) <= self._STATUS_BLOCK_POS:
+            return None
+        block = self._raw[self._STATUS_BLOCK_POS]
+        return block if isinstance(block, list) else None
 
     @property
     def status(self) -> SourceStatus:
         """Processing status from ``self._raw[3][1]``.
 
         Used by ``GET_NOTEBOOK`` source-list rows where every entry
-        carries a status block. Defaults to
-        :data:`SourceStatus.READY` when:
+        carries a status block. Returns :data:`SourceStatus.UNKNOWN` when:
 
         * position 3 is absent / non-list / too short, or
         * the status code is not one of the known enum values.
 
-        This mirrors the legacy ``SourceLister._extract_status``
-        contract — same fallback to :data:`SourceStatus.READY` on any
-        unrecognised code. The membership check uses ``SourceStatus(...)``
-        directly (catching :class:`ValueError`) rather than an explicit
-        member tuple so the adapter automatically accepts any new values
-        added to :class:`SourceStatus` without a parallel update here.
+        Unknown numeric codes emit a warning — once per code — so backend enum
+        drift is visible without repeating on every poll of the same source.
+        Structurally malformed status blocks fail closed without warning because
+        several valid non-listing response shapes omit the block entirely.
         """
-        if (
-            len(self._raw) <= self._STATUS_BLOCK_POS
-            or not isinstance(self._raw[self._STATUS_BLOCK_POS], list)
-            or len(self._raw[self._STATUS_BLOCK_POS]) <= self._STATUS_INNER_POS
-        ):
-            return SourceStatus.READY
+        settings = self._settings_block()
+        if settings is None or len(settings) <= self._STATUS_INNER_POS:
+            return SourceStatus.UNKNOWN
 
-        status_code = self._raw[self._STATUS_BLOCK_POS][self._STATUS_INNER_POS]
+        status_code = settings[self._STATUS_INNER_POS]
+        if not isinstance(status_code, int) or isinstance(status_code, bool):
+            return SourceStatus.UNKNOWN
         try:
             return SourceStatus(status_code)
         except ValueError:
-            return SourceStatus.READY
+            # Warn once per code, like the sibling unmapped-enum path
+            # (``_types/sources.py::_warned_source_types``): ``SourceRow.status``
+            # is re-decoded on every poll, so an unmapped code on a source being
+            # waited on would otherwise repeat the same line ~17 times per wait.
+            if status_code not in _warned_status_codes:
+                _warned_status_codes.add(status_code)
+                logger.warning(
+                    "Unknown source status code %r from RPC %s; treating as UNKNOWN",
+                    status_code,
+                    self.method_id,
+                )
+            return SourceStatus.UNKNOWN
+
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        """Drive-side health from ``self._raw[3][3]`` — ``None`` when absent.
+
+        ``SourceSettings.userDriveSourceStatus`` (tag 4). Only Drive-backed
+        rows carry it: in a 409-row live capture, 4 rows populated it (all
+        Drive-backed, all ``ACTIVE``) and the other 405 left it absent — 402
+        with ``settings=[null,2]`` and 3 with ``settings=[null,2,[...]]`` (see
+        ``docs/notes/web-rpc-vs-mobile-grpc-audit-2026-08-07.md`` §1.6).
+
+        Return values:
+
+        * ``None`` — the slot is absent, null, an explicit ``0``
+          (``DRIVE_SOURCE_STATUS_UNSPECIFIED``, which proto3 normally omits
+          anyway), or the settings block is short. All four mean the same
+          thing — "this row makes no Drive-health claim" — so they share one
+          representation. Absence is therefore NOT proof that a source is not
+          Drive-backed (``SourceRow.drive_document_id`` answers that).
+        * A :class:`~notebooklm.rpc.types.DriveSourceStatus` member for a
+          mapped code.
+        * :attr:`~notebooklm.rpc.types.DriveSourceStatus.UNKNOWN` when the slot
+          IS populated but carries a code (or type) this client does not model
+          — deliberately distinct from ``None`` so "backend said something we
+          could not read" never masquerades as "backend said nothing".
+
+        Unmapped values warn once per raw value, like :attr:`status`: a Drive
+        source polled by ``wait_until_ready`` re-decodes this on every poll.
+        """
+        settings = self._settings_block()
+        if settings is None or len(settings) <= self._DRIVE_STATUS_INNER_POS:
+            return None
+        code = settings[self._DRIVE_STATUS_INNER_POS]
+        if code is None:
+            return None
+        # ``bool`` is an ``int`` subclass, and a JSON ``true``/``false`` here is
+        # drift, not a status — so it must fall through to the warn path rather
+        # than decode as 1 / 0.
+        if isinstance(code, int) and not isinstance(code, bool):
+            # An explicit ``UNSPECIFIED`` (0) collapses into the same ``None``
+            # an absent slot yields: both say "no claim", and one state must
+            # not have two representations.
+            if code == _DRIVE_STATUS_UNSPECIFIED:
+                return None
+            # ``UNKNOWN`` is a client-side sentinel, not a wire value, so a
+            # literal -1 is drift and must warn rather than round-trip.
+            if code != DriveSourceStatus.UNKNOWN:
+                try:
+                    return DriveSourceStatus(code)
+                except ValueError:
+                    pass
+        self._warn_unmapped_drive_status(code)
+        return DriveSourceStatus.UNKNOWN
+
+    def _warn_unmapped_drive_status(self, code: Any) -> None:
+        """Warn once per ``(RPC, unmapped value)`` pair.
+
+        Keyed like the sibling :data:`_warned_drive_id_slots` (which keys on
+        ``(method_id, block_pos)``) so the same drifted code arriving from a
+        second RPC is still reported once, naming that RPC.
+        """
+        rendered = repr(code)[:_MAX_DRIFT_REPR_LEN]
+        key = (self.method_id, rendered)
+        if key in _warned_drive_status_codes:
+            return
+        _warned_drive_status_codes.add(key)
+        logger.warning(
+            "Unknown Drive source status %s from RPC %s; treating as UNKNOWN. "
+            "Drive-side health for this source cannot be reported",
+            rendered,
+            self.method_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -859,7 +1326,15 @@ class SourceFulltextRow:
 
     @property
     def text_content_blocks(self) -> list[Any] | None:
-        """Text-content blocks at ``result[3][0]`` — ``None`` when absent / non-list.
+        """The document ``Body`` at ``result[3][0]`` — ``None`` when absent / non-list.
+
+        ``result[3]`` is the source's ``tailwindDoc`` and ``[3][0]`` its
+        ``Body``: a structured tree, not the pre-flattened string list the name
+        suggests. ``_source/content.py`` derives two things from it — the legacy
+        newline-joined ``SourceFulltext.content`` and, since #2128, the parsed
+        ``SourceFulltext.document`` (via
+        :func:`notebooklm._row_adapters.documents.build_document`, which owns
+        every position below this one).
 
         Mirrors the legacy text-path guard: a falsy / non-list ``result[3]`` or
         a non-list ``result[3][0]`` yields ``None`` (empty content + warning).

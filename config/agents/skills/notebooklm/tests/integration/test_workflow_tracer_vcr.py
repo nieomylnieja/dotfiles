@@ -111,7 +111,11 @@ class TestWorkflowTracerBullet:
         match_on=["method", "scheme", "host", "port", "path", "rpcids", "freq"],
     )
     async def test_full_workflow(
-        self, tmp_path: Path, fast_sleep: None, legacy_vcr_follow_up_probe
+        self,
+        tmp_path: Path,
+        fast_sleep: None,
+        legacy_vcr_follow_up_probe,
+        legacy_vcr_add_url_baseline,
     ) -> None:
         """End-to-end user journey produces a downloadable report.
 

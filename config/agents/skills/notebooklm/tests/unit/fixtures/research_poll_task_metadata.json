@@ -1,0 +1,122 @@
+{
+  "_source": "live POLL_RESEARCH capture, 2026-08-13 (#2122): one fast web run, polled while in flight and again once it settled",
+  "polls": [
+    [],
+    [
+      [
+        [
+          "dd951a87-c3ae-49b9-9056-4fb6d77f18f8",
+          [
+            "39eb5987-a73b-46b2-b906-980dd106e4c6",
+            [
+              "python asyncio event loop",
+              1
+            ],
+            1,
+            null,
+            1
+          ],
+          [
+            1786619578,
+            139902000
+          ],
+          [
+            1786619578,
+            139902000
+          ],
+          "400237754469"
+        ]
+      ]
+    ],
+    [
+      [
+        [
+          "dd951a87-c3ae-49b9-9056-4fb6d77f18f8",
+          [
+            "39eb5987-a73b-46b2-b906-980dd106e4c6",
+            [
+              "python asyncio event loop",
+              1
+            ],
+            1,
+            [
+              [
+                [
+                  "https://docs.python.org/3/howto/a-conceptual-overview-of-asyncio.html",
+                  "A Conceptual Overview of asyncio — Python 3.14.7 documentation",
+                  "Comprehensive introduction to the event loop's role as a conductor.",
+                  1
+                ],
+                [
+                  "https://news.lavx.hu/article/demystifying-python-s-asyncio-a-deep-dive-into-its-core-mechanics",
+                  "Demystifying Python's Asyncio: A Deep Dive into Its Core Mechanics | LavX News",
+                  "Clear breakdown of the relationship between coroutines, tasks, and futures.",
+                  1
+                ],
+                [
+                  "https://en.wikipedia.org/wiki/Cooperative_multitasking",
+                  "Cooperative multitasking - Wikipedia",
+                  "Explanation of cooperative multitasking compared to traditional OS-level scheduling.",
+                  1
+                ],
+                [
+                  "https://dugarsumit.github.io/files/multi-processing-threading-asyncio.pdf",
+                  "Multiprocessing vs Multithreading vs Async IO - Sumit Dugar",
+                  "Visual comparison of synchronous versus asynchronous control flow in Python.",
+                  1
+                ],
+                [
+                  "https://mergify.com/blog/detecting-blocking-tasks-in-asyncio-by-measuring-event-loop-latency",
+                  "Detecting Blocking Tasks in Asyncio by Measuring Event Loop Latency | Mergify",
+                  "Practical techniques for detecting and measuring event loop latency.",
+                  1
+                ],
+                [
+                  "https://erold.guide/guidelines/fastapi/async-patterns/never-block-async/",
+                  "Never Block the Async Event Loop - Erold Guide",
+                  "Crucial patterns for preventing blocking calls in your async code.",
+                  1
+                ],
+                [
+                  "https://oneuptime.com/blog/post/2026-01-30-how-to-build-asyncio-event-loops-in-python/view",
+                  "How to Build Asyncio Event Loops in Python - OneUptime",
+                  "Guidelines on managing loop lifecycles using modern asyncio.run entry points.",
+                  1
+                ],
+                [
+                  "https://stackoverflow.com/questions/79280244/is-it-safe-to-create-asyncio-event-loop-in-one-thread-and-run-it-in-another-thre",
+                  "Is it safe to create asyncio event loop in one thread and run it in another thread while having ability to cancel it from outside the thread (python3) - Stack Overflow",
+                  "Deep dive into thread-safety when running loops in separate threads.",
+                  1
+                ],
+                [
+                  "https://levelup.gitconnected.com/mastering-pythons-asyncio-the-unspoken-secrets-of-writing-high-performance-code-3d7483518894",
+                  "Mastering Python's Asyncio: The Unspoken Secrets of Writing High-Performance Code",
+                  "Advanced performance tricks using uvloop and memory management strategies.",
+                  1
+                ],
+                [
+                  "https://docs.python.org/3/library/asyncio-dev.html",
+                  "Developing with asyncio — Python 3.14.7 documentation",
+                  "Official documentation on using debug mode to identify slow callbacks.",
+                  1
+                ]
+              ],
+              "These resources explain the core mechanics of the Python asyncio event loop, from basic cooperative multitasking to advanced performance optimization."
+            ],
+            2
+          ],
+          [
+            1786619585,
+            195655000
+          ],
+          [
+            1786619578,
+            139902000
+          ],
+          "400237754469"
+        ]
+      ]
+    ]
+  ]
+}

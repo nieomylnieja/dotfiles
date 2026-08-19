@@ -81,6 +81,7 @@ FORBIDDEN_RELATIVE_PARENTS = {"rendering", "error_handler", "runtime"}
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 SRC_ROOT = REPO_ROOT / "src"
 SERVICES_ROOT = REPO_ROOT / "src" / "notebooklm" / "cli" / "services"
+LOGIN_ROOT = SERVICES_ROOT / "login"
 CLI_PACKAGE = "notebooklm.cli"
 
 # Absolute command-layer modules a ``cli/services`` module must never reach via
@@ -117,19 +118,19 @@ GUARDED_PATHS = {
     "cli/services/generate.py": SERVICES_ROOT / "generate.py",
     "cli/services/label_listing.py": SERVICES_ROOT / "label_listing.py",
     "cli/services/listing.py": SERVICES_ROOT / "listing.py",
-    "cli/services/login/browser_accounts.py": SERVICES_ROOT / "login" / "browser_accounts.py",
-    "cli/services/login/chromium_accounts.py": SERVICES_ROOT / "login" / "chromium_accounts.py",
-    "cli/services/login/cookie_domains.py": SERVICES_ROOT / "login" / "cookie_domains.py",
-    "cli/services/login/cookie_jar.py": SERVICES_ROOT / "login" / "cookie_jar.py",
-    "cli/services/login/cookie_writes.py": SERVICES_ROOT / "login" / "cookie_writes.py",
-    "cli/services/login/exceptions.py": SERVICES_ROOT / "login" / "exceptions.py",
-    "cli/services/login/firefox_accounts.py": SERVICES_ROOT / "login" / "firefox_accounts.py",
-    "cli/services/login/io_seam.py": SERVICES_ROOT / "login" / "io_seam.py",
-    "cli/services/login/master_token.py": SERVICES_ROOT / "login" / "master_token.py",
-    "cli/services/login/outcomes.py": SERVICES_ROOT / "login" / "outcomes.py",
-    "cli/services/login/profile_targets.py": SERVICES_ROOT / "login" / "profile_targets.py",
-    "cli/services/login/refresh.py": SERVICES_ROOT / "login" / "refresh.py",
-    "cli/services/login/rookiepy_errors.py": SERVICES_ROOT / "login" / "rookiepy_errors.py",
+    "cli/services/login/browser_accounts.py": LOGIN_ROOT / "browser_accounts.py",
+    "cli/services/login/chromium_accounts.py": LOGIN_ROOT / "chromium_accounts.py",
+    "cli/services/login/cookie_domains.py": LOGIN_ROOT / "cookie_domains.py",
+    "cli/services/login/cookie_jar.py": LOGIN_ROOT / "cookie_jar.py",
+    "cli/services/login/cookie_writes.py": LOGIN_ROOT / "cookie_writes.py",
+    "cli/services/login/exceptions.py": LOGIN_ROOT / "exceptions.py",
+    "cli/services/login/firefox_accounts.py": LOGIN_ROOT / "firefox_accounts.py",
+    "cli/services/login/io_seam.py": LOGIN_ROOT / "io_seam.py",
+    "cli/services/login/master_token.py": LOGIN_ROOT / "master_token.py",
+    "cli/services/login/outcomes.py": LOGIN_ROOT / "outcomes.py",
+    "cli/services/login/profile_targets.py": LOGIN_ROOT / "profile_targets.py",
+    "cli/services/login/refresh.py": LOGIN_ROOT / "refresh.py",
+    "cli/services/login/rookie_cookies_errors.py": LOGIN_ROOT / "rookie_cookies_errors.py",
     "cli/services/playwright_login.py": SERVICES_ROOT / "playwright_login.py",
     "cli/services/playwright_redaction.py": SERVICES_ROOT / "playwright_redaction.py",
     "cli/services/polling.py": SERVICES_ROOT / "polling.py",

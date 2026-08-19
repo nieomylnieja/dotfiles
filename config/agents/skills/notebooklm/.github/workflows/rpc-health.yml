@@ -299,11 +299,46 @@ jobs:
       # redirect chain regardless of which auth source fed it — issue #2019.
       continue-on-error: true
       shell: bash
+      env:
+        HEALTH_EXIT_CODE: ${{ steps.health.outputs.exit_code }}
       run: |
         set +e
-        uv run python scripts/capture_rpc_registry.py --check --check-enums 2>&1 \
+        if [ "$HEALTH_EXIT_CODE" = "2" ]; then
+          cat > bundle-drift-report.txt <<'EOF'
+        AUTHENTICATION FAILURE: bundle drift monitor skipped because the RPC Health Check
+        already classified this run as an authentication or infrastructure failure.
+          No RPC or studio-enum drift conclusion was drawn.
+        EOF
+          echo "outcome=authentication" >> "$GITHUB_OUTPUT"
+          echo "exit_code=2" >> "$GITHUB_OUTPUT"
+          exit 2
+        fi
+        rm -f bundle-outcome.txt
+        uv run python scripts/capture_rpc_registry.py --check --check-enums \
+          --outcome-file bundle-outcome.txt 2>&1 \
           | tee bundle-drift-report.txt
-        exit_code=${PIPESTATUS[0]}
+        raw_exit_code=${PIPESTATUS[0]}
+        if [ -f bundle-outcome.txt ]; then
+          read -r outcome < bundle-outcome.txt || outcome=""
+        else
+          outcome=""
+        fi
+        case "$outcome" in
+          clean) exit_code=0 ;;
+          drift) exit_code=1 ;;
+          authentication|infrastructure) exit_code=2 ;;
+          *)
+            outcome="runner-error"
+            exit_code=2
+            {
+              echo
+              echo "INFRASTRUCTURE FAILURE: bundle monitor exited before classifying the run."
+              echo "Raw command exit: ${raw_exit_code}."
+              echo "No RPC or studio-enum drift conclusion was drawn."
+            } >> bundle-drift-report.txt
+            ;;
+        esac
+        echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
         echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
         exit "$exit_code"
 
@@ -334,7 +369,7 @@ jobs:
         PY
 
     - name: Check for existing bundle drift issue
-      if: steps.bundle.outputs.exit_code != '0'
+      if: steps.bundle.outputs.outcome == 'drift'
       id: dup_bundle
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -350,7 +385,7 @@ jobs:
 
     - name: Create Issue on bundle drift
       if: |
-        steps.bundle.outputs.exit_code != '0'
+        steps.bundle.outputs.outcome == 'drift'
         && steps.dup_bundle.outputs.open == '0'
       uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710  # @ v6.0.0
       with:
@@ -396,8 +431,30 @@ jobs:
         content-filepath: health-report.txt
         labels: bug, rpc-breakage, automated
 
+    - name: Prepare authentication failure report
+      if: |
+        steps.health.outputs.exit_code == '2'
+        || steps.bundle.outputs.exit_code == '2'
+      shell: bash
+      run: |
+        {
+          echo "RPC health authentication/infrastructure failure"
+          echo
+          if [ "${{ steps.health.outputs.exit_code }}" = "2" ]; then
+            echo "--- RPC health check ---"
+            cat health-report.txt
+          fi
+          if [ "${{ steps.bundle.outputs.exit_code }}" = "2" ]; then
+            echo
+            echo "--- Bundle discovery ---"
+            cat bundle-drift-report.txt
+          fi
+        } > auth-failure-report.txt
+
     - name: Check for existing Auth Failure issue
-      if: steps.health.outputs.exit_code == '2'
+      if: |
+        steps.health.outputs.exit_code == '2'
+        || steps.bundle.outputs.exit_code == '2'
       id: dup_auth
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -413,12 +470,12 @@ jobs:
 
     - name: Create Issue on Auth Failure
       if: |
-        steps.health.outputs.exit_code == '2'
+        (steps.health.outputs.exit_code == '2' || steps.bundle.outputs.exit_code == '2')
         && steps.dup_auth.outputs.open == '0'
       uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710  # @ v6.0.0
       with:
         title: "RPC Health Check: Authentication Failure"
-        content-filepath: health-report.txt
+        content-filepath: auth-failure-report.txt
         labels: bug, automated
 
     - name: Check for existing non-transient ERROR issue

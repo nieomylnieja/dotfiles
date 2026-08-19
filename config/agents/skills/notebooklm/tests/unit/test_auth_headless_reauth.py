@@ -537,6 +537,83 @@ def test_stale_outcome_from_previous_cycle_is_not_coalesced(tmp_path: Path, monk
     assert drives["count"] == 2  # drove its own browser, did not coalesce
 
 
+# ---------------------------------------------------------------------------
+# Why the drive coalescer is NOT ``_auth.single_flight`` (ADR-0030 honesty pass)
+# ---------------------------------------------------------------------------
+
+
+def test_single_flight_is_unreachable_from_the_sync_drive_entry() -> None:
+    """``single_flight.claim`` needs a running loop; this drive never has one.
+
+    Pins the reason ``_DriveRecord``'s docstring now states, so the refusal
+    cannot rot back into the retired "a later shared single-flight core will
+    reuse this wholesale" claim.
+
+    ``single_flight.claim`` creates a leader ``asyncio.Task`` and therefore
+    calls ``asyncio.get_running_loop()``. The headless drive's coalescing point
+    (``_drive_capture_coalesced``, reached only from the SYNC public
+    ``attempt_headless_reauth``) has no running loop, and its one production
+    caller runs it *off* the loop via ``asyncio.to_thread`` precisely because
+    the browser drive blocks — so the loop is absent by construction, not by
+    accident.
+    """
+    import asyncio
+    import inspect
+
+    from notebooklm._auth import recovery
+    from notebooklm._auth import single_flight as sf
+
+    # The entry point and its coalescer are synchronous; the async caller that
+    # reaches them hands them to a worker thread.
+    assert not inspect.iscoroutinefunction(attempt_headless_reauth)
+    assert not inspect.iscoroutinefunction(hr._drive_capture_coalesced)
+    assert inspect.iscoroutinefunction(recovery.try_headless_reauth)
+
+    async def _never_runs() -> None:  # pragma: no cover - claim raises first
+        return None
+
+    # In the production shape (inside ``asyncio.to_thread``) there is no loop,
+    # so a claim cannot be made at all.
+    async def _drive_in_worker_thread() -> str:
+        def _claim_from_worker() -> str:
+            try:
+                sf.claim(("path", "profile"), _never_runs)
+            except RuntimeError as exc:
+                return str(exc)
+            return "claimed"  # pragma: no cover - would mean a loop was present
+
+        return await asyncio.to_thread(_claim_from_worker)
+
+    assert asyncio.run(_drive_in_worker_thread()) == "no running event loop"
+
+
+def test_drive_record_keying_is_resolved_inside_the_sync_entry(tmp_path: Path) -> None:
+    """The ``(path, source)`` key depends on CDP resolution the async caller lacks.
+
+    The second reason ``_DriveRecord`` documents for not hoisting the claim up
+    into ``recovery.try_headless_reauth``: the ``source`` half of the key is
+    decided by ``resolve_cdp_url`` — which also enforces the loopback boundary —
+    inside ``attempt_headless_reauth``. A hoisted claim would have to duplicate
+    that security decision or collapse the two sources onto one key, which is
+    the cross-source false-FAILED bug the split key exists to prevent.
+    """
+    storage = tmp_path / "storage_state.json"
+
+    profile_record = hr._get_drive_record(storage, source="profile")
+    cdp_record = hr._get_drive_record(storage, source="cdp")
+
+    # Same storage file, different credential source → different records, so a
+    # dead profile's FAILED can never be handed to a live CDP attach.
+    assert profile_record is not cdp_record
+    assert hr._get_drive_record(storage, source="profile") is profile_record
+
+    # The source is only knowable after ``resolve_cdp_url`` runs, and that call
+    # is the loopback gate: a remote endpoint resolves to ``None`` (→ the
+    # "profile" source), so the key and the security boundary are one decision.
+    assert hr.resolve_cdp_url("http://127.0.0.1:9222", {}) == "http://127.0.0.1:9222"
+    assert hr.resolve_cdp_url("http://remote-host:9222", {}) is None
+
+
 class _DummyModule:
     """Stand-in for the ``playwright`` / ``playwright.sync_api`` modules.
 

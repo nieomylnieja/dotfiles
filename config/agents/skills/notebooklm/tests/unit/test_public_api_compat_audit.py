@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import sys
 from pathlib import Path
 
 import pytest
+
+import notebooklm.config as notebooklm_config
 
 pytestmark = pytest.mark.repo_lint
 
@@ -62,6 +65,11 @@ def _class(*, members: dict | None = None, signature: dict | None = None) -> dic
         "members": members or {},
         "enum_members": {},
     }
+
+
+def _constant(value_repr: str) -> dict:
+    """A value-tracked module constant entry (VALUE_TRACKED_CONSTANTS)."""
+    return {"kind": "str", "signature": None, "constant_value": value_repr}
 
 
 def _manifest(exports: dict) -> dict:
@@ -425,6 +433,140 @@ def test_compare_manifests_detects_enum_value_change(script):
 
     assert [item.code for item in breaks] == ["changed-enum-value"]
     assert breaks[0].object == "notebooklm.SourceType.PDF"
+
+
+def test_compare_manifests_detects_changed_constant_value(script):
+    """A value-tracked constant rebound to a different value is a reviewable break.
+
+    Before this, a public constant carried only its ``kind`` into the manifest, so
+    repointing ``DEFAULT_BASE_URL`` at a different host compared as "str vs str" —
+    identical — and the audit stayed green through the host flip.
+    """
+    baseline = _manifest({"DEFAULT_BASE_URL": _constant("'https://old.example'")})
+    current = _manifest({"DEFAULT_BASE_URL": _constant("'https://new.example'")})
+
+    breaks = script.compare_manifests(baseline, current)
+
+    assert [item.code for item in breaks] == ["changed-constant-value"]
+    assert breaks[0].object == "notebooklm.DEFAULT_BASE_URL"
+    assert "old.example" in breaks[0].detail and "new.example" in breaks[0].detail
+
+
+def test_compare_manifests_ignores_untracked_constant(script):
+    """Only names in ``VALUE_TRACKED_CONSTANTS`` carry a fingerprint.
+
+    Both sides lack ``constant_value``, so nothing is compared — adding or removing
+    a name from the tracked set must not fire a break by itself.
+    """
+    baseline = _manifest({"SOME_CONSTANT": {"kind": "str"}})
+    current = _manifest({"SOME_CONSTANT": {"kind": "str"}})
+
+    assert script.compare_manifests(baseline, current) == []
+
+
+def test_compare_manifests_ignores_one_sided_constant_fingerprint(script):
+    """Newly tracking a constant is not itself a break.
+
+    The baseline predates the name being tracked, so only one side has a
+    fingerprint and there is nothing to compare against.
+    """
+    baseline = _manifest({"DEFAULT_BASE_URL": {"kind": "str"}})
+    current = _manifest({"DEFAULT_BASE_URL": _constant("'https://new.example'")})
+
+    assert script.compare_manifests(baseline, current) == []
+
+
+def test_collect_manifest_captures_tracked_constant_values(script):
+    """The tracked cookie-domain / host constants really do carry a fingerprint."""
+    manifest = script.collect_manifest(REPO_ROOT)
+
+    config_exports = manifest["modules"]["notebooklm.config"]["exports"]
+    assert config_exports["DEFAULT_BASE_URL"]["constant_value"] == repr(
+        notebooklm_config.DEFAULT_BASE_URL
+    )
+
+    auth_exports = manifest["modules"]["notebooklm.auth"]["exports"]
+    required = auth_exports["REQUIRED_COOKIE_DOMAINS"]["constant_value"]
+    assert ".google.com" in required
+    # Untracked public exports stay fingerprint-free — the capture is opt-in.
+    assert "constant_value" not in auth_exports["AuthTokens"]
+
+
+def test_collect_manifest_constant_fingerprint_is_hash_seed_stable(script, monkeypatch):
+    """Set/dict fingerprints must not depend on PYTHONHASHSEED.
+
+    ``REQUIRED_COOKIE_DOMAINS`` is a frozenset, and each collection runs in a fresh
+    subprocess. A raw ``repr()`` would order its members by hash and differ between
+    the baseline run and the current run, reporting a break on every invocation
+    while the value never changed.
+    """
+
+    def _tracked_constants(seed: str) -> dict[str, str]:
+        monkeypatch.setenv("PYTHONHASHSEED", seed)
+        exports = script.collect_manifest(REPO_ROOT)["modules"]["notebooklm.auth"]["exports"]
+        return {
+            name: exports[name]["constant_value"]
+            for name in script.VALUE_TRACKED_CONSTANTS["notebooklm.auth"]
+        }
+
+    assert _tracked_constants("1") == _tracked_constants("2")
+
+
+def _stable_value_repr(script):
+    """Return the real ``stable_value_repr`` from the collector source.
+
+    The function lives inside the ``_COLLECTOR`` script that the audit runs in a
+    subprocess, so it is not an attribute of the loaded module. Lift the actual
+    function definition out of that source rather than re-implementing it here —
+    a copy would happily keep passing after the shipped one regressed.
+    """
+    tree = ast.parse(script._COLLECTOR)
+    node = next(
+        item
+        for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "stable_value_repr"
+    )
+    namespace: dict = {}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "<collector>", "exec"), namespace)
+    return namespace["stable_value_repr"]
+
+
+def test_stable_value_repr_is_order_insensitive_for_containers(script):
+    """Set and dict members render sorted, so iteration order cannot leak in."""
+    stable_value_repr = _stable_value_repr(script)
+
+    assert stable_value_repr(frozenset({"b", "a"})) == stable_value_repr(frozenset({"a", "b"}))
+    assert stable_value_repr({"b": 1, "a": 2}) == stable_value_repr({"a": 2, "b": 1})
+    # Sequences keep their order — reordering a public tuple IS a change.
+    assert stable_value_repr(("a", "b")) != stable_value_repr(("b", "a"))
+
+
+def test_stable_value_repr_distinguishes_container_types(script):
+    """A ``frozenset`` and a ``set`` with equal members must not fingerprint alike.
+
+    Swapping the container of a published constant is a real contract change —
+    a ``set`` lets callers mutate the library's own state — so an untagged
+    ``{...}`` rendering (which also collides with an empty dict) would let it pass
+    as no change.
+    """
+    stable_value_repr = _stable_value_repr(script)
+
+    assert stable_value_repr(frozenset({"a"})) != stable_value_repr({"a"})
+    assert stable_value_repr(frozenset()) != stable_value_repr({})
+    # Nested, too: the members are equal, only the inner container type differs.
+    assert stable_value_repr({"k": frozenset({"a"})}) != stable_value_repr({"k": {"a"}})
+
+
+def test_compare_manifests_detects_nested_container_type_change(script):
+    """The nested change above reaches ``compare_manifests`` as a break."""
+    stable_value_repr = _stable_value_repr(script)
+    baseline = _manifest({"TIERS": _constant(stable_value_repr({"k": frozenset({"a"})}))})
+    current = _manifest({"TIERS": _constant(stable_value_repr({"k": {"a"}}))})
+
+    breaks = script.compare_manifests(baseline, current)
+
+    assert [item.code for item in breaks] == ["changed-constant-value"]
+    assert breaks[0].object == "notebooklm.TIERS"
 
 
 def test_compare_manifests_detects_removed_enum_member(script):

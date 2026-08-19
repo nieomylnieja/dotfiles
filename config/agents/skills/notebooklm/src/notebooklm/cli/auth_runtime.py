@@ -131,23 +131,13 @@ def get_auth_tokens(ctx) -> AuthTokens:
 
     # Read persisted account routing so RPC URLs target the same Google
     # account the tokens were minted for.
-    from ..auth import (
-        get_account_email_for_storage,
-        get_authuser_for_storage,
-        read_account_metadata_from_storage_state,
-    )
+    from ..auth import resolve_account_identity
 
-    if env_auth:
-        metadata = read_account_metadata_from_storage_state(json.loads(read_env_auth_json()))
-        raw_authuser = metadata.get("authuser")
-        resolved_authuser = raw_authuser if type(raw_authuser) is int and raw_authuser >= 0 else 0
-        raw_email = metadata.get("email")
-        resolved_email = raw_email.strip() if isinstance(raw_email, str) else None
-        if not resolved_email:
-            resolved_email = None
-    else:
-        resolved_authuser = get_authuser_for_storage(typed_storage_path)
-        resolved_email = get_account_email_for_storage(typed_storage_path)
+    identity = resolve_account_identity(
+        has_env_auth=env_auth,
+        storage_path=typed_storage_path,
+        env_auth_storage_state=json.loads(read_env_auth_json()) if env_auth else None,
+    )
 
     return AuthTokens(
         cookies=cookies,
@@ -155,8 +145,8 @@ def get_auth_tokens(ctx) -> AuthTokens:
         session_id=session_id,
         storage_path=typed_storage_path,
         cookie_jar=jar,
-        authuser=resolved_authuser,
-        account_email=resolved_email,
+        authuser=identity["authuser"],
+        account_email=identity["email"],
     )
 
 

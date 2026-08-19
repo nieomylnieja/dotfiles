@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from notebooklm._auth.storage_writer import LoginWriteOutcome, LoginWriteStatus
+from notebooklm._auth.profile_store import ReplaceResult, ReplaceStatus
 from notebooklm.cli.services.login import cookie_writes
 from notebooklm.cli.services.login.outcomes import CookieValidationFailure
 from tests._fixtures.login_io import RecordingLoginIO, make_recording_io
@@ -177,7 +177,9 @@ class TestWriteExtractedCookies:
             patch.object(
                 cookie_writes, "validate_with_recovery", return_value=(_ok_storage(), None)
             ),
-            patch.object(cookie_writes, "replace_from_login", side_effect=OSError("disk full")),
+            patch.object(
+                cookie_writes, "replace_profile_from_login", side_effect=OSError("disk full")
+            ),
         ):
             out = cookie_writes._write_extracted_cookies(
                 make_recording_io(),
@@ -201,8 +203,8 @@ class TestWriteExtractedCookies:
             ),
             patch.object(
                 cookie_writes,
-                "replace_from_login",
-                return_value=LoginWriteOutcome(LoginWriteStatus.LOCK_UNAVAILABLE),
+                "replace_profile_from_login",
+                return_value=ReplaceResult(ReplaceStatus.LOCK_UNAVAILABLE),
             ),
         ):
             out = cookie_writes._write_extracted_cookies(

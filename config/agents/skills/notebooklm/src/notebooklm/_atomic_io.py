@@ -49,7 +49,7 @@ front (see :data:`_STORAGE_STATE_FILENAME`). The ``config.json`` /
 only ``storage_state.json`` is special-cased. Cookie/account writers must use
 the dedicated locked writers in :mod:`notebooklm._auth`
 (``save_cookies_to_storage`` / ``write_account_metadata`` /
-``_clear_in_band_account``), which all share ``_storage_state_lock_path``.
+``clear_in_band_account``), which all share ``_storage_state_lock_path``.
 """
 
 from __future__ import annotations
@@ -202,14 +202,16 @@ def replace_file_atomically(temp_path: Path, path: Path) -> None:
 def _atomic_write_json_unchecked(path: Path, data: Any, *, mode: int = 0o600) -> None:
     """Atomic + durable JSON write **without** the storage-state path guard.
 
-    Module-private **bypass** used only by the canonical storage writer
-    (:mod:`notebooklm._auth.storage_writer`), which legitimately writes
-    ``storage_state.json`` under the canonical dotted lock. Every other caller
-    must use the public :func:`atomic_write_json`, which rejects
+    Module-private **bypass** imported only by the sealed credential commit
+    spine (:mod:`notebooklm._auth.credential_io`). Its two typed wrappers are
+    reached by the path-owning profile store and the temporary compatibility
+    policy in :mod:`notebooklm._auth.storage`, after those owners take the
+    appropriate credential lock. Every other caller must use the public
+    :func:`atomic_write_json`, which rejects
     ``storage_state.json`` paths (see that function and :func:`atomic_update_json`
     for the lost-update rationale, #1215). The boundary is enforced by
     ``tests/_guardrails/test_storage_writer_boundary.py`` (an equality-asserted
-    allowlist of this private symbol's importers == ``{storage_writer.py}``).
+    allowlist of this private symbol's importer and its two typed callers).
 
     Steps:
 
@@ -249,6 +251,7 @@ def _atomic_write_json_unchecked(path: Path, data: Any, *, mode: int = 0o600) ->
         with tempfile.NamedTemporaryFile(
             "w",
             encoding="utf-8",
+            newline="\n",
             dir=path.parent,
             prefix=f".{path.name}.",
             suffix=".tmp",
@@ -304,13 +307,12 @@ def atomic_write_json(path: Path, data: Any, *, mode: int = 0o600) -> None:
     mutation must serialize on the canonical dotted ``.storage_state.json.lock``
     sentinel (``_auth.paths._storage_state_lock_path``); a bare atomic write skips
     that lock and re-opens the lost-update race, so it is refused here. Cookie /
-    account writers use the dedicated locked writers in
-    :mod:`notebooklm._auth.storage_writer` (the sole sanctioned user of the
-    private bypass) instead.
+    account writers use the dedicated locked profile/store intents, which reach
+    the bypass only through :mod:`notebooklm._auth.credential_io`.
 
     Raises:
         ValueError: If ``path`` names ``storage_state.json`` (case-insensitive) —
-            route it through :mod:`notebooklm._auth.storage_writer`.
+            route it through :mod:`notebooklm._auth.storage`.
 
     All other behaviour (atomicity, ``0o600`` default mode, fsync durability,
     temp cleanup, Windows replace retries) is delegated unchanged — see
@@ -335,7 +337,7 @@ def atomic_write_json(path: Path, data: Any, *, mode: int = 0o600) -> None:
             f"({_STORAGE_STATE_FILENAME!r}) path: a bare atomic write skips the "
             "canonical dotted '.storage_state.json.lock' sentinel "
             "(_storage_state_lock_path, #1215) and would re-introduce a "
-            "lost-update race. Use the dedicated notebooklm._auth.storage_writer "
+            "lost-update race. Use the dedicated notebooklm._auth.storage "
             "intents (replace_from_login / replace_from_remint / persist_minted_jar "
             "/ merge_cookie_delta / update_account_metadata) instead."
         )
@@ -420,7 +422,7 @@ def atomic_update_json(
             "diverges from the canonical dotted '.storage_state.json.lock' sentinel "
             "(_storage_state_lock_path, #1215), so it would acquire the wrong lock "
             "and risk a lost-update race. Use the dedicated notebooklm._auth writers "
-            "(save_cookies_to_storage / write_account_metadata / _clear_in_band_account) "
+            "(save_cookies_to_storage / write_account_metadata / clear_in_band_account) "
             "instead."
         )
     lock_path = path.with_suffix(path.suffix + ".lock")

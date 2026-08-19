@@ -30,7 +30,7 @@ from tests._fixtures import patch_session_login_dual
 _ROTATE_URL_RE = re.compile(r"^https://accounts\.google\.com/RotateCookies$")
 
 
-def _rookiepy_mock(cookies: list[dict]) -> MagicMock:
+def _rookie_cookies_mock(cookies: list[dict]) -> MagicMock:
     mock = MagicMock()
     mock.chrome = MagicMock(return_value=cookies)
     mock.load = MagicMock(return_value=cookies)
@@ -134,12 +134,12 @@ class TestPsidtsRecoveryDuringExtraction:
 
     def test_recovers_missing_psidts_and_completes_login(self, runner, tmp_path, httpx_mock):
         """SID + secondary binding present, no PSIDTS → RotateCookies + persist."""
-        mock_rk = _rookiepy_mock(list(_RECOVERABLE_BROWSER_COOKIES))
+        mock_rk = _rookie_cookies_mock(list(_RECOVERABLE_BROWSER_COOKIES))
         target_root = tmp_path / "profiles"
         httpx_mock.add_response(url=_ROTATE_URL_RE, **_make_rotate_response())
 
         with (
-            patch.dict("sys.modules", {"rookiepy": mock_rk}),
+            patch.dict("sys.modules", {"rookie_cookies": mock_rk}),
             patch_session_login_dual(
                 "get_storage_path",
                 side_effect=_profile_storage_path(target_root),
@@ -178,11 +178,11 @@ class TestMissingCookiesDiagnostics:
     def test_no_sid_emits_signin_hint(self, runner, tmp_path, httpx_mock):
         """No SID → recovery declines → "not signed in to Google" hint."""
         cookies = [c for c in _RECOVERABLE_BROWSER_COOKIES if c["name"] != "SID"]
-        mock_rk = _rookiepy_mock(cookies)
+        mock_rk = _rookie_cookies_mock(cookies)
         target_root = tmp_path / "profiles"
 
         with (
-            patch.dict("sys.modules", {"rookiepy": mock_rk}),
+            patch.dict("sys.modules", {"rookie_cookies": mock_rk}),
             patch_session_login_dual(
                 "get_storage_path",
                 side_effect=_profile_storage_path(target_root),
@@ -204,11 +204,11 @@ class TestMissingCookiesDiagnostics:
         """No OSID / no APISID+SAPISID → RotateCookies would 401 → visit-page hint."""
         # SID alone — no binding at all.
         cookies = [c for c in _RECOVERABLE_BROWSER_COOKIES if c["name"] == "SID"]
-        mock_rk = _rookiepy_mock(cookies)
+        mock_rk = _rookie_cookies_mock(cookies)
         target_root = tmp_path / "profiles"
 
         with (
-            patch.dict("sys.modules", {"rookiepy": mock_rk}),
+            patch.dict("sys.modules", {"rookie_cookies": mock_rk}),
             patch_session_login_dual(
                 "get_storage_path",
                 side_effect=_profile_storage_path(target_root),
@@ -230,13 +230,13 @@ class TestMissingCookiesDiagnostics:
 
     def test_rotate_cookies_4xx_emits_recovery_failed_hint(self, runner, tmp_path, httpx_mock):
         """Recovery attempts the POST but Google returns 401 → visit-page hint."""
-        mock_rk = _rookiepy_mock(list(_RECOVERABLE_BROWSER_COOKIES))
+        mock_rk = _rookie_cookies_mock(list(_RECOVERABLE_BROWSER_COOKIES))
         target_root = tmp_path / "profiles"
         # 401 means recovery declines (psidts_present check fails).
         httpx_mock.add_response(url=_ROTATE_URL_RE, status_code=401)
 
         with (
-            patch.dict("sys.modules", {"rookiepy": mock_rk}),
+            patch.dict("sys.modules", {"rookie_cookies": mock_rk}),
             patch_session_login_dual(
                 "get_storage_path",
                 side_effect=_profile_storage_path(target_root),

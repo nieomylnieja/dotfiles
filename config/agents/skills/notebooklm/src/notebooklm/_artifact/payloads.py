@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final, TypeVar
 
+from ..exceptions import ValidationError
 from ..rpc import (
     INTERACTIVE_MIND_MAP_VARIANT,
     ArtifactTypeCode,
@@ -250,6 +251,94 @@ def build_report_artifact_params(
     ]
 
 
+#: The client-side defaults applied when a quiz/flashcards option is omitted.
+#: These are *sent explicitly*; see :func:`_quiz_option_code` for why. The CLI
+#: binds its ``--quantity`` / ``--difficulty`` flag defaults to these too, so
+#: the flag default and the wire default cannot drift apart (#2197).
+DEFAULT_QUIZ_QUANTITY: Final = QuizQuantity.STANDARD
+DEFAULT_QUIZ_DIFFICULTY: Final = QuizDifficulty.MEDIUM
+
+_QuizOption = TypeVar("_QuizOption", QuizQuantity, QuizDifficulty)
+
+
+def _quiz_option_code(
+    value: _QuizOption | None,
+    default: _QuizOption,
+    *,
+    parameter: str,
+) -> int:
+    """Resolve one quiz/flashcards option to the integer code sent on the wire.
+
+    ``None`` means **"use this client's default"**, not "let the server
+    choose": the default is substituted here and transmitted explicitly, so
+    every request carries a concrete quantity and difficulty. That is a
+    deliberate choice, not an oversight (#2196), and the alternative was
+    measured rather than assumed:
+
+    * Omission *is* accepted. Live probe: a ``CREATE_ARTIFACT`` with the option
+      message left ``null`` (and one with the proto3 default pair ``[0, 0]``,
+      which the backend stores as an empty message) both generate normally and
+      reach ``ARTIFACT_STATUS_READY``.
+    * But what the server picked is then **unobservable**. The stored options
+      echo back as ``null`` / ``[]``, and the generated content is not carried
+      in ``LIST_ARTIFACTS``, so a caller could not tell what they got — nor
+      could :attr:`~notebooklm._row_adapters.artifacts.ArtifactRow.quiz_options`,
+      the read-back added in #2195 precisely so this surface stops being
+      fixture-only. Passing ``None`` through would trade a value we can name,
+      echo and assert for one we cannot see at all.
+    * The web UI always sends an explicit pair, and every sibling builder in
+      this module (audio, video, infographic, slide deck) resolves ``None`` to
+      an explicit client default the same way. Diverging here would make quiz
+      and flashcards the lone exception.
+
+    A caller who genuinely wants the backend's own default should pass the
+    member they want; there is no ``UNSPECIFIED`` member on
+    :class:`~notebooklm.rpc.QuizQuantity` / :class:`~notebooklm.rpc.QuizDifficulty`
+    because a value that cannot be read back could not be tested.
+
+    Raises:
+        ValidationError: If ``value`` is neither ``None`` nor a member of the
+            expected enum. Previously a bare ``int`` reached ``.value`` and
+            produced ``AttributeError: 'int' object has no attribute 'value'``.
+            The ``isinstance`` check also rejects the *other* option enum —
+            ``quantity=QuizDifficulty.HARD`` used to encode silently as
+            ``MORE``, since both are ``3``.
+    """
+    if value is None:
+        return default.value
+    expected = type(default)
+    if not isinstance(value, expected):
+        raise ValidationError(
+            f"{parameter} must be a {expected.__name__} member or None, got "
+            f"{value!r} ({type(value).__name__})"
+        )
+    return value.value
+
+
+def _quiz_option_pair(
+    quantity: QuizQuantity | None,
+    difficulty: QuizDifficulty | None,
+) -> list[int]:
+    """Build the ``[quantity, difficulty]`` pair both option messages carry.
+
+    The ONE place this client decides that quantity comes first. Both
+    ``QuizGenerationOptions`` and ``FlashcardsGenerationOptions`` number
+    ``quantity`` 1 and ``difficulty`` 2, so the two builders emit an identical
+    pair into different slots (quiz ``[9][1][7]``, flashcards ``[9][1][6]``).
+
+    Sharing it is the point rather than a tidy-up: #2116 was two hand-written
+    literals drifting apart, with the flashcards one transposed for long enough
+    that ``docs/rpc-reference.md`` documented the inversion as intended. One
+    expression cannot disagree with itself. The decode side is symmetric —
+    :class:`~notebooklm._row_adapters.artifacts.QuizOptionPair` reads the pair
+    back through named fields rather than positions.
+    """
+    return [
+        _quiz_option_code(quantity, DEFAULT_QUIZ_QUANTITY, parameter="quantity"),
+        _quiz_option_code(difficulty, DEFAULT_QUIZ_DIFFICULTY, parameter="difficulty"),
+    ]
+
+
 def build_quiz_artifact_params(
     notebook_id: str,
     source_ids: list[str],
@@ -260,8 +349,7 @@ def build_quiz_artifact_params(
 ) -> list[Any]:
     """Build ``CREATE_ARTIFACT`` params for quiz generation."""
     source_ids_triple = nest_source_ids(source_ids, 2)
-    quantity_code = quantity.value if quantity is not None else QuizQuantity.STANDARD.value
-    difficulty_code = difficulty.value if difficulty is not None else QuizDifficulty.MEDIUM.value
+    option_pair = _quiz_option_pair(quantity, difficulty)
 
     return [
         _artifact_client_options(),
@@ -286,7 +374,7 @@ def build_quiz_artifact_params(
                     None,
                     None,
                     None,
-                    [quantity_code, difficulty_code],
+                    option_pair,
                 ],
             ],
         ],
@@ -303,8 +391,7 @@ def build_flashcards_artifact_params(
 ) -> list[Any]:
     """Build ``CREATE_ARTIFACT`` params for flashcard generation."""
     source_ids_triple = nest_source_ids(source_ids, 2)
-    quantity_code = quantity.value if quantity is not None else QuizQuantity.STANDARD.value
-    difficulty_code = difficulty.value if difficulty is not None else QuizDifficulty.MEDIUM.value
+    option_pair = _quiz_option_pair(quantity, difficulty)
 
     return [
         _artifact_client_options(),
@@ -328,7 +415,10 @@ def build_flashcards_artifact_params(
                     None,
                     None,
                     None,
-                    [difficulty_code, quantity_code],
+                    # Same expression as the quiz builder above — the ordering
+                    # lives in ``_quiz_option_pair`` so the two cannot drift
+                    # apart again (#2116).
+                    option_pair,
                 ],
             ],
         ],

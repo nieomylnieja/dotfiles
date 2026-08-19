@@ -3,6 +3,7 @@
 Commands:
     status      Check research status (single check)
     wait        Wait for research to complete (blocking)
+    import      Import a completed run's sources (no wait for the run)
     cancel      Cancel an in-flight research run (fire-and-forget)
 
 The ``wait`` command is a thin Click handler over
@@ -12,8 +13,14 @@ the transport-neutral :mod:`notebooklm._app.research` core. Task-id
 pinning is handled by ``ResearchAPI.wait_for_completion``. ``status`` and
 ``cancel`` are thin handlers over the same neutral core
 (:func:`notebooklm._app.research.poll_and_classify` /
-:func:`~notebooklm._app.research.cancel_research`). This module owns
-input validation, spinner I/O, rendering, and exit codes.
+:func:`~notebooklm._app.research.cancel_research`). ``import`` is the
+never-waits-for-the-run counterpart to ``wait --import-all`` (#2206): it drives the
+same neutral pair the MCP ``research_import`` tool and the REST import
+route drive (:func:`~notebooklm._app.research.classify_importable_research`
++ :func:`~notebooklm._app.research.import_research_sources`), so the
+importable-state ladder and the idempotency contract cannot fork a third
+time. This module owns input validation, spinner I/O, rendering, and exit
+codes.
 """
 
 from typing import Any
@@ -21,10 +28,15 @@ from typing import Any
 import click
 
 from .._app.research import (
+    ResearchImportOutcome,
     ResearchStatusResult,
     cancel_research,
+    classify_importable_research,
     poll_and_classify,
     validate_research_wait_flags,
+)
+from .._app.research import (
+    import_research_sources as import_research_sources_core,
 )
 from ..exceptions import ValidationError
 from .auth_runtime import resolve_client_factory, with_client
@@ -36,6 +48,10 @@ from .rendering import (
     display_report,
     display_research_sources,
     json_output_response,
+)
+from .research_import import (
+    _display_cited_import_selection,
+    _select_research_sources_for_import,
 )
 from .resolve import (
     require_notebook,
@@ -55,6 +71,9 @@ from .services.research import (
 # with the underlying API or with `research wait --import-all`).
 _SUMMARY_PREVIEW_CHARS = 500
 
+#: Default ``research import --timeout``; matches ``research wait --timeout``.
+_DEFAULT_IMPORT_TIMEOUT = 1800
+
 
 @click.group()
 def research():
@@ -64,6 +83,7 @@ def research():
     Commands:
       status    Check research status (non-blocking)
       wait      Wait for research to complete (blocking)
+      import    Import a completed run's sources (no wait for the run)
       cancel    Cancel an in-flight research run (fire-and-forget)
 
     \b
@@ -75,6 +95,12 @@ def research():
       notebooklm source add-research "AI" --mode deep --no-wait
       notebooklm research status
       notebooklm research wait --import-all
+
+    \b
+    Or own the polling cadence yourself, never blocking:
+      notebooklm source add-research "AI" --mode deep --no-wait
+      notebooklm research status        # your loop, your interval
+      notebooklm research import
     """
     pass
 
@@ -127,9 +153,254 @@ def _render_status_result(result: ResearchStatusResult) -> None:
 
         display_report(result.report)
 
-        console.print("\n[dim]Use 'research wait --import-all' to import sources[/dim]")
+        # The run is already completed here, so point at the command that
+        # imports without waiting rather than at the blocking one (#2206).
+        console.print("\n[dim]Use 'research import' to import sources[/dim]")
     else:
         console.print(f"[yellow]Status: {result.status}[/yellow]")
+        # A terminal run that found nothing is not a broken run — say which it
+        # was and what to do next (issue #1964). ``--json`` output is
+        # deliberately untouched: it emits the byte-stable
+        # ``ResearchTask.to_public_dict()`` payload, the same reason
+        # ``status_code`` was kept out of it in #1922.
+        _print_failure_reason(result.reason_message, result.hint)
+
+
+def _print_failure_reason(reason_message: str | None, hint: str | None) -> None:
+    """Print the differentiated termination reason + remediation, when present.
+
+    Shared by the ``research status`` / ``research wait`` text renderers so the
+    two cannot drift in how they explain a non-success run (issue #1964).
+    """
+    if reason_message:
+        console.print(reason_message)
+    if hint:
+        console.print(f"[dim]{hint}[/dim]")
+
+
+@research.command("import")
+@notebook_option
+@click.option(
+    "--run-id",
+    default=None,
+    help=(
+        "Run to import. Omit it and the notebook's single research run is used; "
+        "with more than one run this errors rather than guessing, so pass the "
+        "id ('research status' shows it)."
+    ),
+)
+@click.option("--cited-only", is_flag=True, help="Import only report-cited sources")
+@click.option(
+    "--timeout",
+    default=_DEFAULT_IMPORT_TIMEOUT,
+    type=int,
+    help=(
+        "Seconds budget for the import retry loop (default: 1800). The command "
+        "never waits for the RUN to finish, but IMPORT_RESEARCH itself commonly "
+        "outlives a single client timeout on deep payloads and is retried with "
+        "reconciliation; this bounds that. Matches 'research wait --timeout'."
+    ),
+)
+@click.option(
+    "--max-sources",
+    # ``IntRange(min=1)`` rejects 0/negative at parse time, mirroring the MCP
+    # tool's "omit it to import all" bound (a 0 cap would silently import
+    # nothing and report success).
+    type=click.IntRange(min=1),
+    default=None,
+    help="Import at most N sources (default: all)",
+)
+@click.option(
+    "--allow-duplicate",
+    is_flag=True,
+    help="Re-add sources whose URL is already in the notebook",
+)
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@with_client
+def research_import(
+    ctx,
+    notebook_id,
+    run_id,
+    cited_only,
+    timeout,
+    max_sources,
+    allow_duplicate,
+    json_output,
+    client_auth,
+):
+    """Import a completed research run's sources.
+
+    The counterpart to 'research wait --import-all' that never waits for the RUN:
+    it imports one that is ALREADY complete and fails fast when it is not. Drive
+    your own polling cadence with 'research status'.
+
+    \b
+    The import RPC itself is not instant — IMPORT_RESEARCH commonly outlives a
+    single client timeout on deep payloads and is retried with reconciliation,
+    bounded by --timeout.
+
+    \b
+    Idempotent when the pre-import snapshot succeeds: a source whose URL is
+    already in the notebook is reported as already-present instead of duplicated
+    (--allow-duplicate re-adds it), so a repeat import reads as "0 new, N already
+    present" rather than a no-op. Two limits are worth knowing before you re-run
+    one: a deep run's report row has no URL to dedupe on and is imported every
+    time, and if the snapshot itself fails the filter is skipped entirely. After
+    interrupting an import, check 'source list' before re-running it.
+
+    \b
+    Examples:
+      notebooklm research import
+      notebooklm research import --run-id <run_id> --cited-only
+      notebooklm research import --max-sources 10 --json
+    """
+    nb_id = require_notebook(notebook_id)
+
+    async def _run():
+        async with resolve_client_factory(ctx)(client_auth) as client:
+            nb_id_resolved = await resolve_notebook_id(client, nb_id, json_output=json_output)
+            # ONE poll does both jobs: it resolves a bare "current run" (no
+            # --run-id) AND feeds the shared importable-state ladder, so the
+            # fail-fast path spends the same single RPC either way.
+            status = await poll_and_classify(client, nb_id_resolved, run_id)
+            resolved_run_id = run_id or status.task_id
+            if not resolved_run_id:
+                raise ValidationError(
+                    "No research run found for this notebook; start one with "
+                    "'source add-research', or pass --run-id."
+                )
+            # Every refuse rule (not_found / failed / not-complete / empty) lives
+            # in the neutral classifier the MCP tool and REST route also drive.
+            sources, report = classify_importable_research(
+                status, resolved_run_id, notebook_id=nb_id_resolved
+            )
+            selected, cited_selection = _select_research_sources_for_import(
+                sources, report, cited_only
+            )
+            # Selection then bounding, matching the MCP tool's order: narrow to
+            # cited sources first, then cap. The cap is applied BEFORE the
+            # selection is reported so the count printed is the count imported.
+            if max_sources is not None:
+                selected = selected[:max_sources]
+            if cited_selection is not None and not json_output:
+                _display_cited_import_selection(cited_selection, selected_count=len(selected))
+            # The import is the one slow step here, so it gets the spinner (and
+            # with it the canonical "Cancelled. Resume with: ..." SIGINT
+            # envelope) the way ``research wait`` wraps its poll loop. The hint
+            # is built from the RESOLVED notebook/run plus the selection flags:
+            # a bare 'research import' would retarget the active notebook, go
+            # ambiguous instead of re-pinning this run, and silently drop the
+            # filters, so following it could import sources the user excluded.
+            async with status_with_elapsed(
+                f"Importing {len(selected)} sources...",
+                json_output=json_output,
+                resume_hint=_import_resume_hint(
+                    notebook_id=nb_id_resolved,
+                    run_id=resolved_run_id,
+                    cited_only=cited_only,
+                    max_sources=max_sources,
+                    allow_duplicate=allow_duplicate,
+                    timeout=timeout,
+                    json_output=json_output,
+                ),
+            ):
+                outcome = await import_research_sources_core(
+                    client,
+                    nb_id_resolved,
+                    resolved_run_id,
+                    selected,
+                    allow_duplicate=allow_duplicate,
+                    max_elapsed=timeout,
+                )
+            _render_import_result(
+                outcome,
+                run_id=resolved_run_id,
+                sources_found=len(sources),
+                sources_selected=len(selected),
+                cited_selection=cited_selection,
+                json_output=json_output,
+            )
+
+    return _run()
+
+
+def _import_resume_hint(
+    *,
+    notebook_id: str,
+    run_id: str,
+    cited_only: bool,
+    max_sources: int | None,
+    allow_duplicate: bool,
+    timeout: int,
+    json_output: bool,
+) -> str:
+    """Build a resume command that re-runs THIS import, not a different one.
+
+    Re-pins the resolved notebook and run (a bare re-run would target the active
+    notebook and, with several runs in flight, fail as ambiguous) and carries
+    every flag that changes WHAT is imported, so following the hint cannot widen
+    the import past what the user asked for. ``--json`` rides along too: the
+    cancellation envelope is machine-readable, so automation that executes the
+    hint it just parsed must not get human-readable output back.
+    """
+    parts = ["notebooklm research import", "-n", notebook_id, "--run-id", run_id]
+    if cited_only:
+        parts.append("--cited-only")
+    if max_sources is not None:
+        parts += ["--max-sources", str(max_sources)]
+    if allow_duplicate:
+        parts.append("--allow-duplicate")
+    if timeout != _DEFAULT_IMPORT_TIMEOUT:
+        parts += ["--timeout", str(timeout)]
+    if json_output:
+        parts.append("--json")
+    return " ".join(parts)
+
+
+def _render_import_result(
+    outcome: ResearchImportOutcome,
+    *,
+    run_id: str,
+    sources_found: int,
+    sources_selected: int,
+    cited_selection: Any,
+    json_output: bool,
+) -> None:
+    """Render a ``research import`` outcome (exit 0 — an idempotent skip is success).
+
+    Keeps the CLI's own ``--json`` vocabulary rather than mirroring the MCP
+    tool's: ``imported`` is a COUNT here (as in ``research wait --json``) with the
+    rows under ``imported_sources``, and the idempotency split the CLI could not
+    report before (#2206) rides alongside as ``already_present`` /
+    ``already_present_sources``.
+    """
+    if json_output:
+        payload: dict[str, Any] = {
+            "status": (
+                "already_imported"
+                if not outcome.newly_imported and outcome.already_present
+                else "imported"
+            ),
+            "run_id": run_id,
+            "sources_found": sources_found,
+            "sources_selected": sources_selected,
+            "imported": outcome.newly_imported_count,
+            "imported_sources": outcome.newly_imported,
+            "already_present": outcome.already_present_count,
+            "already_present_sources": outcome.already_present,
+        }
+        if cited_selection is not None:
+            payload["cited_only"] = True
+            payload["cited_only_fallback"] = cited_selection.used_fallback
+        json_output_response(payload)
+        return
+
+    console.print(f"[green]Imported {outcome.newly_imported_count} sources[/green]")
+    if outcome.already_present:
+        console.print(
+            f"[dim]{outcome.already_present_count} already present "
+            f"(skipped; use --allow-duplicate to re-add)[/dim]"
+        )
 
 
 @research.command("cancel")
@@ -179,9 +450,18 @@ def research_cancel(ctx, run_id, notebook_id, json_output, client_auth):
 @notebook_option
 @click.option(
     "--timeout",
-    default=300,
+    # 1800, matching ``source add-research`` (#2142). The legacy 5-minute cap sat
+    # below every observed deep run: 374 s live, 358 s in
+    # ``research_deep_poll_long.yaml``. Fast runs settle in seconds, so the raised
+    # ceiling costs them nothing — it is a cap, not a wait.
+    default=1800,
     type=int,
-    help="Maximum seconds to wait (default: 300)",
+    help=(
+        "Per-phase seconds budget for (a) the research-completion poll loop "
+        "and (b) the --import-all retry loop (default: 1800). Each phase gets "
+        "the full budget independently, so worst-case total wall time is up to "
+        "2× this value. Matches 'source add-research --timeout' semantics."
+    ),
 )
 @click.option(
     "--interval",
@@ -292,12 +572,20 @@ def _render_wait_result(plan: ResearchWaitPlan, result: ResearchWaitResult) -> N
                 failed_payload["sources_found"] = result.sources_count
             if result.report:
                 failed_payload["report"] = result.report
+            # Unlike ``research status --json`` (byte-stable public dict), this
+            # payload is CLI-owned, so the reason travels on the machine
+            # surface too (issue #1964).
+            if result.reason_message:
+                failed_payload["reason_message"] = result.reason_message
+            if result.hint:
+                failed_payload["hint"] = result.hint
             json_output_response(failed_payload)
         else:
             if result.query:
                 console.print(f"[red]Research failed:[/red] {result.query}")
             else:
                 console.print("[red]Research failed[/red]")
+            _print_failure_reason(result.reason_message, result.hint)
         exit_with_code(1)
 
     # outcome == "completed"

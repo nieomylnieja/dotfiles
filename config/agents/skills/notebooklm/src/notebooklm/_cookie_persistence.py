@@ -5,55 +5,186 @@ from __future__ import annotations
 __all__ = ["CookiePersistence", "SaveCookiesToStorage"]
 
 import itertools
+import json
+import logging
 import threading
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypeAlias, TypeVar
 
 import httpx
 
-from ._auth.paths import canonical_storage_key
+from ._auth.cookie_policy import RequiredCookieValidationError
+from ._auth.cookie_types import Cookie, CookieJar
+from ._auth.cookies import StorageStateValidationError, _load_cookie_pair_pure
+from ._auth.profile_store import ProfileStore
 from ._auth.storage import (
     CookieSaveResult,
     CookieSnapshot,
+    CookieSnapshotKey,
+    CookieSnapshotValue,
     advance_cookie_snapshot_after_save,
     snapshot_cookie_jar,
 )
 from .auth import AuthTokens
 
+logger = logging.getLogger("notebooklm.auth")
+
 
 class SaveCookiesToStorage(Protocol):
-    """Callable shape for the storage writer resolved by ``NotebookLMClient``."""
+    """Callable shape for the exact v0.x callback invocation."""
 
     def __call__(
         self,
         cookie_jar: httpx.Cookies,
-        path: Path | None = None,
+        path: Path,
+        /,
         *,
-        original_snapshot: CookieSnapshot | None = None,
-        return_result: bool = False,
+        original_snapshot: CookieSnapshot | None,
+        return_result: bool,
     ) -> bool | CookieSaveResult: ...
 
 
-ToThread = Callable[[Callable[[], None]], Awaitable[None]]
+T = TypeVar("T")
 
 
-def _apply_ran_merge(result: bool | CookieSaveResult) -> bool:
-    """Did this save actually apply a merge (so the ordering marker may advance)?
+class ToThread(Protocol):
+    def __call__(self, func: Callable[[], T], /) -> Awaitable[T]: ...
 
-    True for a success and for a CAS-partial apply (``ok=False`` WITH
-    ``cas_rejected_keys`` — matching ``_advance_baseline_after_save`` and
-    ``_cookie_persistence`` §b.3). False for a hard-fail (``ok=False`` WITHOUT
-    rejected keys: read/write error, missing file, skipped save) so a newer
-    hard-failed dispatch does not suppress an older worker.
-    """
-    if isinstance(result, CookieSaveResult):
-        return result.ok or bool(result.cas_rejected_keys)
-    return bool(result)
+
+@dataclass(frozen=True, slots=True)
+class UninitializedBaseline:
+    pass
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class ReadyBaseline:
+    value: CookieJar = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, CookieJar):
+            raise TypeError("value must be a CookieJar")
+        object.__setattr__(self, "value", CookieJar(tuple(self.value)))
+
+
+@dataclass(frozen=True, slots=True)
+class FailedBaseline:
+    pass
+
+
+BaselineState: TypeAlias = UninitializedBaseline | ReadyBaseline | FailedBaseline
+
+
+@dataclass
+class _PathSaveState:
+    baseline: BaselineState = field(default_factory=UninitializedBaseline)
+    last_applied_sequence: int = -1
+
+
+def _snapshot_from_typed(jar: CookieJar) -> CookieSnapshot:
+    """Project a typed baseline to the legacy, SameSite-free snapshot shape."""
+    return {
+        CookieSnapshotKey(cookie.name, cookie.domain, cookie.path): CookieSnapshotValue(
+            cookie.value,
+            int(cookie.expires) if cookie.expires is not None else None,
+            cookie.secure,
+            cookie.http_only,
+        )
+        for cookie in jar
+    }
+
+
+def _typed_from_snapshot(snapshot: CookieSnapshot) -> CookieJar:
+    """Restore the typed load-time baseline carried by ``AuthTokens``."""
+    return CookieJar(
+        Cookie(
+            name=key.name,
+            domain=key.domain,
+            path=key.path,
+            value=value.value,
+            expires=value.expires,
+            secure=value.secure,
+            http_only=value.http_only,
+        )
+        for key, value in snapshot.items()
+    )
+
+
+class _LegacySnapshotAdapter:
+    """Own v0.x snapshots and the compatibility-only AuthTokens mirror."""
+
+    def __init__(
+        self,
+        default_key: Path | None,
+        *,
+        auth: AuthTokens | None,
+        initial: CookieSnapshot | None = None,
+    ) -> None:
+        self._default_key = default_key
+        self._auth = auth
+        self._snapshots: dict[Path | None, CookieSnapshot] = {}
+        if initial is not None:
+            self.set(default_key, initial)
+
+    @property
+    def auth(self) -> AuthTokens | None:
+        return self._auth
+
+    @property
+    def snapshots(self) -> dict[Path | None, CookieSnapshot]:
+        return self._snapshots
+
+    def set_default_key(self, key: Path | None) -> None:
+        self._default_key = key
+
+    def get(self, key: Path | None) -> CookieSnapshot | None:
+        return self._snapshots.get(key)
+
+    def get_default(self) -> CookieSnapshot | None:
+        if self._auth is not None and self._auth.cookie_snapshot is not self.get(self._default_key):
+            external = self._auth.cookie_snapshot
+            self.set(
+                self._default_key,
+                None if external is None else dict(external),
+            )
+        return self.get(self._default_key)
+
+    def set(self, key: Path | None, snapshot: CookieSnapshot | None) -> None:
+        if snapshot is None:
+            self._snapshots.pop(key, None)
+        else:
+            self._snapshots[key] = snapshot
+        if key == self._default_key and self._auth is not None:
+            self._auth.cookie_snapshot = snapshot
+
+    def project(self, key: Path | None, baseline: CookieJar) -> CookieSnapshot:
+        snapshot = _snapshot_from_typed(baseline)
+        self.set(key, snapshot)
+        return snapshot
+
+    def advance(
+        self,
+        key: Path,
+        snapshot: CookieSnapshot,
+    ) -> None:
+        self.set(key, snapshot)
+
+
+_BASELINE_ERRORS = (
+    OSError,
+    UnicodeDecodeError,
+    json.JSONDecodeError,
+    StorageStateValidationError,
+    RequiredCookieValidationError,
+    TypeError,
+    ValueError,
+    OverflowError,
+)
 
 
 class CookiePersistence:
-    """Owns cookie save snapshots, in-process serialization, and baseline state."""
+    """Own per-profile typed baselines, ordering, and v0.x projections."""
 
     def __init__(
         self,
@@ -62,32 +193,253 @@ class CookiePersistence:
         *,
         save_lock: threading.Lock | None = None,
     ) -> None:
-        self.auth = auth
-        self.default_path = default_path
+        if not isinstance(auth, AuthTokens):
+            raise TypeError("auth must be an AuthTokens")
+        store = ProfileStore(default_path) if default_path is not None else None
+        self._initialize(
+            store,
+            save_lock=save_lock,
+            adapter=_LegacySnapshotAdapter(
+                store.ordering_key if store is not None else None,
+                auth=auth,
+                initial=auth.cookie_snapshot,
+            ),
+        )
+
+    @classmethod
+    def _from_store(
+        cls,
+        store: ProfileStore | None,
+        *,
+        save_lock: threading.Lock | None = None,
+        initial_snapshot: CookieSnapshot | None = None,
+    ) -> CookiePersistence:
+        if store is not None and not isinstance(store, ProfileStore):
+            raise TypeError("store must be a ProfileStore or None")
+        instance = cls.__new__(cls)
+        instance._initialize(
+            store,
+            save_lock=save_lock,
+            adapter=_LegacySnapshotAdapter(
+                store.ordering_key if store is not None else None,
+                auth=None,
+                initial=initial_snapshot,
+            ),
+        )
+        if store is not None and initial_snapshot is not None:
+            instance._states[store.ordering_key] = _PathSaveState(
+                baseline=ReadyBaseline(_typed_from_snapshot(initial_snapshot))
+            )
+        return instance
+
+    def _initialize(
+        self,
+        store: ProfileStore | None,
+        *,
+        save_lock: threading.Lock | None,
+        adapter: _LegacySnapshotAdapter,
+    ) -> None:
+        self._default_store = store
+        # This blocking lock is acquired only inside the nested ``_save`` and
+        # ``_adopt`` closures, each dispatched through ``to_thread``. Never
+        # acquire it directly on the event-loop thread.
         self.save_lock = save_lock if save_lock is not None else threading.Lock()
-        self.loaded_cookie_snapshot: CookieSnapshot | None = None
-        # Save-ordering guard [storage-F3 / refresh-F3]: each save() dispatch is
-        # stamped from a monotonic counter (``__next__`` is GIL-atomic — the
-        # ordering does not rest on the unenforced one-loop-per-client contract).
-        # Under ``save_lock`` a worker drops itself if its sequence is older than
-        # the newest sequence that has already applied a merge to the same
-        # effective path, so a queued stale save can never overwrite a newer one
-        # ("close() must win", per client instance). Keyed per effective path so
-        # a newer save to path B never drops an older save to path A.
         self._save_seq = itertools.count()
-        self._last_applied_seq: dict[Path, int] = {}
+        self._states: dict[Path, _PathSaveState] = {}
+        self._legacy = adapter
+
+    @property
+    def auth(self) -> AuthTokens:
+        """Compatibility view; production factory instances have no AuthTokens."""
+        auth = self._legacy.auth
+        if auth is None:
+            raise AttributeError("production CookiePersistence has no AuthTokens")
+        return auth
+
+    @property
+    def default_path(self) -> Path | None:
+        return self._default_store.path if self._default_store is not None else None
+
+    @property
+    def _default_key(self) -> Path | None:
+        return self._default_store.ordering_key if self._default_store is not None else None
+
+    @property
+    def _loaded_cookie_snapshots(self) -> dict[Path | None, CookieSnapshot]:
+        """Historical inspection view, owned by the concrete legacy adapter."""
+        return self._legacy.snapshots
+
+    @property
+    def _last_applied_seq(self) -> dict[Path, int]:
+        """Historical inspection view over the typed per-path state."""
+        return {
+            key: state.last_applied_sequence
+            for key, state in self._states.items()
+            if state.last_applied_sequence >= 0
+        }
+
+    @property
+    def loaded_cookie_snapshot(self) -> CookieSnapshot | None:
+        return self._legacy.get_default()
+
+    @loaded_cookie_snapshot.setter
+    def loaded_cookie_snapshot(self, snapshot: CookieSnapshot | None) -> None:
+        self._legacy.set(self._default_key, snapshot)
+
+    def register_open_baseline(self, store: ProfileStore, baseline: CookieJar) -> None:
+        if not isinstance(store, ProfileStore):
+            raise TypeError("store must be a ProfileStore")
+        if not isinstance(baseline, CookieJar):
+            raise TypeError("baseline must be a CookieJar")
+        ready = ReadyBaseline(baseline)
+        key = store.ordering_key
+        self._states[key] = _PathSaveState(baseline=ready)
+        if self._default_store is None or self._default_store.ordering_key == key:
+            self._default_store = store
+            self._legacy.set_default_key(key)
+        self._legacy.project(key, ready.value)
+
+    def _resolve_store(self, path: Path | None) -> ProfileStore | None:
+        if path is None:
+            return self._default_store
+        if self._default_store is not None and path == self._default_store.path:
+            return self._default_store
+        return ProfileStore(path)
+
+    async def _prepare_open_baseline(
+        self,
+        path: Path | None,
+        *,
+        to_thread: ToThread,
+    ) -> None:
+        store = self._resolve_store(path)
+        if store is None:
+            return
+        if path is not None:
+            self._default_store = store
+            self._legacy.set_default_key(store.ordering_key)
+        key = store.ordering_key
+        state = self._states.setdefault(key, _PathSaveState())
+        if isinstance(state.baseline, ReadyBaseline | FailedBaseline):
+            return
+
+        try:
+            pair = await to_thread(
+                lambda: _load_cookie_pair_pure(store.path, require_routable=False)
+            )
+        except _BASELINE_ERRORS as exc:
+            logger.warning(
+                "Cookie persistence disabled for %s: baseline load failed (%s)",
+                store.path,
+                type(exc).__name__,
+            )
+            state.baseline = FailedBaseline()
+            return
+        ready = ReadyBaseline(pair.baseline)
+        state.baseline = ready
+        self._legacy.project(key, ready.value)
+
+    async def _adopt_reloaded_baseline(
+        self,
+        path: Path,
+        expected: CookieJar,
+        *,
+        to_thread: ToThread,
+    ) -> None:
+        """Adopt the current disk baseline after a recovery jar replacement.
+
+        The recovery path replaces the live jar before calling this method, so
+        a save sequenced before this operation observed the rejected jar and a
+        save sequenced after it observes the replacement. Re-read under
+        ``save_lock`` to cover a later save that reached the lock first. If disk
+        advanced again, keep the old baseline: adopting unmatched provenance
+        would authorize the live replacement to overwrite that sibling update.
+        """
+        if not isinstance(expected, CookieJar):
+            raise TypeError("expected must be a CookieJar")
+        store = self._resolve_store(path)
+        if store is None:  # pragma: no cover - ``path`` is concrete by contract
+            raise ValueError("baseline adoption requires a storage path")
+        key = store.ordering_key
+        seq = next(self._save_seq)
+
+        def _adopt() -> None:
+            with self.save_lock:
+                pair = _load_cookie_pair_pure(store.path, require_routable=False)
+                if pair.baseline != expected:
+                    logger.debug(
+                        "Cookie profile advanced again; recovery baseline not adopted: %s",
+                        store.path,
+                    )
+                    return
+                state = self._states.setdefault(key, _PathSaveState())
+                ready = ReadyBaseline(pair.baseline)
+                state.baseline = ready
+                state.last_applied_sequence = max(state.last_applied_sequence, seq)
+                self._legacy.project(key, ready.value)
+
+        await to_thread(_adopt)
 
     def capture_open_snapshot(self, jar: httpx.Cookies) -> CookieSnapshot:
-        """Capture and publish the baseline used for later delta saves."""
-        self.loaded_cookie_snapshot = (
-            dict(self.auth.cookie_snapshot)
-            if self.auth.cookie_snapshot is not None
-            else snapshot_cookie_jar(jar)
-        )
-        self.auth.cookie_snapshot = self.loaded_cookie_snapshot
-        return self.loaded_cookie_snapshot
+        store = self._default_store
+        if store is None:
+            snapshot = snapshot_cookie_jar(jar)
+            self._legacy.set(None, snapshot)
+            return snapshot
+        key = store.ordering_key
+        state = self._states.setdefault(key, _PathSaveState())
+        if isinstance(state.baseline, ReadyBaseline):
+            return self._legacy.project(key, state.baseline.value)
+        snapshot = snapshot_cookie_jar(jar)
+        self._legacy.set(key, snapshot)
+        return snapshot
 
-    async def save(
+    async def _save_canonical(
+        self,
+        jar: httpx.Cookies,
+        path: Path | None,
+        *,
+        to_thread: ToThread,
+    ) -> None:
+        store = self._resolve_store(path)
+        if store is None:
+            return
+        key = store.ordering_key
+        seq = next(self._save_seq)
+        observation = CookieJar.from_httpx(jar)
+
+        def _save() -> None:
+            with self.save_lock:
+                state = self._states.setdefault(key, _PathSaveState())
+                if seq < state.last_applied_sequence:
+                    return
+                if isinstance(state.baseline, FailedBaseline):
+                    return
+                if isinstance(state.baseline, UninitializedBaseline):
+                    try:
+                        pair = _load_cookie_pair_pure(store.path, require_routable=False)
+                    except _BASELINE_ERRORS:
+                        return
+                    state.baseline = ReadyBaseline(pair.baseline)
+                    self._legacy.project(key, pair.baseline)
+                baseline = state.baseline
+                if not isinstance(baseline, ReadyBaseline):  # pragma: no cover
+                    raise AssertionError("canonical baseline must be ready")
+                result = store.merge_cookie_observation(
+                    observation,
+                    baseline=baseline.value,
+                )
+                if not result.advances_ordering:
+                    return
+                if result.next_baseline is None:  # pragma: no cover - result invariant
+                    raise AssertionError("accepted merge must provide a next baseline")
+                state.last_applied_sequence = seq
+                state.baseline = ReadyBaseline(result.next_baseline)
+                self._legacy.project(key, result.next_baseline)
+
+        await to_thread(_save)
+
+    async def _save_v0_callback(
         self,
         jar: httpx.Cookies,
         path: Path | None = None,
@@ -95,87 +447,60 @@ class CookiePersistence:
         save_cookies_to_storage: SaveCookiesToStorage,
         to_thread: ToThread,
     ) -> None:
-        """Persist ``jar`` through the shared in-process save lock.
-
-        The jar copy and post-save snapshot are taken before dispatching the
-        worker so the background thread never iterates a live
-        ``AsyncClient.cookies`` object. The blocking lock is acquired only
-        inside the worker closure passed to ``to_thread``.
-        """
-        effective_path = path if path is not None else self.default_path
-        if effective_path is None:
+        """Persist through an explicitly injected v0.x writer callback."""
+        store = self._resolve_store(path)
+        if store is None:
             return
-        save_path: Path = effective_path
-        # Canonical save-ordering KEY (CodeRabbit #5): collapse two syntactic
-        # spellings of the SAME file (relative vs resolved vs ``~``-expanded vs
-        # symlinked) to one ``_last_applied_seq`` entry. Keying by the raw
-        # ``effective_path`` lets a stale worker hash to a DIFFERENT key, be missed
-        # by the drop-check, and write an older jar after a newer one. The WRITE
-        # still targets ``save_path`` unchanged; only the ordering key canonicalizes.
-        save_key: Path = canonical_storage_key(save_path) or save_path
-
-        # Stamp the dispatch order BEFORE the worker is queued (on the loop
-        # thread, so the sequence reflects save() call order, not worker run
-        # order). ``next()`` on ``itertools.count`` is atomic under the GIL.
+        key = store.ordering_key
+        is_default = key == self._default_key
         seq = next(self._save_seq)
-
         jar_copy = httpx.Cookies(jar)
-        post_save_snapshot = snapshot_cookie_jar(jar_copy)
+        post = snapshot_cookie_jar(jar_copy)
 
-        def _save(
-            s: httpx.Cookies = jar_copy,
-            p: Path = save_path,
-            key: Path = save_key,
-            lock: threading.Lock = self.save_lock,
-            post: CookieSnapshot = post_save_snapshot,
-            persistence: CookiePersistence = self,
-            dispatch_seq: int = seq,
-        ) -> None:
-            """Worker-thread save: hold the in-process lock around the disk write."""
-            with lock:
-                # Drop a stale worker: a newer save() dispatch has already
-                # applied a merge to this path (keyed canonically), so writing our
-                # older jar would resurrect the stale-overwrite race. A newer
-                # dispatch that only *hard-failed* (see below) does NOT advance the
-                # marker, so this older worker still proceeds — its write is
-                # strictly newer than disk and dropping it would regress vs today.
-                last_applied = persistence._last_applied_seq.get(key, -1)
-                if dispatch_seq < last_applied:
+        def _save() -> None:
+            with self.save_lock:
+                state = self._states.setdefault(key, _PathSaveState())
+                if seq < state.last_applied_sequence:
                     return
-                snap = persistence.loaded_cookie_snapshot
+                original = self._legacy.get(key)
+                if original is None and not is_default:
+                    try:
+                        pair = _load_cookie_pair_pure(store.path, require_routable=False)
+                    except _BASELINE_ERRORS as exc:
+                        logger.warning(
+                            "Skipping cookie save: override baseline initialization failed (%s)",
+                            type(exc).__name__,
+                        )
+                        return
+                    original = self._legacy.project(key, pair.baseline)
                 result = save_cookies_to_storage(
-                    s,
-                    p,
-                    original_snapshot=snap,
+                    jar_copy,
+                    store.path,
+                    original_snapshot=original,
                     return_result=True,
                 )
-                # Advance the per-path marker only after an apply that actually
-                # ran the merge (success OR CAS-partial — ``ok=False`` WITH
-                # rejected keys). A hard-fail (``ok=False`` WITHOUT rejected
-                # keys) does not advance, so the older worker above may proceed.
-                if _apply_ran_merge(result) and dispatch_seq > last_applied:
-                    persistence._last_applied_seq[key] = dispatch_seq
-                persistence._advance_baseline_after_save(snap, post, result)
+                advanced: CookieSnapshot | None = None
+                advances_ordering = False
+                if isinstance(result, CookieSaveResult):
+                    if result.ok:
+                        advanced = post
+                        advances_ordering = True
+                    elif result.cas_rejected_keys:
+                        advanced = advance_cookie_snapshot_after_save(
+                            original,
+                            post,
+                            result.cas_rejected_keys,
+                        )
+                        advances_ordering = True
+                elif result:
+                    advanced = post
+                    advances_ordering = True
+                if not advances_ordering:
+                    return
+                if advanced is not None:
+                    self._legacy.advance(key, advanced)
+                state.last_applied_sequence = seq
+                if isinstance(state.baseline, ReadyBaseline):
+                    state.baseline = UninitializedBaseline()
 
         await to_thread(_save)
-
-    def _advance_baseline_after_save(
-        self,
-        original_snapshot: CookieSnapshot | None,
-        post_save_snapshot: CookieSnapshot,
-        result: bool | CookieSaveResult,
-    ) -> None:
-        if isinstance(result, CookieSaveResult):
-            if result.ok:
-                self.loaded_cookie_snapshot = post_save_snapshot
-            elif result.cas_rejected_keys:
-                self.loaded_cookie_snapshot = advance_cookie_snapshot_after_save(
-                    original_snapshot,
-                    post_save_snapshot,
-                    result.cas_rejected_keys,
-                )
-            if self.loaded_cookie_snapshot is not None:
-                self.auth.cookie_snapshot = self.loaded_cookie_snapshot
-        elif result:
-            self.loaded_cookie_snapshot = post_save_snapshot
-            self.auth.cookie_snapshot = post_save_snapshot

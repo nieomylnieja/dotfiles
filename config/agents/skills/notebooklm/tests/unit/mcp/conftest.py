@@ -71,6 +71,38 @@ def mock_client() -> MagicMock:
     client = MagicMock()
     for namespace in _NAMESPACES:
         setattr(client, namespace, MagicMock())
+
+    from notebooklm._source.batch import SourceUrlBatchItem
+
+    async def _batch_add(notebook_id: str, urls: list[str]) -> list[SourceUrlBatchItem]:
+        """Adapter-test seam: model typed batch outcomes through mocked add_url.
+
+        Production reaches the real one-RPC ``SourcesAPI._add_urls_batch``;
+        this keeps existing tool tests focused on their JSON contract while
+        dedicated source-batch service tests pin the wire call count/shape.
+        """
+        from notebooklm._app.source_batch import batch_item_is_fatal
+        from notebooklm._idempotency import mark_unconfirmed
+        from notebooklm.exceptions import NetworkError, RateLimitError, ServerError
+
+        outcomes: list[SourceUrlBatchItem] = []
+        for url in urls:
+            try:
+                source = await client.sources.add_url(notebook_id, url)
+            except Exception as exc:  # noqa: BLE001 - scripted per-item outcome
+                # Production sends every URL in one write. Any transport-class
+                # failure leaves its committed subset unknown and is therefore
+                # projected as non-retriable RPC, not as NETWORK / 429 / 5xx.
+                if isinstance(exc, (NetworkError, RateLimitError, ServerError)):
+                    mark_unconfirmed(exc)
+                if batch_item_is_fatal(exc):
+                    raise
+                outcomes.append(SourceUrlBatchItem(url=url, error=exc))  # type: ignore[arg-type]
+            else:
+                outcomes.append(SourceUrlBatchItem(url=url, source=source))
+        return outcomes
+
+    client.sources._add_urls_batch = AsyncMock(side_effect=_batch_add)
     # `_app.download.execute_download` probes `client.artifacts._list_for_download`
     # (the #1488 raw-rows fast path). A bare MagicMock auto-vivifies it as a
     # truthy, non-awaitable attr; pin it to None so download tests exercise the

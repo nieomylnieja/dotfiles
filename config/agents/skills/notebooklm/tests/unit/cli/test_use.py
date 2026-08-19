@@ -17,7 +17,7 @@ import notebooklm.auth as auth_module
 import notebooklm.cli.helpers as helpers_module
 import notebooklm.cli.session_cmd as session_cmd_module
 from notebooklm.notebooklm_cli import cli
-from notebooklm.types import Notebook
+from notebooklm.types import Notebook, SharePermission
 
 from .conftest import create_mock_client, inject_client
 
@@ -136,15 +136,21 @@ class TestUseCommand:
         data = json.loads(mock_context_file.read_text())
         assert data["notebook_id"] == "nb_forced"
 
-    def test_use_shows_owner_status(self, runner, mock_auth, mock_context_file):
-        """Test 'use' command displays ownership status correctly."""
+    def test_use_shows_role_and_persists_it(self, runner, mock_auth, mock_context_file):
+        """``use`` shows the caller's actual role and records it in the context.
+
+        The old assertion here (``"Shared" in output or "nb_shared" in output``)
+        could never fail — the right operand is the notebook id, which is always
+        printed. It now pins the Access cell itself, and the write half of the
+        context round-trip that ``status`` later reads back (#2125).
+        """
         mock_client = create_mock_client()
         mock_client.notebooks.get = AsyncMock(
             return_value=Notebook(
                 id="nb_shared",
                 title="Shared Notebook",
                 created_at=datetime(2024, 1, 15),
-                is_owner=False,  # Shared notebook
+                role=SharePermission.VIEWER,  # shared WITH us, read-only
             )
         )
 
@@ -162,7 +168,12 @@ class TestUseCommand:
                 result = runner.invoke(cli, ["use", "nb_shared"], obj=inject_client(mock_client))
 
         assert result.exit_code == 0
-        assert "Shared" in result.output or "nb_shared" in result.output
+        assert "Viewer" in result.output
+        assert "Access" in result.output
+
+        data = json.loads(mock_context_file.read_text())
+        assert data["role"] == "viewer"
+        assert data["is_owner"] is False
 
 
 # =============================================================================

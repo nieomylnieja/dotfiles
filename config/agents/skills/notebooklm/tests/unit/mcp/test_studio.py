@@ -31,8 +31,10 @@ from notebooklm._types.research import MindMapResult  # noqa: E402
 from notebooklm.exceptions import (  # noqa: E402 - after importorskip guard
     ArtifactFeatureUnavailableError,
     ArtifactNotFoundError,
+    ClientError,
     NotebookNotFoundError,
     RateLimitError,
+    RPCError,
 )
 from notebooklm.mcp.tools.studio import _KIND_OPTIONS  # noqa: E402
 from notebooklm.types import Artifact, ArtifactType, GenerationState, Note  # noqa: E402
@@ -256,7 +258,7 @@ async def test_studio_list_kind_enum_matches_studio_kinds(mcp_list_tools) -> Non
     schema = next(t for t in tools if t.name == "studio_list").inputSchema
     enum = _schema_enum(schema["properties"]["kind"])
     assert enum == STUDIO_KINDS
-    assert enum is not None and len(enum) == 10
+    assert enum is not None and len(enum) == 12
     assert "cinematic-video" not in enum
 
 
@@ -1914,6 +1916,67 @@ async def test_artifact_retry_completed_gives_actionable_error(mcp_call, mock_cl
     assert "completed" in msg  # names the current status
     assert "studio_generate" in msg  # actionable next step
     assert "Retry generation is unavailable" not in msg  # not the generic text
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        pytest.param(ClientError("denied", rpc_code=7), id="permission_denied"),
+        pytest.param(RPCError("unavailable", rpc_code=14), id="unavailable"),
+        pytest.param(ClientError("gone", rpc_code=5), id="not_found"),
+    ],
+)
+async def test_artifact_retry_preserves_non_state_refusals(mcp_call, mock_client, refusal) -> None:
+    """#2188: only a wrong-STATE refusal may be relabelled "artifact is not failed".
+
+    A bare ``[7]`` PERMISSION_DENIED decodes to ``ClientError`` and ``[14]``
+    UNAVAILABLE to a plain ``RPCError`` — neither is caught by the typed
+    exclusions, so without a status check both would be rewritten into a
+    validation error, handing the caller the wrong category AND the wrong
+    recovery advice.
+    """
+    art = Artifact(
+        id=_ART_FULL,
+        title="Podcast 1",
+        _artifact_type=ArtifactTypeCode.AUDIO.value,
+        status=int(ArtifactStatus.COMPLETED),
+        created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    mock_client.artifacts.retry_failed = AsyncMock(side_effect=refusal)
+    mock_client.artifacts.get_or_none = AsyncMock(return_value=art)
+
+    with pytest.raises(ToolError) as excinfo:
+        await mcp_call("studio_retry", {"notebook": NB_ID, "artifact": _ART_FULL})
+
+    assert "artifact is not failed" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("code", [3, 9])
+async def test_artifact_retry_state_refusal_with_status_is_enriched(
+    mcp_call, mock_client, code
+) -> None:
+    """A status-tagged state refusal still gets the actionable message (#2188).
+
+    INVALID_ARGUMENT / FAILED_PRECONDITION are the shapes that can plausibly
+    mean "wrong state", so the #1924 F15 enrichment must survive them — that is
+    the whole reason the catch was widened past ``ArtifactFeatureUnavailableError``.
+    """
+    art = Artifact(
+        id=_ART_FULL,
+        title="Podcast 1",
+        _artifact_type=ArtifactTypeCode.AUDIO.value,
+        status=int(ArtifactStatus.COMPLETED),
+        created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    mock_client.artifacts.retry_failed = AsyncMock(side_effect=RPCError("rejected", rpc_code=code))
+    mock_client.artifacts.get_or_none = AsyncMock(return_value=art)
+
+    with pytest.raises(ToolError) as excinfo:
+        await mcp_call("studio_retry", {"notebook": NB_ID, "artifact": _ART_FULL})
+
+    msg = str(excinfo.value)
+    assert "completed" in msg
+    assert "studio_generate" in msg
 
 
 async def test_artifact_retry_refusal_on_failed_reraises_generic(mcp_call, mock_client) -> None:

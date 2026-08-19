@@ -20,11 +20,19 @@ from .._app.notebooks import (
     execute_notebook_metadata,
     execute_notebook_rename,
 )
+from .._app.views import notebook_viewed_keys
+from ..types import share_permission_to_str
 from .auth_runtime import resolve_client_factory, with_client
 from .context import clear_context, get_current_notebook, set_current_notebook
 from .error_handler import _output_error
 from .options import json_option, list_options, notebook_option
-from .rendering import cli_print, console, json_output_response, render_list
+from .rendering import (
+    cli_print,
+    console,
+    get_notebook_access_display,
+    json_output_response,
+    render_list,
+)
 from .resolve import require_notebook, resolve_notebook_id
 from .services.confirming_mutation import MutationPlan, run_confirmed_mutation
 from .services.listing import ListSpec, prepare_list
@@ -56,14 +64,17 @@ def register_notebook_commands(cli):
                         "id": nb.id,
                         "title": nb.title,
                         "is_owner": nb.is_owner,
+                        "role": share_permission_to_str(nb.role) if nb.role is not None else None,
                         "created_at": nb.created_at.isoformat() if nb.created_at else None,
-                        "modified_at": nb.modified_at.isoformat() if nb.modified_at else None,
+                        **notebook_viewed_keys(nb),
                     },
-                    columns=["ID", "Title", "Owner", "Created"],
+                    # "Access" (not "Owner") because the column now reports the
+                    # caller's actual role — Owner / Editor / Viewer (#2125).
+                    columns=["ID", "Title", "Access", "Created"],
                     row=lambda nb: [
                         nb.id,
                         nb.title,
-                        "Owner" if nb.is_owner else "Shared",
+                        get_notebook_access_display(nb.role),
                         nb.created_at.strftime("%Y-%m-%d") if nb.created_at else "-",
                     ],
                 )
@@ -105,15 +116,26 @@ def register_notebook_commands(cli):
 
                 if switch_context:
                     created_str = nb.created_at.strftime("%Y-%m-%d") if nb.created_at else None
-                    set_current_notebook(nb.id, nb.title, nb.is_owner, created_str)
+                    set_current_notebook(
+                        nb.id,
+                        nb.title,
+                        nb.is_owner,
+                        created_str,
+                        role=share_permission_to_str(nb.role) if nb.role is not None else None,
+                    )
 
                 if json_output:
                     data: dict = {
                         "notebook": {
                             "id": nb.id,
                             "title": nb.title,
+                            # Kept in step with `list --json` / `use --json` so
+                            # automation sees one notebook shape (#2125).
+                            "role": (
+                                share_permission_to_str(nb.role) if nb.role is not None else None
+                            ),
                             "created_at": nb.created_at.isoformat() if nb.created_at else None,
-                            "modified_at": nb.modified_at.isoformat() if nb.modified_at else None,
+                            **notebook_viewed_keys(nb),
                         }
                     }
                     # When --use switched the active context, surface the new
@@ -376,8 +398,9 @@ def register_notebook_commands(cli):
                         console.print(
                             f"[dim]Created:[/dim] {metadata.created_at.strftime('%Y-%m-%d %H:%M')}"
                         )
-                    owner_status = "Owner" if metadata.is_owner else "Shared"
-                    console.print(f"[dim]Access:[/dim] {owner_status}")
+                    console.print(
+                        f"[dim]Access:[/dim] {get_notebook_access_display(metadata.role)}"
+                    )
 
                     console.print(f"\n[bold]Sources ({len(metadata.sources)}):[/bold]")
                     if not metadata.sources:

@@ -38,6 +38,9 @@ exception sets can only shrink). Cross-axis facts baked in as exceptions:
   ``ArtifactTypeCode`` member.
 * ``report`` display names are per-format (``_REPORT_DISPLAY``), so the kind
   has no row in ``_DISPLAY_NAME``.
+* ``fantasy-map`` and ``file`` are real backend artifact types but have no
+  observed creation/download row shape yet, so they are listable without being
+  generation kinds or download-spec entries.
 
 KNOWN PARITY BUG (baselined, not fixed here — see
 :func:`test_duration_hint_behavior_baseline_known_bug`):
@@ -258,6 +261,18 @@ ARTIFACT_TYPE_EXTRAS: Mapping[str, str] = {
     "UNKNOWN": "decoder fallback for unrecognized wire types; not a generable kind",
 }
 
+ARTIFACT_TYPE_GENERATION_EXTRAS: Mapping[str, str] = {
+    **ARTIFACT_TYPE_EXTRAS,
+    "FANTASY_MAP": "real listable backend type 6; no observed creation payload yet",
+    "FILE": "real listable backend type 10; no observed creation payload yet",
+}
+
+DOWNLOAD_SPEC_ARTIFACT_EXCEPTIONS: Mapping[str, str] = {
+    "UNKNOWN": "decoder fallback for unrecognized wire types; not downloadable",
+    "FANTASY_MAP": "real listable backend type 6; download row shape is not observed",
+    "FILE": "real listable backend type 10; download row shape is not observed",
+}
+
 ARTIFACT_TYPE_CODE_EXCEPTIONS: Mapping[str, str] = {
     "FLASHCARDS": "shares wire code 4 with QUIZ; distinguished by FLASHCARDS_VARIANT "
     "at artifact_data[9][1][0], so it has no ArtifactTypeCode member of its own",
@@ -344,6 +359,8 @@ ALL_DOCUMENTED_REASON_TABLES: Mapping[str, Mapping[str, str]] = {
     "DOWNLOAD_SPEC_EXCEPTIONS": DOWNLOAD_SPEC_EXCEPTIONS,
     "KIND_TO_ARTIFACT_TYPE_EXCEPTIONS": KIND_TO_ARTIFACT_TYPE_EXCEPTIONS,
     "ARTIFACT_TYPE_EXTRAS": ARTIFACT_TYPE_EXTRAS,
+    "ARTIFACT_TYPE_GENERATION_EXTRAS": ARTIFACT_TYPE_GENERATION_EXTRAS,
+    "DOWNLOAD_SPEC_ARTIFACT_EXCEPTIONS": DOWNLOAD_SPEC_ARTIFACT_EXCEPTIONS,
     "ARTIFACT_TYPE_CODE_EXCEPTIONS": ARTIFACT_TYPE_CODE_EXCEPTIONS,
     "ARTIFACT_TYPE_CODE_EXTRAS": ARTIFACT_TYPE_CODE_EXTRAS,
     "CODE_MAP_EXCEPTIONS": CODE_MAP_EXCEPTIONS,
@@ -650,7 +667,7 @@ def test_download_specs_are_internally_sound() -> None:
             table=f"{table} 'kind' column",
             axis_name="ArtifactType",
             axis_location=LOC["ArtifactType"],
-            exceptions=ARTIFACT_TYPE_EXTRAS,  # UNKNOWN is not downloadable
+            exceptions=DOWNLOAD_SPEC_ARTIFACT_EXCEPTIONS,
         )
     )
 
@@ -689,7 +706,7 @@ def test_artifact_type_enum_matches_kind_axis() -> None:
             table=f"ArtifactType ({LOC['ArtifactType']})",
             axis_name="GenerationKind-derived artifact-type names",
             axis_location=LOC["GenerationKind"],
-            extras=ARTIFACT_TYPE_EXTRAS,
+            extras=ARTIFACT_TYPE_GENERATION_EXTRAS,
         )
     )
     # Keep the derivation's own exception set honest against the axis.

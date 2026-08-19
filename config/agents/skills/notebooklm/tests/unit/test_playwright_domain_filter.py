@@ -20,6 +20,7 @@ parity for the Playwright path:
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
 
 import pytest
@@ -463,3 +464,35 @@ def test_no_duplicates_well_formed_passthrough_unchanged() -> None:
     ]
     out = _filter()(_state(cookies))
     assert out["cookies"] == cookies
+
+
+def test_domainless_rows_drop_silently(caplog: pytest.LogCaptureFixture) -> None:
+    """A row with no usable ``domain`` is dropped without any warning.
+
+    This branch had no coverage: line-level measurement showed the silent-return
+    in the malformed-row handler was never executed by any test in the repo, and
+    the behavior is deliberately quiet, so nothing would have failed loudly if a
+    later edit started warning on every domain-less row a browser exports.
+
+    Note the diagnostic is quieter than it once was, not merely unchanged: the
+    shared row predicate rejects an empty ``domain`` up front, whereas the old
+    inline chain checked ``domain`` last and let such a row fall through to the
+    ``expires`` check, which did warn. Rows dropped are identical either way.
+    """
+    caplog.set_level(logging.WARNING, logger="notebooklm.auth")
+    state = _state(
+        [
+            {"name": "SID", "value": "v", "domain": ".google.com", "path": "/"},
+            {"name": "X", "value": "v", "path": "/"},  # domain absent
+            {"name": "Y", "value": "v", "domain": "", "path": "/"},  # domain empty
+            {"name": "Z", "value": "v", "expires": "never"},  # domain absent + bad expires
+        ]
+    )
+    filtered = _filter()(copy.deepcopy(state))
+
+    assert _names(filtered) == {"SID"}
+    domain_warnings = [r for r in caplog.records if "domain" in r.getMessage()]
+    assert domain_warnings == [], f"domain-less rows must drop silently: {domain_warnings}"
+    assert [r for r in caplog.records if "expires" in r.getMessage()] == [], (
+        "a domain-less row's expires defect is swallowed by the silent drop too"
+    )

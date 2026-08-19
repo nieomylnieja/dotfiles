@@ -690,8 +690,22 @@ def register_file_routes(mcp: FastMCP, config: FileTransferConfig) -> None:
                     # ValidationError ⊂ NotebookLMError, so this MUST precede the
                     # NotebookLMError handler. ``validate_upload_path`` rejections can
                     # embed the local file path, so the detail is redacted.
+                    #
+                    # A post-registration rejection (``raise_partial_upload_failure()``
+                    # attaches ``source_id``/``stage`` to the real cause rather than
+                    # wrapping it — see ``_source/_upload_decode.py``) additionally
+                    # names the retained row: a retry re-registers a NEW row rather
+                    # than replacing this one, and #2138's own evidence is exactly
+                    # this shape (an HTTP-400 upload rejection after registration).
+                    retained_id = getattr(exc, "source_id", None)
+                    retained = (
+                        f"\nRegistered source {retained_id} was left behind; "
+                        "delete it to retry cleanly."
+                        if retained_id is not None
+                        else ""
+                    )
                     return PlainTextResponse(
-                        f"Upload rejected: {redact(str(exc))}",
+                        f"Upload rejected: {redact(str(exc))}{retained}",
                         status_code=400,
                         headers={
                             "Cache-Control": "no-store",
@@ -701,9 +715,47 @@ def register_file_routes(mcp: FastMCP, config: FileTransferConfig) -> None:
                     )
                 except NotebookLMError as exc:
                     # An upstream auth/server/rate-limit error from execute_source_add
-                    # (add_file → RPC) would otherwise escape as a raw 500. The bytes
-                    # already finished uploading by here, so tell the user a retry
-                    # re-sends the whole file (vs a mid-stream failure that did not).
+                    # (add_file → RPC) would otherwise escape as a raw 500.
+                    #
+                    # If this is a post-registration upload failure (``source_id``/
+                    # ``stage`` attached by ``raise_partial_upload_failure()``), the
+                    # bytes may not have finished uploading at all — ``stage`` advances
+                    # to ``upload_finalize`` BEFORE the body request is issued, so it
+                    # also covers a connect failure that never sent a body. Never claim
+                    # bytes were transferred; name the retained row instead, since a
+                    # retry registers ANOTHER row and this route is the one surface
+                    # whose caller is a browser with no other way to find it.
+                    #
+                    # Otherwise the bytes already finished uploading by here, so tell
+                    # the user a retry re-sends the whole file (vs a mid-stream failure
+                    # that did not).
+                    retained_id = getattr(exc, "source_id", None)
+                    stage = getattr(exc, "stage", None)
+                    if retained_id is not None:
+                        return _upstream_error_response(
+                            exc,
+                            note=(
+                                f"The upload did not complete ({stage}). Registered "
+                                f"source {retained_id} was left behind; delete it to "
+                                "retry cleanly."
+                            ),
+                        )
+                    # An UNCONFIRMED registration (#2220) reaches neither branch
+                    # above: its idempotency probe could not say whether the
+                    # register committed, so there is no ``source_id`` to name —
+                    # and the "your file uploaded" note below would be flatly
+                    # false, because registration failed BEFORE the resumable
+                    # upload started. Worse, it invites the retry that duplicates.
+                    if getattr(exc, "unconfirmed", False):
+                        return _upstream_error_response(
+                            exc,
+                            note=(
+                                "Nothing was uploaded. The source registration could "
+                                "not be confirmed, so it may or may not exist — check "
+                                "the notebook's source list before retrying, or a "
+                                "retry may add it twice."
+                            ),
+                        )
                     return _upstream_error_response(
                         exc,
                         note="Your file uploaded, but adding it as a source failed "

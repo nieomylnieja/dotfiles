@@ -34,11 +34,74 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 
 # Suppression gate. Setting ``NOTEBOOKLM_QUIET_DEPRECATIONS`` to a truthy value
 # silences the warnings emitted through this module. It is intentionally read
 # live (not cached) so tests and callers can toggle it per call.
 _QUIET_ENV_VAR = "NOTEBOOKLM_QUIET_DEPRECATIONS"
+
+
+@dataclass(frozen=True, slots=True)
+class DeprecationSpec:
+    """One immutable, statically-auditable deprecation contract."""
+
+    key: str
+    message: str
+    category: type[Warning]
+    replacement: str
+    since: str
+    removal: str
+    stacklevel: int
+
+
+DEPRECATION_SPECS: Mapping[str, DeprecationSpec] = MappingProxyType(
+    {
+        "auth_tokens_from_storage": DeprecationSpec(
+            key="auth_tokens_from_storage",
+            message=(
+                "AuthTokens.from_storage(...) is deprecated; use "
+                "notebooklm.NotebookLMClient.from_storage(...) and access client.auth within "
+                "the managed client lifecycle instead. It will be removed in v1.0."
+            ),
+            category=DeprecationWarning,
+            replacement="notebooklm.NotebookLMClient.from_storage",
+            since="0.8.1",
+            removal="1.0",
+            stacklevel=3,
+        ),
+        "auth_tokens_sync_storage_construction": DeprecationSpec(
+            key="auth_tokens_sync_storage_construction",
+            message=(
+                "Constructing AuthTokens(..., storage_path=..., cookie_jar=None) is deprecated "
+                "because it performs synchronous storage/recovery I/O; use "
+                "notebooklm.NotebookLMClient.from_storage(...) and access client.auth within "
+                "the managed client lifecycle instead. It will be removed in v1.0."
+            ),
+            category=DeprecationWarning,
+            replacement="notebooklm.NotebookLMClient.from_storage",
+            since="0.8.1",
+            removal="1.0",
+            stacklevel=4,
+        ),
+        "auth_tokens_flat_cookies": DeprecationSpec(
+            key="auth_tokens_flat_cookies",
+            message=(
+                "AuthTokens.flat_cookies is deprecated because its name-only projection "
+                "discards domain/path siblings; use AuthTokens.jar for bootstrap cookie "
+                "questions and managed NotebookLMClient request APIs for HTTP. It will be "
+                "removed in v1.0."
+            ),
+            category=DeprecationWarning,
+            replacement="notebooklm.AuthTokens.jar",
+            since="0.8.1",
+            removal="1.0",
+            stacklevel=3,
+        ),
+    }
+)
 
 
 def _deprecations_quiet() -> bool:
@@ -107,3 +170,9 @@ def warn_deprecated(message: str, *, removal: str | None = None, stacklevel: int
     if removal is not None and f"v{removal}" not in text and removal not in text:
         text = f"{text} It will be removed in v{removal}."
     warnings.warn(text, DeprecationWarning, stacklevel=stacklevel)
+
+
+def warn_registered_deprecation(key: str) -> None:
+    """Emit one registered deprecation at its frozen public-boundary depth."""
+    spec = DEPRECATION_SPECS[key]
+    warn_deprecated(spec.message, removal=spec.removal, stacklevel=spec.stacklevel + 1)

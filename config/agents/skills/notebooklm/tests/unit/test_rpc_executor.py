@@ -10,6 +10,7 @@ import pytest
 from notebooklm._logging import get_request_id, reset_request_id, set_request_id
 from notebooklm._request_types import AuthSnapshot
 from notebooklm._rpc_executor import RpcExecutor
+from notebooklm._transport_errors import TransportServerError
 from notebooklm.auth import AuthTokens
 from notebooklm.exceptions import DecodingError, UnknownRPCMethodError
 from notebooklm.rpc import (
@@ -98,6 +99,7 @@ class _Owner:
         rpc_method: str | None = None,
         refresh_budget: Any = None,
         retry_deadline: Any = None,
+        read_timeout: float | None = None,
     ) -> httpx.Response:
         url, body, headers = build_request(self.snapshot)
         self.perform_calls.append(
@@ -109,6 +111,7 @@ class _Owner:
                 "headers": headers,
                 "refresh_budget": refresh_budget,
                 "retry_deadline": retry_deadline,
+                "read_timeout": read_timeout,
             }
         )
         return self.response
@@ -128,7 +131,9 @@ def _executor(
     async def _no_sleep(_: float) -> None:
         return None
 
-    def _decode(_: str, rpc_id: str, *, allow_null: bool = False) -> dict[str, Any]:
+    def _decode(
+        _: str, rpc_id: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> dict[str, Any]:
         return {"rpc_id": rpc_id, "allow_null": allow_null}
 
     # ADR-0014 Rule 5 (Wave 4 of session-decoupling): the executor takes
@@ -237,7 +242,9 @@ async def test_constructor_injected_decode_response_drives_executor(monkeypatch)
     """
     decode_calls: list[dict[str, Any]] = []
 
-    def fake_decode(raw: str, rpc_id: str, *, allow_null: bool = False) -> dict[str, Any]:
+    def fake_decode(
+        raw: str, rpc_id: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> dict[str, Any]:
         decode_calls.append({"raw": raw, "rpc_id": rpc_id, "allow_null": allow_null})
         return {"decoded": rpc_id}
 
@@ -252,6 +259,7 @@ async def test_constructor_injected_decode_response_drives_executor(monkeypatch)
         rpc_method: str | None = None,
         refresh_budget: Any = None,
         retry_deadline: Any = None,
+        read_timeout: float | None = None,
     ) -> httpx.Response:
         return _ok_response("wire")
 
@@ -286,8 +294,17 @@ async def test_execute_threads_override_source_allow_null_and_retry_flag(monkeyp
     owner = _Owner()
     decode_calls: list[dict[str, Any]] = []
 
-    def decode(raw: str, rpc_id: str, *, allow_null: bool = False) -> dict[str, Any]:
-        decode_calls.append({"raw": raw, "rpc_id": rpc_id, "allow_null": allow_null})
+    def decode(
+        raw: str, rpc_id: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> dict[str, Any]:
+        decode_calls.append(
+            {
+                "raw": raw,
+                "rpc_id": rpc_id,
+                "allow_null": allow_null,
+                "raise_on_null_status": raise_on_null_status,
+            }
+        )
         return {"ok": True}
 
     result = await _executor(owner, decode_response=decode)._execute_once(
@@ -297,6 +314,7 @@ async def test_execute_threads_override_source_allow_null_and_retry_flag(monkeyp
         True,
         False,
         disable_internal_retries=True,
+        raise_on_null_status=True,
     )
 
     assert result == {"ok": True}
@@ -310,7 +328,48 @@ async def test_execute_threads_override_source_allow_null_and_retry_flag(monkeyp
     body = httpx.QueryParams(owner.perform_calls[0]["body"])
     assert body["at"] == "CSRF_SNAPSHOT"
     assert '"OverrideRpc"' in body["f.req"]
-    assert decode_calls == [{"raw": "raw", "rpc_id": "OverrideRpc", "allow_null": True}]
+    # ``raise_on_null_status`` is asserted here because this is the ONLY link
+    # between "the call site asked for strictness" and "the decoder received
+    # it" — the end-to-end tests replace ``rpc_call``, which sits above the
+    # executor. Dropping the kwarg at the decode call left the whole suite
+    # green before this assertion existed (#2188).
+    assert decode_calls == [
+        {
+            "raw": "raw",
+            "rpc_id": "OverrideRpc",
+            "allow_null": True,
+            "raise_on_null_status": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rpc_call_threads_read_timeout_override_to_transport() -> None:
+    """#2187: ``read_timeout`` (e.g. IMPORT_RESEARCH's batch-scaled budget)
+    reaches ``perform_authed_post`` through the public ``rpc_call`` entry
+    point, mirroring the existing chat-transport precedent."""
+    owner = _Owner()
+
+    result = await _executor(owner).rpc_call(
+        RPCMethod.LIST_NOTEBOOKS,
+        [],
+        read_timeout=123.0,
+    )
+
+    assert result == {"rpc_id": RPCMethod.LIST_NOTEBOOKS.value, "allow_null": False}
+    assert owner.perform_calls[0]["read_timeout"] == 123.0
+
+
+@pytest.mark.asyncio
+async def test_rpc_call_omits_read_timeout_by_default() -> None:
+    """Every existing caller that doesn't pass ``read_timeout`` must see no
+    behavior change: the transport receives ``None`` (inherit the client
+    default), not a spuriously-set override."""
+    owner = _Owner()
+
+    await _executor(owner).rpc_call(RPCMethod.LIST_NOTEBOOKS, [])
+
+    assert owner.perform_calls[0]["read_timeout"] is None
 
 
 @pytest.mark.asyncio
@@ -323,7 +382,9 @@ async def test_decode_time_auth_retry_uses_injected_collaborators() -> None:
     is_auth_error_calls: list[Exception] = []
     decode_allow_nulls: list[bool] = []
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         decode_allow_nulls.append(allow_null)
         if len(decode_allow_nulls) == 1:
             raise RPCError("not matched by the built-in auth detector")
@@ -388,7 +449,9 @@ async def test_decode_time_auth_retry_gives_up_when_aggregate_deadline_exhausted
     auth_rpc_error = RPCError("authentication expired")
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         raise auth_rpc_error
@@ -430,7 +493,9 @@ async def test_decode_time_auth_retry_preserves_none_result() -> None:
     owner = _Owner(refresh_callback=refresh_callback)
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         if decode_calls == 1:
@@ -472,7 +537,9 @@ async def test_decode_time_auth_retry_skipped_for_non_idempotent_method() -> Non
     owner = _Owner(refresh_callback=refresh_callback)
     auth_rpc_error = RPCError("authentication expired")
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise auth_rpc_error
 
     with pytest.raises(RPCError) as raised:
@@ -511,7 +578,9 @@ async def test_decode_time_auth_retry_skipped_when_caller_disables_retries() -> 
     owner = _Owner(refresh_callback=refresh_callback)
     auth_rpc_error = RPCError("authentication expired")
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise auth_rpc_error
 
     with pytest.raises(RPCError) as raised:
@@ -550,7 +619,9 @@ async def test_decode_time_auth_retry_threads_refresh_budget_to_transport() -> N
     owner = _Owner(refresh_callback=refresh_callback)
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         if decode_calls == 1:
@@ -580,6 +651,45 @@ async def test_decode_time_auth_retry_threads_refresh_budget_to_transport() -> N
 
 
 @pytest.mark.asyncio
+async def test_decode_time_auth_retry_threads_read_timeout_to_transport() -> None:
+    """#2187 codex review: a ``read_timeout`` override must survive a
+    decode-time auth-refresh-and-retry, not silently fall back to the
+    client-wide default on the retry leg."""
+
+    async def refresh_callback() -> object:
+        return object()
+
+    owner = _Owner(refresh_callback=refresh_callback)
+    decode_calls = 0
+
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
+        nonlocal decode_calls
+        decode_calls += 1
+        if decode_calls == 1:
+            raise RPCError("authentication expired")
+        return {"ok": True}
+
+    result = await _executor(
+        owner,
+        decode_response=decode,
+        is_auth_error=lambda exc: True,
+    )._execute_once(
+        RPCMethod.LIST_NOTEBOOKS,
+        [],
+        "/",
+        False,
+        False,
+        read_timeout=210.0,
+    )
+
+    assert result == {"ok": True}
+    read_timeouts = [call["read_timeout"] for call in owner.perform_calls]
+    assert read_timeouts == [210.0, 210.0]
+
+
+@pytest.mark.asyncio
 async def test_decode_time_auth_retry_threads_retry_deadline_to_transport() -> None:
     """Issue #1873: the executor seeds the chain with the SAME aggregate deadline.
 
@@ -599,7 +709,9 @@ async def test_decode_time_auth_retry_threads_retry_deadline_to_transport() -> N
     owner._timeout = 30.0
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         if decode_calls == 1:
@@ -644,7 +756,9 @@ async def test_decode_time_auth_retry_skips_when_shared_budget_already_spent() -
     owner = _Owner(refresh_callback=refresh_callback)
     auth_rpc_error = RPCError("authentication expired")
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise auth_rpc_error
 
     spent_budget = RefreshBudget()
@@ -684,7 +798,9 @@ async def test_decode_time_auth_retry_increments_auth_retry_metric() -> None:
     owner = _Owner(refresh_callback=refresh_callback)
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         if decode_calls == 1:
@@ -750,6 +866,8 @@ async def test_constructor_injected_sleep_drives_executor(monkeypatch) -> None:
         *,
         disable_internal_retries: bool = False,
         operation_variant: str | None = None,
+        read_timeout: float | None = None,
+        raise_on_null_status: bool = False,
         _refresh_budget: Any = None,
         _retry_deadline: Any = None,
     ) -> dict[str, bool]:
@@ -760,6 +878,12 @@ async def test_constructor_injected_sleep_drives_executor(monkeypatch) -> None:
         assert _is_retry is True
         assert disable_internal_retries is True
         assert operation_variant is None
+        # The post-refresh retry must inherit the per-call options, not silently
+        # fall back to the module defaults. This repo has already shipped that
+        # exact bug once — ``read_timeout`` was dropped here in the #2187 PR and
+        # only caught in review — so both are pinned (#2188).
+        assert read_timeout == 45.0
+        assert raise_on_null_status is True
         return {"ok": True}
 
     # ADR-0014 Rule 5 (Wave 4): executor calls ``self._auth_refresh.await_refresh()``
@@ -776,6 +900,8 @@ async def test_constructor_injected_sleep_drives_executor(monkeypatch) -> None:
         True,
         RPCError("auth"),
         disable_internal_retries=True,
+        read_timeout=45.0,
+        raise_on_null_status=True,
         _refresh_budget=RefreshBudget(),
     )
 
@@ -818,6 +944,44 @@ def test_request_error_mapper_uses_owner_timeout_seconds() -> None:
         )
 
     assert raised.value.timeout_seconds == 12.5
+
+
+def test_request_error_mapper_reports_read_timeout_override_when_given() -> None:
+    """#2187 codex review: a call widened via ``read_timeout`` (e.g.
+    IMPORT_RESEARCH's batch-scaled budget) must report ITS actual budget in
+    ``timeout_seconds`` on timeout, not the unwidened client-wide default —
+    otherwise a 240s IMPORT_RESEARCH timeout misreports as a 30s one.
+    """
+    executor = _executor(_Owner(timeout=30.0))
+
+    with pytest.raises(RPCTimeoutError) as raised:
+        executor.raise_rpc_error_from_request_error(
+            httpx.ReadTimeout("slow"),
+            RPCMethod.LIST_NOTEBOOKS,
+            read_timeout=210.0,
+        )
+
+    assert raised.value.timeout_seconds == 210.0
+
+
+@pytest.mark.asyncio
+async def test_rpc_call_timeout_reports_read_timeout_override() -> None:
+    """End-to-end: a ``read_timeout`` passed to ``rpc_call`` reaches the
+    request-error mapper, not just the transport call."""
+    owner = _Owner()
+
+    async def fail_with_read_timeout(**_: Any) -> httpx.Response:
+        raise TransportServerError(
+            "server-error retries exhausted",
+            original=httpx.ReadTimeout("slow", request=httpx.Request("POST", "https://x.test")),
+        )
+
+    owner.perform_authed_post = fail_with_read_timeout  # type: ignore[method-assign]
+
+    with pytest.raises(RPCTimeoutError) as raised:
+        await _executor(owner).rpc_call(RPCMethod.LIST_NOTEBOOKS, [], read_timeout=99.0)
+
+    assert raised.value.timeout_seconds == 99.0
 
 
 @pytest.mark.parametrize(
@@ -866,7 +1030,9 @@ async def test_decode_shape_error_wrapped(
     decoder_exc = decoder_exc_factory()
     owner = _Owner()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise decoder_exc
 
     with pytest.raises(RPCError) as raised:
@@ -894,7 +1060,9 @@ async def test_decode_shape_error_json_decode_wrapped() -> None:
     owner = _Owner()
     decoder_exc = _json.JSONDecodeError("expecting value", "doc", 0)
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise decoder_exc
 
     with pytest.raises(RPCError) as raised:
@@ -915,7 +1083,9 @@ async def test_rpc_error_log_includes_class_code_and_retry_after(caplog) -> None
     """Decode-time RPCError logs carry enough non-sensitive CI diagnostics."""
     owner = _Owner()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise RateLimitError(
             "quota",
             method_id=RPCMethod.START_DEEP_RESEARCH.value,
@@ -973,7 +1143,9 @@ async def test_decode_code_bug_propagates(
     decoder_exc = decoder_exc_factory()
     owner = _Owner()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise decoder_exc
 
     with pytest.raises(type(decoder_exc)) as raised:
@@ -1037,7 +1209,9 @@ async def test_decode_errors_metric_increments_on_wrapped_shape_drift(
     """The wrap branch (bad JSON / missing key-or-index) bumps the counter."""
     owner = _Owner()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise decoder_exc_factory()
 
     with pytest.raises(RPCError):
@@ -1071,7 +1245,9 @@ async def test_decode_errors_metric_increments_on_surfaced_drift(
     owner = _Owner()
     drift_exc = drift_exc_factory()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise drift_exc
 
     with pytest.raises(DecodingError) as raised:
@@ -1095,7 +1271,9 @@ async def test_decode_errors_metric_not_bumped_for_non_drift_rpc_error() -> None
     """
     owner = _Owner()
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         raise RateLimitError("quota", method_id=RPCMethod.LIST_NOTEBOOKS.value)
 
     with pytest.raises(RateLimitError):
@@ -1122,7 +1300,9 @@ async def test_decode_errors_metric_not_counted_when_recovered_by_retry() -> Non
     owner = _Owner(refresh_callback=refresh_callback)
     decode_calls = 0
 
-    def decode(_: str, __: str, *, allow_null: bool = False) -> Any:
+    def decode(
+        _: str, __: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> Any:
         nonlocal decode_calls
         decode_calls += 1
         if decode_calls == 1:

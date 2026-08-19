@@ -50,7 +50,9 @@ async def test_rpc_metrics_event_and_correlation_scope(auth_tokens: AuthTokens) 
     # the test brittle to RPC-ID changes. Stubbing keeps the test focused
     # on observability semantics (counters + events + correlation) rather
     # than wire-format details.
-    def fake_decode(raw: str, rpc_id: str, *, allow_null: bool = False) -> dict:
+    def fake_decode(
+        raw: str, rpc_id: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> dict:
         return {"ok": True}
 
     core = build_client_shell_for_tests(
@@ -120,7 +122,9 @@ async def test_rpc_decode_error_bumps_drift_counter(auth_tokens: AuthTokens) -> 
     """
     from notebooklm.exceptions import DecodingError
 
-    def drifting_decode(raw: str, rpc_id: str, *, allow_null: bool = False) -> dict:
+    def drifting_decode(
+        raw: str, rpc_id: str, *, allow_null: bool = False, raise_on_null_status: bool = False
+    ) -> dict:
         raise DecodingError("Google reshaped the response", method_id=rpc_id)
 
     core = build_client_shell_for_tests(auth_tokens, decode_response=drifting_decode)

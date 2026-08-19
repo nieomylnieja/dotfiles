@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from notebooklm.exceptions import RateLimitError
+from notebooklm.types import ConversationTurnKey
 
 from .fakes import FakeClient
 
@@ -124,3 +125,31 @@ def test_configure_unknown_mode_is_422(authed_client: TestClient) -> None:
     # request-schema boundary (422), not reaching the core.
     resp = authed_client.post("/v1/notebooks/nb-1/chat/configure", json={"chat_mode": "bogus"})
     assert resp.status_code == 422
+
+
+# --- ConversationTurnKey on the ask response (#2122) -------------------------
+
+
+def test_ask_reports_no_turn_key_when_the_stream_carried_none(authed_client: TestClient) -> None:
+    resp = authed_client.post("/v1/notebooks/nb-1/chat", json={"question": "hi"})
+    assert resp.status_code == 200
+    assert resp.json()["turn_key"] is None
+
+
+def test_ask_serializes_the_turn_key_parts(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    """The three parts must arrive readable — a REST caller building a per-turn
+    RPC needs each of them, not a stringified blob."""
+    # ``session_id`` is deliberately NOT the fake's conversation id ("conv-1"):
+    # they are different wire slots, and reusing one value would let a route
+    # substituting one for the other pass.
+    fake_client.chat_turn_key = ConversationTurnKey("session-1", "turn-1", 2187103311)
+    resp = authed_client.post("/v1/notebooks/nb-1/chat", json={"question": "hi"})
+    assert resp.status_code == 200
+    assert resp.json()["conversation_id"] == "conv-1"
+    assert resp.json()["turn_key"] == {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "turn_code": 2187103311,
+    }

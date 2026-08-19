@@ -200,9 +200,13 @@ async def test_client_rpc_call_forwards_supported_kwargs() -> None:
 
     After the v0.6.0 cut, the public wrapper exposes only the supported
     surface (``method``, ``params``, ``allow_null``, and the keyword-only
-    ``disable_internal_retries``); the previously-deprecated
+    ``disable_internal_retries`` / ``read_timeout`` /
+    ``raise_on_null_status``); the previously-deprecated
     ``source_path`` / ``_is_retry`` / ``operation_variant`` kwargs were
-    removed and are no longer forwarded by this layer.
+    removed and are no longer forwarded by this layer. ``read_timeout``
+    (#2187) is the per-call read-timeout override used by callers like
+    ``ResearchAPI.import_sources`` that need a longer budget than the
+    client-wide default for one specific RPC.
     """
     from notebooklm import NotebookLMClient
     from notebooklm.auth import AuthTokens
@@ -229,6 +233,8 @@ async def test_client_rpc_call_forwards_supported_kwargs() -> None:
         ["My Notebook"],
         allow_null=True,
         disable_internal_retries=True,
+        read_timeout=45.0,
+        raise_on_null_status=True,
     )
 
     assert result == {"ok": True}
@@ -237,6 +243,8 @@ async def test_client_rpc_call_forwards_supported_kwargs() -> None:
         params=["My Notebook"],
         allow_null=True,
         disable_internal_retries=True,
+        read_timeout=45.0,
+        raise_on_null_status=True,
     )
 
 
@@ -272,4 +280,6 @@ async def test_client_rpc_call_forwards_default_arguments() -> None:
         params=[],
         allow_null=False,
         disable_internal_retries=False,
+        read_timeout=None,
+        raise_on_null_status=False,
     )

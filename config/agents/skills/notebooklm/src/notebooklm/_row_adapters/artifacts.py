@@ -6,17 +6,74 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
+from .._types.artifact_content import (
+    ArtifactInfographic,
+    ArtifactMedia,
+    ArtifactMediaType,
+    ArtifactSlide,
+    ArtifactUserState,
+    AudioArtifactUserState,
+    FlashcardArtifactUserState,
+    UnknownArtifactUserState,
+)
 from .._types.common import _datetime_from_timestamp
 from ..exceptions import UnknownRPCMethodError
-from ..rpc import ArtifactStatus, ArtifactTypeCode, RPCMethod, safe_index
+from ..rpc import FLASHCARDS_VARIANT, ArtifactStatus, ArtifactTypeCode, RPCMethod, safe_index
 
 __all__ = [
     "MIND_MAP_LEAF_ABSENT",
     "ArtifactRow",
+    "QuizOptionPair",
     "ReportSuggestionRow",
     "unwrap_artifact_rows",
     "unwrap_mind_map_generation_leaf",
 ]
+
+
+@dataclass(frozen=True)
+class QuizOptionPair:
+    """The quantity/difficulty pair a quiz or flashcards artifact was generated with.
+
+    The backend stores this pair inside the artifact and echoes it back on
+    ``LIST_ARTIFACTS``, which makes it the one place the *sent* options can be
+    verified against the *stored* options. Nothing read it before #2195, so the
+    only thing standing between a wrong pair and the user was a hand-written
+    fixture — which is exactly how #2116 (a transposed pair) survived.
+
+    Both ``QuizGenerationOptions`` and ``FlashcardsGenerationOptions`` declare
+    the same two fields in the same order, so one type covers both families —
+    mirroring the shared :class:`~notebooklm.rpc.QuizQuantity` /
+    :class:`~notebooklm.rpc.QuizDifficulty` enums.
+
+    The fields are **named, not positional**, on purpose: a bare
+    ``tuple[int, int]`` read-back would reintroduce on the decode side the very
+    ambiguity that produced the transposition on the encode side.
+
+    Values are raw ``int`` codes rather than enum members (matching
+    :attr:`ArtifactRow.type_code` / :attr:`ArtifactRow.status`) so a value
+    Google adds before this client models it decodes as itself instead of
+    raising. ``QuizQuantity`` / ``QuizDifficulty`` are ``int`` enums, so
+    ``pair.quantity == QuizQuantity.FEWER`` compares as expected.
+
+    Either field is ``None`` when the stored options message leaves it unset —
+    live-observed: a request carrying the proto3 default pair ``[0, 0]`` echoes
+    back as an empty list, since default-valued fields are dropped from the
+    JSON encoding. ``None`` *also* covers a leaf that is present but not an
+    integer code; the two are not distinguishable here, and
+    :meth:`ArtifactRow._option_code` records why that narrow conflation is
+    accepted while malformed *containers* raise instead.
+
+    Because the fields are plain ``int``, they compare equal across the two
+    option enums — ``QuizOptionPair(quantity=3, ...).quantity ==
+    QuizDifficulty.HARD`` is ``True``, since ``QuizQuantity.MORE`` and
+    ``QuizDifficulty.HARD`` are both ``3``. Compare against the enum matching
+    the field you are reading. The encode side rejects that mix-up outright
+    (:func:`~notebooklm._artifact.payloads._quiz_option_code`); the decode side
+    cannot, because it has only the wire integer to go on.
+    """
+
+    quantity: int | None
+    difficulty: int | None
 
 
 def unwrap_artifact_rows(result: list[Any], *, method_id: str, source: str) -> list[Any]:
@@ -114,22 +171,27 @@ class ArtifactRow:
     0      artifact id (str)
     1      artifact title (str)
     2      type code (int — see :class:`notebooklm.rpc.ArtifactTypeCode`)
-    3      failed-artifact plain error text (when present)
+    3      source references; IDs are exposed through :attr:`source_ids`
     4      processing status (int — see :class:`notebooklm.rpc.ArtifactStatus`)
-    5      failed-artifact nested error payload (when present)
+    5      isPubliclyReadable (bool — unread; see #2134)
     6      audio metadata; ``[6][5]`` is the audio media list
     7      report markdown payload (string or one-element wrapper)
     8      video metadata; nested media variants
     9      options block; ``[9][1][0]`` is the variant code (used to
            distinguish among QUIZ, FLASHCARDS, and the interactive mind map
-           (variant 4) when type == 4); ``[9][1][2]`` is the generation prompt
+           (variant 4) when type == 4); ``[9][1][2]`` is the generation prompt;
+           ``[9][1][6]`` and ``[9][1][7]`` are the stored flashcards / quiz
+           ``[quantity, difficulty]`` pairs
+    10     last-modified timestamp (``[seconds, nanos]``)
     14     infographic metadata; ``[14][0][0]`` is the generation prompt
     15     timestamp block; ``[15][0]`` is the creation timestamp
            (seconds since epoch)
     16     slide deck metadata; ``[16][3]`` is PDF URL, ``[16][4]`` is PPTX
            URL, and ``[16][0][0]`` is the generation prompt
+    17     per-user playback or app study state
     18     data table raw rich-text payload; ``[18][1][0]`` is the
            generation prompt
+    21     etag (when returned)
     =====  ============================================================
 
     Each artifact also carries the free-text prompt that produced it, at a
@@ -168,44 +230,90 @@ class ArtifactRow:
     _ID_POS: ClassVar[int] = 0
     _TITLE_POS: ClassVar[int] = 1
     _TYPE_POS: ClassVar[int] = 2
-    _ERROR_TEXT_POS: ClassVar[int] = 3
+    _SOURCES_POS: ClassVar[int] = 3
     _STATUS_POS: ClassVar[int] = 4
-    _ERROR_PAYLOAD_POS: ClassVar[int] = 5
     _AUDIO_METADATA_POS: ClassVar[int] = 6
     _REPORT_MARKDOWN_POS: ClassVar[int] = 7
     _VIDEO_METADATA_POS: ClassVar[int] = 8
     _OPTIONS_POS: ClassVar[int] = 9
+    _LAST_MODIFIED_TIMESTAMP_POS: ClassVar[int] = 10
     _INFOGRAPHIC_METADATA_POS: ClassVar[int] = 14
     _TIMESTAMP_POS: ClassVar[int] = 15
     _SLIDE_DECK_METADATA_POS: ClassVar[int] = 16
+    _ARTIFACT_USER_STATE_POS: ClassVar[int] = 17
     _DATA_TABLE_PAYLOAD_POS: ClassVar[int] = 18
+    _ETAG_POS: ClassVar[int] = 21
 
     # Per-type location of the user's generation prompt: the top-level block
     # index that holds the artifact's content, followed by the sub-path to the
     # prompt leaf inside it. The type-4 key (QUIZ) covers quizzes, flashcards,
     # and the interactive mind map, which share one options block. Verified live
-    # across every studio artifact type; note-backed mind maps (synthetic type
-    # 5) are absent here and therefore have no prompt.
+    # across every studio artifact type; adapted note-backed mind maps (using
+    # the genuine backend mind-map code 5) are absent here and have no prompt.
+    # ---- Inside the type-4 options block (``data[9]``) ---------------------
+    # ``AppArtifact.generationOptions`` and the four leaves this adapter reads
+    # from it. The whole family is quantity-then-difficulty: both
+    # ``QuizGenerationOptions`` and ``FlashcardsGenerationOptions`` number
+    # quantity 1 and difficulty 2, so one pair of constants indexes both (the
+    # shared numbering is asserted in test_wire_contract.py).
+    _GENERATION_OPTIONS_POS: ClassVar[int] = 1
+    _APP_TYPE_POS: ClassVar[int] = 0
+    _FLASHCARDS_OPTIONS_POS: ClassVar[int] = 6
+    _QUIZ_OPTIONS_POS: ClassVar[int] = 7
+    _OPTION_QUANTITY_POS: ClassVar[int] = 0
+    _OPTION_DIFFICULTY_POS: ClassVar[int] = 1
+
     _PROMPT_LOCATION: ClassVar[dict[int, tuple[int, ...]]] = {
         ArtifactTypeCode.AUDIO.value: (_AUDIO_METADATA_POS, 1, 0),
         ArtifactTypeCode.REPORT.value: (_REPORT_MARKDOWN_POS, 1, 5),
         ArtifactTypeCode.VIDEO.value: (_VIDEO_METADATA_POS, 2, 2),
-        ArtifactTypeCode.QUIZ.value: (_OPTIONS_POS, 1, 2),
+        ArtifactTypeCode.QUIZ.value: (_OPTIONS_POS, _GENERATION_OPTIONS_POS, 2),
         ArtifactTypeCode.INFOGRAPHIC.value: (_INFOGRAPHIC_METADATA_POS, 0, 0),
         ArtifactTypeCode.SLIDE_DECK.value: (_SLIDE_DECK_METADATA_POS, 0, 0),
         ArtifactTypeCode.DATA_TABLE.value: (_DATA_TABLE_PAYLOAD_POS, 1, 0),
     }
 
     _AUDIO_MEDIA_LIST_POS: ClassVar[int] = 5
+    _AUDIO_DURATION_POS: ClassVar[int] = 6
+    _VIDEO_MEDIA_LIST_POS: ClassVar[int] = 4
+    _VIDEO_DURATION_POS: ClassVar[int] = 5
     _MEDIA_URL_POS: ClassVar[int] = 0
     _MEDIA_KIND_POS: ClassVar[int] = 1
     _MEDIA_MIME_POS: ClassVar[int] = 2
     _VIDEO_PREFERRED_KIND: ClassVar[int] = 4
+    _MEDIA_TYPE_MAP: ClassVar[dict[int, ArtifactMediaType]] = {
+        1: ArtifactMediaType.PROGRESSIVE,
+        2: ArtifactMediaType.HLS,
+        3: ArtifactMediaType.DASH,
+        4: ArtifactMediaType.DOWNLOAD,
+    }
+    _REPORT_GENERATION_OPTIONS_POS: ClassVar[int] = 1
+    _REPORT_KIND_POS: ClassVar[int] = 0
+    _INFOGRAPHIC_ITEMS_POS: ClassVar[int] = 2
+    # Historical compatibility fallback: before the exact infographic block
+    # was modeled, the URL extractor scanned any top-level list's slot 2.
     _INFOGRAPHIC_CONTENT_POS: ClassVar[int] = 2
     _INFOGRAPHIC_FIRST_CONTENT_POS: ClassVar[int] = 0
     _INFOGRAPHIC_IMAGE_DATA_POS: ClassVar[int] = 1
+    _INFOGRAPHIC_TITLE_POS: ClassVar[int] = 0
+    _INFOGRAPHIC_IMAGE_POS: ClassVar[int] = 1
+    _INFOGRAPHIC_ALT_TEXT_POS: ClassVar[int] = 2
+    _INFOGRAPHIC_TEXT_POS: ClassVar[int] = 3
+    _SLIDE_ITEMS_POS: ClassVar[int] = 2
+    _SLIDE_IMAGE_POS: ClassVar[int] = 0
+    _SLIDE_ALT_TEXT_POS: ClassVar[int] = 1
+    _SLIDE_TEXT_POS: ClassVar[int] = 2
+    _IMAGE_URL_POS: ClassVar[int] = 0
+    _IMAGE_WIDTH_POS: ClassVar[int] = 1
+    _IMAGE_HEIGHT_POS: ClassVar[int] = 2
     _SLIDE_DECK_PDF_URL_POS: ClassVar[int] = 3
     _SLIDE_DECK_PPTX_URL_POS: ClassVar[int] = 4
+    _AUDIO_USER_STATE_POS: ClassVar[int] = 0
+    _APP_USER_STATE_POS: ClassVar[int] = 2
+    _PLAYBACK_POSITION_POS: ClassVar[int] = 0
+    _APP_STATE_POS: ClassVar[int] = 0
+    _DURATION_SECONDS_POS: ClassVar[int] = 0
+    _DURATION_NANOS_POS: ClassVar[int] = 1
     _MEDIA_ARTIFACT_TYPES: ClassVar[frozenset[int]] = frozenset(
         {
             ArtifactTypeCode.AUDIO.value,
@@ -253,11 +361,42 @@ class ArtifactRow:
 
     @property
     def status(self) -> int:
-        """Processing status code (see :class:`ArtifactStatus`); ``0`` when absent."""
+        """Processing status code (see :class:`ArtifactStatus`); ``0`` when absent.
+
+        Caveat: since #2127 modeled ``ArtifactStatus.UNKNOWN = 0``, this
+        synthetic ``0`` is indistinguishable from the backend genuinely
+        reporting ``ARTIFACT_STATUS_UNKNOWN``. The conflation is invisible in
+        ``status_str`` (both render ``"unknown"``), but not at the enum: a
+        caller doing ``ArtifactStatus(artifact.status)`` on a truncated or
+        malformed row used to get a ``ValueError`` — a signal — and now gets
+        ``ArtifactStatus.UNKNOWN``, and ``artifact.status ==
+        ArtifactStatus.UNKNOWN`` is now ``True`` for such a row. Narrowing this
+        to ``int | None`` (so ``_status_from_code``'s existing ``none_status``
+        parameter decides, as the CREATE_ARTIFACT path already does) is the
+        clean fix and is deliberately left out of the #2127 wire-decode
+        correction.
+        """
         if len(self._raw) <= self._STATUS_POS:
             return 0
         value = self._raw[self._STATUS_POS]
         return value if isinstance(value, int) else 0
+
+    @property
+    def source_ids(self) -> tuple[str, ...]:
+        """Source IDs referenced by the artifact, in backend order."""
+        sources = self._list_at_top_level(self._SOURCES_POS)
+        if sources is None:
+            return ()
+        result: list[str] = []
+        for source in sources:
+            if not isinstance(source, list) or not source:
+                continue
+            source_id = source[0]
+            if isinstance(source_id, list) and source_id:
+                source_id = source_id[0]
+            if isinstance(source_id, str):
+                result.append(source_id)
+        return tuple(result)
 
     # ---- Nested descents (delegated to safe_index) -----------------------
     # The outer ``len`` guard preserves the "optional trailing positions"
@@ -289,12 +428,118 @@ class ArtifactRow:
             return None
         value = safe_index(
             options_block,
-            1,
-            0,
+            self._GENERATION_OPTIONS_POS,
+            self._APP_TYPE_POS,
             method_id=self.method_id,
             source="ArtifactRow.variant",
         )
         return value if isinstance(value, int) else None
+
+    @property
+    def flashcards_options(self) -> QuizOptionPair | None:
+        """Stored flashcards ``[quantity, difficulty]`` pair at ``data[9][1][6]``.
+
+        Returns ``None`` for every row that does not carry the flashcards
+        options message — a short row, ``data[9]`` absent or ``null``, or a
+        non-flashcards artifact (the slot is ``null`` on a quiz or mind-map
+        row).
+
+        Raises :class:`UnknownRPCMethodError` when a container that IS present
+        no longer has the expected shape, matching :attr:`variant`'s policy: a
+        reshaped payload is drift, and reporting it as "no options" would hide
+        exactly what this accessor exists to surface.
+
+        See :attr:`quiz_options` for why this is worth reading at all.
+        """
+        return self._option_pair(self._FLASHCARDS_OPTIONS_POS, "ArtifactRow.flashcards_options")
+
+    @property
+    def quiz_options(self) -> QuizOptionPair | None:
+        """Stored quiz ``[quantity, difficulty]`` pair at ``data[9][1][7]``.
+
+        This is the backend's own echo of the options the artifact was created
+        with, so it is the only client-side read that can check a
+        :func:`~notebooklm._artifact.payloads.build_quiz_artifact_params`
+        payload against reality rather than against a fixture (#2195). It is
+        deliberately a *decode* of what the server stored, never a
+        reconstruction of what we sent.
+
+        Returns ``None`` — and raises on drift — under the same conditions as
+        :attr:`flashcards_options`.
+        """
+        return self._option_pair(self._QUIZ_OPTIONS_POS, "ArtifactRow.quiz_options")
+
+    def _option_pair(self, position: int, source: str) -> QuizOptionPair | None:
+        """Decode one ``[quantity, difficulty]`` leaf out of the options block."""
+        if len(self._raw) <= self._OPTIONS_POS:
+            return None
+        options_block = self._raw[self._OPTIONS_POS]
+        if not isinstance(options_block, list):
+            # Same legacy soft-degrade as ``variant`` for ``data[9] = None``.
+            return None
+        generation_options = safe_index(
+            options_block,
+            self._GENERATION_OPTIONS_POS,
+            method_id=self.method_id,
+            source=source,
+        )
+        # ``None`` is a genuine absence (a row with no generation options at
+        # all); any OTHER non-list here is a message that changed shape, which
+        # is drift and must not be reported as "no options" — that would make a
+        # reshaped payload indistinguishable from an unset one, in the accessor
+        # whose entire job is saying what the server stored.
+        if generation_options is None:
+            return None
+        if not isinstance(generation_options, list):
+            raise UnknownRPCMethodError(
+                "expected a list at the generation-options position, got "
+                f"{type(generation_options).__name__}",
+                method_id=self.method_id,
+                path=(self._OPTIONS_POS, self._GENERATION_OPTIONS_POS),
+                source=source,
+                data_at_failure=repr(generation_options)[:200],
+            )
+        # The two option slots ARE optional trailing positions inside that
+        # message (a mind-map row carries neither, and each family's row leaves
+        # the sibling's slot null), so a short block or a null slot is absence.
+        if len(generation_options) <= position:
+            return None
+        pair = generation_options[position]
+        if pair is None:
+            return None
+        if not isinstance(pair, list):
+            raise UnknownRPCMethodError(
+                f"expected a list at the option-pair position, got {type(pair).__name__}",
+                method_id=self.method_id,
+                path=(self._OPTIONS_POS, self._GENERATION_OPTIONS_POS, position),
+                source=source,
+                data_at_failure=repr(pair)[:200],
+            )
+        return QuizOptionPair(
+            quantity=self._option_code(pair, self._OPTION_QUANTITY_POS),
+            difficulty=self._option_code(pair, self._OPTION_DIFFICULTY_POS),
+        )
+
+    @staticmethod
+    def _option_code(pair: list[Any], position: int) -> int | None:
+        """Read one option code, or ``None`` when the leaf is absent/unusable.
+
+        ``None`` covers two cases the caller cannot tell apart, which is a
+        deliberate narrowing of the strictness applied to the *containers*
+        above: the field was genuinely unset (proto3 drops default-valued
+        fields, so an ``[0, 0]`` pair arrives as ``[]``), or the leaf is not an
+        integer code. The container shapes are the ones that signal a reshaped
+        payload; a single odd scalar is not worth raising from a read-back
+        accessor, so it degrades and the pair simply reports the field as unset.
+
+        ``bool`` is excluded explicitly: ``isinstance(True, int)`` is ``True``
+        in Python, and this row genuinely carries a bool two slots further
+        along, so an unguarded read would happily decode ``difficulty=True``.
+        """
+        if len(pair) <= position:
+            return None
+        value = pair[position]
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
 
     @property
     def created_at_raw(self) -> int | float | None:
@@ -345,6 +590,37 @@ class ArtifactRow:
         if raw is None:
             return None
         return _datetime_from_timestamp(raw)
+
+    @staticmethod
+    def _duration_seconds(value: Any) -> float | None:
+        """Decode a protobuf ``Duration``/``Timestamp`` seconds-nanos pair."""
+        if not isinstance(value, list) or not value:
+            return None
+        seconds = value[ArtifactRow._DURATION_SECONDS_POS]
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            return None
+        nanos: int | float = 0
+        if len(value) > ArtifactRow._DURATION_NANOS_POS:
+            raw_nanos = value[ArtifactRow._DURATION_NANOS_POS]
+            if isinstance(raw_nanos, (int, float)) and not isinstance(raw_nanos, bool):
+                nanos = raw_nanos
+        return float(seconds) + float(nanos) / 1_000_000_000
+
+    @property
+    def last_modified_at(self) -> datetime | None:
+        """Last-modified timestamp at ``data[10]``, or ``None`` when absent."""
+        if len(self._raw) <= self._LAST_MODIFIED_TIMESTAMP_POS:
+            return None
+        seconds = self._duration_seconds(self._raw[self._LAST_MODIFIED_TIMESTAMP_POS])
+        return _datetime_from_timestamp(seconds) if seconds is not None else None
+
+    @property
+    def etag(self) -> str | None:
+        """Artifact etag at ``data[21]``, when the listing includes it."""
+        if len(self._raw) <= self._ETAG_POS:
+            return None
+        value = self._raw[self._ETAG_POS]
+        return value if isinstance(value, str) else None
 
     # ---- Downloadable / content payload accessors ----------------------------
 
@@ -401,6 +677,69 @@ class ArtifactRow:
                 return item[self._MEDIA_URL_POS]
         return fallback_url
 
+    def _media_entries(self, media_list: Any) -> tuple[ArtifactMedia, ...]:
+        """Decode every URL-bearing entry in one media-list message."""
+        if not isinstance(media_list, list):
+            return ()
+        entries: list[ArtifactMedia] = []
+        for item in media_list:
+            if not isinstance(item, list) or not item:
+                continue
+            url = item[self._MEDIA_URL_POS]
+            if not self._is_valid_artifact_url(url):
+                continue
+            type_code: int | None = None
+            if len(item) > self._MEDIA_KIND_POS:
+                raw_type = item[self._MEDIA_KIND_POS]
+                if isinstance(raw_type, int) and not isinstance(raw_type, bool):
+                    type_code = raw_type
+            mime_type = None
+            if len(item) > self._MEDIA_MIME_POS and isinstance(item[self._MEDIA_MIME_POS], str):
+                mime_type = item[self._MEDIA_MIME_POS]
+            entries.append(
+                ArtifactMedia(
+                    url=url,
+                    kind=(
+                        self._MEDIA_TYPE_MAP.get(type_code, ArtifactMediaType.UNKNOWN)
+                        if type_code is not None
+                        else ArtifactMediaType.UNKNOWN
+                    ),
+                    type_code=type_code,
+                    mime_type=mime_type,
+                )
+            )
+        return tuple(entries)
+
+    @property
+    def media_urls(self) -> tuple[ArtifactMedia, ...]:
+        """All streaming/download URLs for an audio or video artifact."""
+        if self.type_code == ArtifactTypeCode.AUDIO.value:
+            block = self._list_at_top_level(self._AUDIO_METADATA_POS)
+            if block is None or len(block) <= self._AUDIO_MEDIA_LIST_POS:
+                return ()
+            return self._media_entries(block[self._AUDIO_MEDIA_LIST_POS])
+        if self.type_code == ArtifactTypeCode.VIDEO.value:
+            block = self._list_at_top_level(self._VIDEO_METADATA_POS)
+            if block is None or len(block) <= self._VIDEO_MEDIA_LIST_POS:
+                return ()
+            return self._media_entries(block[self._VIDEO_MEDIA_LIST_POS])
+        return ()
+
+    @property
+    def duration_seconds(self) -> float | None:
+        """Audio/video duration, including the nanosecond fraction."""
+        if self.type_code == ArtifactTypeCode.AUDIO.value:
+            block = self._list_at_top_level(self._AUDIO_METADATA_POS)
+            position = self._AUDIO_DURATION_POS
+        elif self.type_code == ArtifactTypeCode.VIDEO.value:
+            block = self._list_at_top_level(self._VIDEO_METADATA_POS)
+            position = self._VIDEO_DURATION_POS
+        else:
+            return None
+        if block is None or len(block) <= position:
+            return None
+        return self._duration_seconds(block[position])
+
     @property
     def video_url(self) -> str | None:
         """Video Overview media URL, preferring the primary ``video/mp4`` entry."""
@@ -433,31 +772,95 @@ class ArtifactRow:
     @property
     def infographic_url(self) -> str | None:
         """Infographic image URL from the first URL-bearing content block."""
-        for item in self._raw:
-            if not isinstance(item, list) or len(item) <= self._INFOGRAPHIC_CONTENT_POS:
+        for item in self.infographics:
+            if item.image_url is not None:
+                return item.image_url
+        # Preserve the permissive private-extractor behavior for historical
+        # minimal rows that placed the infographic content block elsewhere.
+        for block in self._raw:
+            if not isinstance(block, list) or len(block) <= self._INFOGRAPHIC_CONTENT_POS:
                 continue
-            content = item[self._INFOGRAPHIC_CONTENT_POS]
+            content = block[self._INFOGRAPHIC_CONTENT_POS]
             if not isinstance(content, list) or not content:
                 continue
-            first_content = safe_index(
-                content,
-                self._INFOGRAPHIC_FIRST_CONTENT_POS,
-                method_id=self.method_id,
-                source="ArtifactRow.infographic_url",
-            )
-            if (
-                not isinstance(first_content, list)
-                or len(first_content) <= self._INFOGRAPHIC_IMAGE_DATA_POS
-            ):
+            first = content[self._INFOGRAPHIC_FIRST_CONTENT_POS]
+            if not isinstance(first, list) or len(first) <= self._INFOGRAPHIC_IMAGE_DATA_POS:
                 continue
-            img_data = first_content[self._INFOGRAPHIC_IMAGE_DATA_POS]
-            if (
-                isinstance(img_data, list)
-                and img_data
-                and self._is_valid_artifact_url(img_data[self._MEDIA_URL_POS])
-            ):
-                return img_data[self._MEDIA_URL_POS]
+            image = first[self._INFOGRAPHIC_IMAGE_DATA_POS]
+            if isinstance(image, list) and image and self._is_valid_artifact_url(image[0]):
+                return image[0]
         return None
+
+    @classmethod
+    def _image_fields(cls, value: Any) -> tuple[str | None, int | None, int | None]:
+        if not isinstance(value, list):
+            return None, None, None
+        url = value[cls._IMAGE_URL_POS] if value else None
+        width = value[cls._IMAGE_WIDTH_POS] if len(value) > cls._IMAGE_WIDTH_POS else None
+        height = value[cls._IMAGE_HEIGHT_POS] if len(value) > cls._IMAGE_HEIGHT_POS else None
+        return (
+            url if cls._is_valid_artifact_url(url) else None,
+            width if isinstance(width, int) and not isinstance(width, bool) else None,
+            height if isinstance(height, int) and not isinstance(height, bool) else None,
+        )
+
+    @property
+    def infographics(self) -> tuple[ArtifactInfographic, ...]:
+        """Rendered infographic images plus their alt and full text."""
+        block = self._list_at_top_level(self._INFOGRAPHIC_METADATA_POS)
+        if block is None or len(block) <= self._INFOGRAPHIC_ITEMS_POS:
+            return ()
+        items = block[self._INFOGRAPHIC_ITEMS_POS]
+        if not isinstance(items, list):
+            return ()
+        result: list[ArtifactInfographic] = []
+        for item in items:
+            if not isinstance(item, list):
+                continue
+            title = item[self._INFOGRAPHIC_TITLE_POS] if item else None
+            image = item[self._INFOGRAPHIC_IMAGE_POS] if len(item) > 1 else None
+            image_url, width, height = self._image_fields(image)
+            alt_text = item[self._INFOGRAPHIC_ALT_TEXT_POS] if len(item) > 2 else None
+            text = item[self._INFOGRAPHIC_TEXT_POS] if len(item) > 3 else None
+            result.append(
+                ArtifactInfographic(
+                    title=title if isinstance(title, str) else None,
+                    image_url=image_url,
+                    width=width,
+                    height=height,
+                    alt_text=alt_text if isinstance(alt_text, str) else None,
+                    text=text if isinstance(text, str) else None,
+                )
+            )
+        return tuple(result)
+
+    @property
+    def slides(self) -> tuple[ArtifactSlide, ...]:
+        """Rendered slide images plus their alt and full text."""
+        block = self._list_at_top_level(self._SLIDE_DECK_METADATA_POS)
+        if block is None or len(block) <= self._SLIDE_ITEMS_POS:
+            return ()
+        items = block[self._SLIDE_ITEMS_POS]
+        if not isinstance(items, list):
+            return ()
+        result: list[ArtifactSlide] = []
+        for item in items:
+            if not isinstance(item, list):
+                continue
+            image = item[self._SLIDE_IMAGE_POS] if item else None
+            image_url, width, height = self._image_fields(image)
+            alt_text = item[self._SLIDE_ALT_TEXT_POS] if len(item) > 1 else None
+            text = item[self._SLIDE_TEXT_POS] if len(item) > 2 else None
+            result.append(
+                ArtifactSlide(
+                    image_url=image_url,
+                    width=width,
+                    height=height,
+                    alt_text=alt_text if isinstance(alt_text, str) else None,
+                    text=text if isinstance(text, str) else None,
+                )
+            )
+        return tuple(result)
 
     @property
     def slide_deck_pdf_url(self) -> str | None:
@@ -508,6 +911,94 @@ class ArtifactRow:
         return None
 
     @property
+    def report_kind(self) -> str | None:
+        """Backend report-kind label at ``data[7][1][0]``."""
+        block = self._list_at_top_level(self._REPORT_MARKDOWN_POS)
+        if block is None or len(block) <= self._REPORT_GENERATION_OPTIONS_POS:
+            return None
+        options = block[self._REPORT_GENERATION_OPTIONS_POS]
+        if not isinstance(options, list) or len(options) <= self._REPORT_KIND_POS:
+            return None
+        value = options[self._REPORT_KIND_POS]
+        return value if isinstance(value, str) else None
+
+    @staticmethod
+    def _int_tuple(value: Any) -> tuple[int, ...]:
+        if not isinstance(value, list):
+            return ()
+        return tuple(item for item in value if isinstance(item, int) and not isinstance(item, bool))
+
+    @property
+    def user_state(self) -> ArtifactUserState | None:
+        """Per-user playback/study state at ``data[17]``.
+
+        Known audio and flashcard shapes decode to tagged public dataclasses.
+        Any other populated shape is retained as
+        :class:`UnknownArtifactUserState` for forward compatibility.
+        """
+        if len(self._raw) <= self._ARTIFACT_USER_STATE_POS:
+            return None
+        raw = self._raw[self._ARTIFACT_USER_STATE_POS]
+        if raw is None:
+            return None
+        if not isinstance(raw, list):
+            return UnknownArtifactUserState(raw=raw)
+
+        if self.type_code == ArtifactTypeCode.AUDIO.value and len(raw) > self._AUDIO_USER_STATE_POS:
+            audio_state = raw[self._AUDIO_USER_STATE_POS]
+            if isinstance(audio_state, list) and len(audio_state) > self._PLAYBACK_POSITION_POS:
+                position = self._duration_seconds(audio_state[self._PLAYBACK_POSITION_POS])
+                if position is not None:
+                    return AudioArtifactUserState(playback_position_seconds=position)
+
+        if (
+            self.type_code == ArtifactTypeCode.QUIZ.value
+            and self.variant == FLASHCARDS_VARIANT
+            and len(raw) > self._APP_USER_STATE_POS
+        ):
+            app_state = raw[self._APP_USER_STATE_POS]
+            if isinstance(app_state, list) and len(app_state) > self._APP_STATE_POS:
+                state = app_state[self._APP_STATE_POS]
+                if isinstance(state, dict):
+                    acquisitions = state.get("cardAcquisitionsMapping")
+                    known_keys = {
+                        "cardAcquisitionsMapping",
+                        "currentCardIndex",
+                        "hiddenCardIndices",
+                        "lastShownOrder",
+                        "currentView",
+                    }
+                    if known_keys.intersection(state):
+                        normalized_acquisitions = (
+                            {
+                                str(key): value
+                                for key, value in acquisitions.items()
+                                if isinstance(value, str)
+                            }
+                            if isinstance(acquisitions, dict)
+                            else {}
+                        )
+                        current_index = state.get("currentCardIndex")
+                        return FlashcardArtifactUserState(
+                            card_acquisitions=normalized_acquisitions,
+                            current_card_index=(
+                                current_index
+                                if isinstance(current_index, int)
+                                and not isinstance(current_index, bool)
+                                else None
+                            ),
+                            hidden_card_indices=self._int_tuple(state.get("hiddenCardIndices")),
+                            last_shown_order=self._int_tuple(state.get("lastShownOrder")),
+                            current_view=(
+                                state.get("currentView")
+                                if isinstance(state.get("currentView"), str)
+                                else None
+                            ),
+                        )
+
+        return UnknownArtifactUserState(raw=raw)
+
+    @property
     def data_table_raw_payload(self) -> Any:
         """Raw rich-text payload for a data table artifact."""
         if len(self._raw) <= self._DATA_TABLE_PAYLOAD_POS:
@@ -524,8 +1015,8 @@ class ArtifactRow:
 
         Returns ``None`` when:
 
-        * the type has no known prompt location (e.g. note-backed mind maps,
-          synthetic type 5, or an unrecognised type code), or
+        * the type has no known prompt location (e.g. adapted note-backed mind
+          maps using type 5, or an unrecognised type code), or
         * the content block is absent (a short or minimal row), or
         * the prompt leaf is present but not a string.
 
@@ -548,28 +1039,6 @@ class ArtifactRow:
             source="ArtifactRow.generation_prompt",
         )
         return value if isinstance(value, str) else None
-
-    @property
-    def failed_error_text(self) -> str | None:
-        """Human-readable error text from a failed artifact row, when present."""
-        if len(self._raw) > self._ERROR_TEXT_POS:
-            direct = self._raw[self._ERROR_TEXT_POS]
-            if isinstance(direct, str) and direct.strip():
-                return direct.strip()
-
-        if len(self._raw) <= self._ERROR_PAYLOAD_POS:
-            return None
-        nested = self._raw[self._ERROR_PAYLOAD_POS]
-        if not isinstance(nested, list):
-            return None
-        for item in nested:
-            if isinstance(item, str) and item.strip():
-                return item.strip()
-            if isinstance(item, list):
-                for sub_item in item:
-                    if isinstance(sub_item, str) and sub_item.strip():
-                        return sub_item.strip()
-        return None
 
     def artifact_url(
         self,

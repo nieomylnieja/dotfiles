@@ -22,9 +22,11 @@ lives in ``tests/unit/test_scripts_auth_cookie_domains.py`` (issue #2019).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
+import warnings
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -50,6 +52,10 @@ partition_errors = check_rpc_health.partition_errors
 print_summary = check_rpc_health.print_summary
 setup_temp_resources = check_rpc_health.setup_temp_resources
 make_rpc_request = check_rpc_health.make_rpc_request
+
+
+class _Abort(BaseException):
+    pass
 
 
 def _result(
@@ -745,15 +751,66 @@ def test_main_exits_two_when_auth_missing(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 async def _load_auth_raising(monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
-    """Run ``load_auth`` with ``AuthTokens.from_storage`` raising ``error``."""
+    """Run ``load_auth`` with the private storage owner raising ``error``."""
+    from notebooklm._auth import tokens as tokens_module
 
-    class _RaisingAuthTokens:
-        @staticmethod
-        async def from_storage(path: Path | None) -> Any:
-            raise error
+    async def load(_self: object, **_kwargs: Any) -> Any:
+        raise error
 
-    monkeypatch.setattr(check_rpc_health, "AuthTokens", _RaisingAuthTokens)
+    monkeypatch.setattr(tokens_module.StoredAuthLoader, "load", load)
     await check_rpc_health.load_auth(None)
+
+
+@pytest.mark.asyncio
+async def test_load_auth_uses_private_owner_with_exact_arguments_and_no_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from notebooklm._auth import tokens as tokens_module
+
+    auth = object()
+    captured: dict[str, Any] = {}
+
+    class Loaded:
+        pass
+
+    loaded = Loaded()
+    loaded.auth = auth
+
+    async def load(_self: object, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return loaded
+
+    monkeypatch.setattr(tokens_module.StoredAuthLoader, "load", load)
+    path = Path("storage.json")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        result = await check_rpc_health.load_auth(path)
+
+    assert result is auth
+    assert captured == {
+        "path": path,
+        "profile": None,
+        "policy": check_rpc_health.LoadPolicy(),
+        "auth_type": check_rpc_health.AuthTokens,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("refresh failed"),
+        OSError("permission denied"),
+        asyncio.CancelledError(),
+        _Abort("abort"),
+    ],
+)
+async def test_load_auth_preserves_unmapped_error_identity(
+    monkeypatch: pytest.MonkeyPatch, error: BaseException
+) -> None:
+    with pytest.raises(type(error)) as excinfo:
+        await _load_auth_raising(monkeypatch, error)
+    assert excinfo.value is error
 
 
 async def test_load_auth_exits_two_and_names_the_source_on_value_error(

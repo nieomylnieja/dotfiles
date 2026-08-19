@@ -7,16 +7,16 @@ human-friendly profile name (the one shown in the Chrome profile picker)
 lives in ``<user-data-dir>/Local State`` under
 ``profile.info_cache.<profile-dir>.name``.
 
-``rookiepy.chrome()`` (and siblings) read the ``Default`` profile only —
-hard-coded inside rookiepy. Users with multiple Chrome user-profiles
+``rookie_cookies.chrome()`` (and siblings) read the ``Default`` profile only —
+hard-coded inside rookie-cookies. Users with multiple Chrome user-profiles
 signed in to different Google accounts see ``--browser-cookies chrome``
 silently skip every non-Default account (issue #571).
 
 This module:
 
 1. Discovers every populated user-data profile across the chromium family.
-2. Reads cookies from each via ``rookiepy.any_browser(db_path, domains=…)``,
-   which (unlike ``rookiepy.chromium_based``) successfully decrypts non-Default
+2. Reads cookies from each via ``rookie_cookies.any_browser(db_path, domains=…)``,
+   which (unlike ``rookie_cookies.chromium_based``) successfully decrypts non-Default
    Chrome cookies on macOS — empirically verified, the
    ``missing osx_key_service`` blocker noted in #511 only affects
    ``chromium_based`` and not ``any_browser``.
@@ -315,26 +315,26 @@ def read_chromium_profile_cookies(
 ) -> list[dict[str, Any]]:
     """Read and decrypt cookies from a single Chromium user-data profile.
 
-    Uses ``rookiepy.any_browser(db_path, domains=…)``, which auto-detects the
+    Uses ``rookie_cookies.any_browser(db_path, domains=…)``, which auto-detects the
     encryption scheme. On macOS it reads the per-browser Safe Storage key from
     Keychain transparently — verified working for non-Default Chrome profiles
-    against the real ``rookiepy.chromium_based`` blocker described in #511.
+    against the real ``rookie_cookies.chromium_based`` blocker described in #511.
 
     Args:
         profile: A profile from :func:`discover_chromium_profiles`.
-        domains: Domain allowlist to forward to rookiepy.
+        domains: Domain allowlist to forward to rookie-cookies.
 
     Returns:
-        Raw cookie dicts (rookiepy's native shape).
+        Raw cookie dicts (rookie-cookies' native shape).
 
     Raises:
-        ImportError: When the optional ``rookiepy`` dependency isn't
+        ImportError: When the optional ``rookie-cookies`` dependency isn't
             installed. The CLI fan-out caller converts this to a friendly
             "pip install 'notebooklm-py[cookies]'" message.
-        OSError, RuntimeError: Propagated from rookiepy on read or decrypt
+        OSError, RuntimeError: Propagated from rookie-cookies on read or decrypt
             failure (locked DB, corrupt Keychain item, etc.). Caller decides
             whether to skip-and-warn or propagate.
     """
-    import rookiepy  # imported lazily; rookiepy is an optional extra
+    import rookie_cookies  # imported lazily; rookie-cookies is an optional extra
 
-    return rookiepy.any_browser(str(profile.cookies_db), domains=domains)
+    return rookie_cookies.any_browser(str(profile.cookies_db), domains=domains)

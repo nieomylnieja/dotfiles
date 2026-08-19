@@ -35,7 +35,7 @@ from .._app.source_wait import (
     execute_source_wait,
 )
 from ..exceptions import ValidationError
-from ..types import Source
+from ..types import SOURCE_STATUS_LABELS, Source
 
 # Render/validation helpers live in ``_source_render``; re-exported here so the
 # historical ``source_cmd.<helper>`` import/patch surface keeps resolving them
@@ -148,9 +148,18 @@ def source():
     default=None,
     help="Only list sources in this label (label id, partial prefix, or exact name).",
 )
+@click.option(
+    "--status",
+    "status_filter",
+    type=click.Choice(SOURCE_STATUS_LABELS),
+    default=None,
+    help="Only list sources with this status. Use 'preparing' to find rows a failed add left behind.",
+)
 @list_options
 @with_client
-def source_list(ctx, notebook_id, json_output, label_filter, limit, no_truncate, client_auth):
+def source_list(
+    ctx, notebook_id, json_output, label_filter, status_filter, limit, no_truncate, client_auth
+):
     """List all sources in a notebook.
 
     \b
@@ -158,6 +167,19 @@ def source_list(ctx, notebook_id, json_output, label_filter, limit, no_truncate,
       --limit N         Show at most N sources (default: unlimited).
       --no-truncate     Do not truncate the Title column in the table view.
       --label <id|name> Restrict the listing to a label's sources (read-only).
+      --status <state>  Restrict to one status: ready, processing, error,
+                        preparing, or unknown.
+
+    \b
+    Finding orphaned sources:
+      A file add that fails after its source row is registered leaves that row
+      in place on purpose — it is the evidence, and it still counts against the
+      notebook's source quota. The row sits at 'preparing', not 'error', so:
+
+        notebooklm source list --status preparing
+
+      is the query that surfaces it. Rows genuinely mid-upload also appear, so
+      re-run it before deleting anything.
     """
     nb_id = require_notebook(notebook_id)
 
@@ -171,6 +193,7 @@ def source_list(ctx, notebook_id, json_output, label_filter, limit, no_truncate,
                 no_truncate=no_truncate,
                 source_type_display=get_source_type_display,
                 label_filter=label_filter,
+                status_filter=status_filter,
             )
             try:
                 render = await execute_source_list(client, plan)
@@ -524,9 +547,11 @@ def source_add_drive(ctx, file_id, title, notebook_id, mime_type, json_output, c
 @json_option
 @with_client
 def source_add_drive_file(ctx, document_id, notebook_id, title, wait, json_output, client_auth):
-    """Add an upload-only Google Drive file (epub/docx/txt/md/rtf/odt/csv/tsv/pdf).
+    """Add an upload-only Google Drive file (epub/docx/pptx/txt/md/csv/pdf/...).
 
     Downloads the file from Drive (server-side, using your session) and uploads it.
+    A rejected type names the full accepted set in its error (that list is derived
+    from the upload-support declaration, so this summary can't be the stale one).
     A Drive PDF can also go by reference via `source add-drive` (which takes native
     Docs/Slides/Sheets + PDF). DOCUMENT_ID is a raw file id or share URL.
     """

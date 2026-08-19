@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
-from notebooklm._types.research import ResearchStart
+from notebooklm._types.research import (
+    ResearchSource,
+    ResearchStart,
+    ResearchStatus,
+    ResearchTask,
+)
+from notebooklm.types import DiscoveryMode
 
 from .fakes import FakeClient
 
@@ -271,3 +278,87 @@ def test_unauthorized_is_401(raw_client: TestClient) -> None:
         "/v1/notebooks/nb-1/research", json={"query": "t"}, headers={"Host": "127.0.0.1"}
     )
     assert resp.status_code == 401
+
+
+def test_status_route_reports_termination_reason(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    """#1964: the REST status route used to return a bare ``failed`` while the
+    import route below it already explained itself — the two disagreed about
+    what the server knew."""
+    resp = authed_client.post("/v1/notebooks/nb-1/research", json={"query": "q", "source": "drive"})
+    poll_id = resp.json()["poll_id"]
+    # Live-captured shape of a Drive search that matched nothing.
+    fake_client.research_tasks[("nb-1", poll_id)] = ResearchTask(
+        task_id=poll_id,
+        status=ResearchStatus.FAILED,
+        query="Example Document.md",
+        status_code=3,
+        source_type=2,
+    )
+
+    body = authed_client.get(f"/v1/notebooks/nb-1/research/{poll_id}").json()
+
+    assert body["status"] == "failed"
+    assert body["status_code"] == 3
+    assert body["termination_reason"] == "no_results"
+    assert body["reason_message"] == (
+        "The search of Google Drive found no matches for 'Example Document.md'."
+    )
+    assert "document id" in body["hint"]
+
+
+def test_status_route_omits_explanation_on_success(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    resp = authed_client.post("/v1/notebooks/nb-1/research", json={"query": "q"})
+    poll_id = resp.json()["poll_id"]
+    fake_client.research_tasks[("nb-1", poll_id)] = ResearchTask(
+        task_id=poll_id, status=ResearchStatus.COMPLETED, query="q", status_code=2, source_type=1
+    )
+
+    body = authed_client.get(f"/v1/notebooks/nb-1/research/{poll_id}").json()
+
+    assert body["termination_reason"] == "completed"
+    assert body["reason_message"] is None
+    assert body["hint"] is None
+
+
+# --- run metadata on the status payload (#2122) ------------------------------
+
+
+def test_status_reports_run_metadata(authed_client: TestClient, fake_client: FakeClient) -> None:
+    resp = authed_client.post("/v1/notebooks/nb-1/research", json={"query": "topic"})
+    poll_id = resp.json()["poll_id"]
+    fake_client.research_tasks[("nb-1", poll_id)] = ResearchTask(
+        task_id=poll_id,
+        status=ResearchStatus.COMPLETED,
+        query="topic",
+        sources=(ResearchSource(url="https://a.example", title="A", hint="why this one"),),
+        discovery_mode=DiscoveryMode.DEEP_RESEARCH,
+        created_at=datetime(2026, 8, 13, 11, 12, 58, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 8, 13, 11, 13, 5, tzinfo=timezone.utc),
+    )
+
+    body = authed_client.get(f"/v1/notebooks/nb-1/research/{poll_id}").json()
+
+    assert body["discovery_mode"] == "deep_research"
+    assert body["created_at"] == "2026-08-13T11:12:58+00:00"
+    assert body["updated_at"] == "2026-08-13T11:13:05+00:00"
+    assert body["duration_seconds"] == 7.0
+    assert body["sources"][0]["hint"] == "why this one"
+
+
+def test_status_run_metadata_is_null_when_absent(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    resp = authed_client.post("/v1/notebooks/nb-1/research", json={"query": "topic"})
+    poll_id = resp.json()["poll_id"]
+    fake_client.set_research_completed("nb-1", poll_id)
+
+    body = authed_client.get(f"/v1/notebooks/nb-1/research/{poll_id}").json()
+
+    assert body["discovery_mode"] is None
+    assert body["created_at"] is None
+    assert body["updated_at"] is None
+    assert body["duration_seconds"] is None

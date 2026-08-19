@@ -1,10 +1,10 @@
 {
-  "schema_version": 1,
+  "allowed_breaks": [],
   "extra_public_names": {
     "notebooklm": [
       "configure_logging",
       "DEFAULT_STORAGE_PATH"
     ]
   },
-  "allowed_breaks": []
+  "schema_version": 1
 }

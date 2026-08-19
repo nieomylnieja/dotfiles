@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from ..types import Source
+from ..types import Source, source_status_to_str
 
 if TYPE_CHECKING:
     from ..client import NotebookLMClient
@@ -40,8 +40,9 @@ async def fetch_sources(
     label_filter: str | None,
     label_resolver: LabelResolver,
     json_output: bool = False,
+    status_filter: str | None = None,
 ) -> list[Source]:
-    """Fetch the notebook's sources, optionally restricted to one label's members.
+    """Fetch the notebook's sources, optionally restricted by label and/or status.
 
     When ``label_filter`` is set, the injected ``label_resolver`` resolves the
     ``<id|name>`` token and the group's members are fetched via
@@ -50,6 +51,19 @@ async def fetch_sources(
     filtered set with no post-filter desync. Otherwise the full notebook source
     list is returned.
 
+    ``status_filter`` is a ``source_status_to_str`` label (``ready``,
+    ``processing``, ``error``, ``preparing``, ``unknown``) and is applied here,
+    inside the fetch, for the same count/rows reason. It composes with
+    ``label_filter``: both narrow the same set.
+
+    ``preparing`` is the one worth naming (#2138). A file add that fails after
+    its source row is registered deliberately leaves that row in place rather
+    than deleting it — the row is the evidence — but it sits at ``PREPARING``,
+    not ``ERROR``, so a caller looking for the wreckage under ``error`` finds
+    nothing and the row stays invisible while still counting against the
+    notebook's source quota. Filtering on ``preparing`` is the reconciliation
+    query: "what did my failed adds leave behind?"
+
     ``json_output`` is forwarded to the resolver only (it tunes the resolver's
     own diagnostic routing); this function performs no rendering.
     """
@@ -57,8 +71,14 @@ async def fetch_sources(
         label_id = await label_resolver(client, notebook_id, label_filter, json_output=json_output)
         # ``labels.sources()`` returns the group's members (joined from a single
         # ``sources.list()``), so the filtered set is fetched once.
-        return await client.labels.sources(notebook_id, label_id)
-    return await client.sources.list(notebook_id)
+        sources = await client.labels.sources(notebook_id, label_id)
+    else:
+        sources = await client.sources.list(notebook_id)
+    if status_filter is not None:
+        # Compare on the same rendered label the rows themselves show, so what a
+        # caller reads in the Status column is exactly what they can filter on.
+        sources = [src for src in sources if source_status_to_str(src.status) == status_filter]
+    return sources
 
 
 __all__ = ["LabelResolver", "fetch_sources"]

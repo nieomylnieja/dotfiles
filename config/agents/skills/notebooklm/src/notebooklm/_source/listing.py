@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import builtins
 import logging
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable, Collection
+from typing import Any, TypeVar
 
 from .._row_adapters.sources import SourceRow
 from .._runtime.contracts import RpcCaller
 from ..rpc import RPCError, RPCMethod, safe_index
-from ..types import Source
+from ..rpc.types import SourceStatus
+from ..types import Source, SourceType
 from .upload_payloads import build_template_block
 
 # Keep source-list warnings on the historical logger so existing log filters
@@ -19,6 +20,26 @@ logger = logging.getLogger("notebooklm").getChild("_sources")
 
 
 SourceListHook = Callable[[str], Awaitable[builtins.list[Source]]]
+_FilterValue = TypeVar("_FilterValue")
+
+
+def _snapshot_enum_filter(
+    values: Collection[_FilterValue] | None,
+    *,
+    enum_type: type[_FilterValue],
+    parameter: str,
+) -> frozenset[_FilterValue] | None:
+    """Validate and snapshot one public source-list filter before I/O."""
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes)) or not isinstance(values, Collection):
+        raise TypeError(f"{parameter} must be a collection of {enum_type.__name__} values")
+
+    snapshot = tuple(values)
+    for value in snapshot:
+        if not isinstance(value, enum_type):
+            raise TypeError(f"{parameter} must contain only {enum_type.__name__} values")
+    return frozenset(snapshot)
 
 
 class SourceLister:
@@ -27,7 +48,14 @@ class SourceLister:
     def __init__(self, rpc: RpcCaller) -> None:
         self._rpc = rpc
 
-    async def list(self, notebook_id: str, *, strict: bool = False) -> builtins.list[Source]:
+    async def list(
+        self,
+        notebook_id: str,
+        *,
+        strict: bool = False,
+        statuses: Collection[SourceStatus] | None = None,
+        types: Collection[SourceType] | None = None,
+    ) -> builtins.list[Source]:
         """List all sources in a notebook.
 
         A malformed or error-shaped ``GET_NOTEBOOK`` response raises
@@ -35,7 +63,22 @@ class SourceLister:
         silently reported as "0 sources" — see issue #1159. The legacy
         ``NOTEBOOKLM_STRICT_DECODE=0`` opt-out into warn-and-return-``[]``
         was retired in v0.7.0; strict decoding is now the only mode.
+        ``strict=True`` additionally rejects malformed source rows and
+        conflicting duplicate IDs instead of skipping/deduplicating them.
+        Filters are applied after normalization: members are ORed within one
+        filter and the status/type filters are ANDed together.
         """
+        status_filter = _snapshot_enum_filter(
+            statuses,
+            enum_type=SourceStatus,
+            parameter="statuses",
+        )
+        type_filter = _snapshot_enum_filter(
+            types,
+            enum_type=SourceType,
+            parameter="types",
+        )
+
         # GET_NOTEBOOK read-path tail migrated to the nested template block
         # (#1549; live-verified forward-compatible). Mirrors
         # ``_notebooks.build_get_notebook_params`` — inlined here because
@@ -58,18 +101,35 @@ class SourceLister:
         # echo an existing id — which would otherwise over-count both
         # ``source_list`` and ``metadata.sources``. A collision is a benign
         # backend artifact, so it logs at DEBUG rather than WARNING.
-        seen_ids: set[str] = set()
+        seen_sources: dict[str, Source] = {}
         sources: builtins.list[Source] = []
-        for src in sources_list:
-            source = self._parse_source(src)
+        for index, src in enumerate(sources_list):
+            source = self._parse_source(
+                src,
+                notebook_id=notebook_id,
+                index=index,
+                strict=strict,
+            )
             if source is None:
                 continue
-            if source.id in seen_ids:
+            previous = seen_sources.get(source.id)
+            if previous is not None:
+                if strict and source != previous:
+                    raise RPCError(
+                        f"Could not list sources for {notebook_id}: "
+                        f"conflicting duplicate source row at index {index}"
+                    )
                 logger.debug("SourcesAPI.list: Skipping duplicate source id %s", source.id)
                 continue
-            seen_ids.add(source.id)
+            seen_sources[source.id] = source
             sources.append(source)
-        return sources
+
+        return [
+            source
+            for source in sources
+            if (status_filter is None or source.status in status_filter)
+            and (type_filter is None or source.kind in type_filter)
+        ]
 
     async def get(
         self,
@@ -171,8 +231,19 @@ class SourceLister:
         raise RPCError(f"Could not list sources for {notebook_id}: {error_detail}")
 
     @staticmethod
-    def _parse_source(src: Any) -> Source | None:
+    def _parse_source(
+        src: Any,
+        *,
+        notebook_id: str,
+        index: int,
+        strict: bool,
+    ) -> Source | None:
         if not isinstance(src, builtins.list) or len(src) == 0:
+            if strict:
+                raise RPCError(
+                    f"Could not list sources for {notebook_id}: "
+                    f"malformed source row at index {index}"
+                )
             return None
 
         # GET_NOTEBOOK source-list entries arrive in the "entry" layout
@@ -187,7 +258,18 @@ class SourceLister:
                 "SourcesAPI.list: Skipping source with unexpected id shape: %s",
                 repr(src)[:500],
             )
+            if strict:
+                raise RPCError(
+                    f"Could not list sources for {notebook_id}: "
+                    f"source row at index {index} has no usable id"
+                )
             return None
+
+        if strict and (shape_error := row.listing_shape_error()) is not None:
+            raise RPCError(
+                f"Could not list sources for {notebook_id}: "
+                f"incomplete source row at index {index} ({shape_error})"
+            )
 
         # Funnel through the single ``Source`` construction site shared
         # with ``Source.from_api_response`` so the list/get/poll path and

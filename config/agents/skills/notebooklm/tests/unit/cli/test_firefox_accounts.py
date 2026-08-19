@@ -40,16 +40,16 @@ class TestReadFirefoxContainerCookiesErrors:
         assert isinstance(result, BrowserCookieOutcome)
         assert "no cookies.sqlite" in result.message
 
-    def test_oserror_routes_through_rookiepy_handler(self, tmp_path):
+    def test_oserror_routes_through_rookie_cookies_handler(self, tmp_path):
         mod = _fake_containers_module(tmp_path, extract_side_effect=OSError("database is locked"))
         result = firefox_accounts._read_firefox_container_cookies(
             make_recording_io(), "none", verbose=False, firefox_containers=mod
         )
         assert isinstance(result, BrowserCookieOutcome)
-        # The locked-DB message from _handle_rookiepy_error is surfaced.
+        # The locked-DB message from _handle_rookie_cookies_error is surfaced.
         assert "database is locked" in result.message
 
-    def test_runtime_error_routes_through_rookiepy_handler(self, tmp_path):
+    def test_runtime_error_routes_through_rookie_cookies_handler(self, tmp_path):
         mod = _fake_containers_module(
             tmp_path, extract_side_effect=RuntimeError("totally unexpected")
         )

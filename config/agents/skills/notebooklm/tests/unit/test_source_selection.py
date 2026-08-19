@@ -324,7 +324,7 @@ class TestArtifactsSourceSelection:
 
         # Mock successful generation response
         mock_core.rpc_executor.rpc_call.return_value = [
-            ["artifact_123", "Audio", 1, None, 1]  # status 1 = in_progress
+            ["artifact_123", "Audio", 1, None, 1]  # status 1 = INITIALIZED -> pending
         ]
 
         result = await api.generate_audio(
@@ -333,7 +333,7 @@ class TestArtifactsSourceSelection:
         )
 
         assert result.task_id == "artifact_123"
-        assert result.status == "in_progress"
+        assert result.status == "pending"
 
         # Verify RPC was called with correct source encoding
         mock_core.rpc_executor.rpc_call.assert_called_once()
@@ -790,13 +790,20 @@ class TestArtifactsSourceSelection:
         flashcard_options = inner_params[9][1][6]
 
         assert source_ids_triple == [[["src_flash"]]]
-        assert flashcard_options == [QuizDifficulty.MEDIUM.value, QuizQuantity.STANDARD.value]
+        assert flashcard_options == [QuizQuantity.STANDARD.value, QuizDifficulty.MEDIUM.value]
 
     @pytest.mark.asyncio
     async def test_generate_flashcards_explicit_options_override_defaults(
         self, mock_core, mock_mind_map_service
     ):
-        """Explicit flashcard quantity and difficulty preserve flashcard option order."""
+        """Explicit flashcard quantity and difficulty preserve flashcard option order.
+
+        The fixture is deliberately **asymmetric** (#2116): the previous
+        ``FEWER``/``EASY`` pair encoded to ``[1, 1]``, which stayed green under
+        the transposed ``[difficulty, quantity]`` ordering this test exists to
+        pin. ``FEWER``/``HARD`` -> ``[1, 3]`` fails loudly if the pair is
+        reversed, mirroring the quiz sibling above.
+        """
         api = ArtifactsAPI(
             rpc=mock_core,
             drain=mock_core,
@@ -810,12 +817,13 @@ class TestArtifactsSourceSelection:
             notebook_id="nb_123",
             source_ids=["src_flash"],
             quantity=QuizQuantity.FEWER,
-            difficulty=QuizDifficulty.EASY,
+            difficulty=QuizDifficulty.HARD,
         )
 
         params = mock_core.rpc_executor.rpc_call.call_args.args[1]
         flashcard_options = params[2][9][1][6]
-        assert flashcard_options == [QuizDifficulty.EASY.value, QuizQuantity.FEWER.value]
+        assert flashcard_options == [QuizQuantity.FEWER.value, QuizDifficulty.HARD.value]
+        assert flashcard_options == [1, 3]
 
     @pytest.mark.asyncio
     async def test_generate_infographic_source_encoding(self, mock_core, mock_mind_map_service):

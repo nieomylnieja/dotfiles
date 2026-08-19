@@ -34,22 +34,12 @@ if TYPE_CHECKING:
     from .rpc import RPCMethod
     from .types import ClientMetricsSnapshot, ConnectionLimits, RpcTelemetryEvent
 
-# The construction wiring lives in ``_client_assembly`` (the seam shared
-# with the canonical test factory), but the names below stay runtime
-# imports on purpose:
-#
-# - the feature-API / collaborator types annotate the class-level
-#   attribute block, and keeping them importable at runtime keeps
-#   ``typing.get_type_hints(NotebookLMClient)`` working for downstream
-#   introspection;
-# - this module's attribute surface (``notebooklm.client.SourcesAPI``
-#   etc.) predates the assembly split and is kept byte-compatible so
-#   external tooling/imports against it don't break. The F401-suppressed
-#   names are exactly the previously-importable names the annotations no
-#   longer reference.
+# Keep feature/collaborator types importable for runtime type-hint introspection.
 from ._artifacts import ArtifactsAPI
-from ._auth.account import _probe_authuser, get_account_email_for_storage, write_account_metadata
+from ._auth import tokens as _auth_tokens
+from ._auth.account import _probe_authuser
 from ._auth.account import authuser_query as authuser_query
+from ._auth.account_email import AccountEmailCacheKey, resolve_account_email
 from ._auth.extraction import extract_wiz_field as extract_wiz_field
 from ._auth.session import refresh_auth_session
 from ._chat import ChatAPI
@@ -69,8 +59,8 @@ from ._notes import NotesAPI
 from ._research import ResearchAPI
 from ._rpc_executor import RpcExecutor
 from ._runtime.config import (
+    AUTO_READ_TIMEOUT,
     DEFAULT_CHAT_RESPONSE_MAX_BYTES,
-    DEFAULT_CHAT_TIMEOUT,
     DEFAULT_KEEPALIVE_MIN_INTERVAL,
     DEFAULT_MAX_CONCURRENT_RPCS,
     DEFAULT_MAX_CONCURRENT_UPLOADS,
@@ -174,18 +164,39 @@ class NotebookLMClient:
         on_rpc_event: Callable[[RpcTelemetryEvent], object] | None = None,
         cookie_saver: CookieSaver | None = None,
         cookie_rotator: CookieRotator | None = None,
-        chat_timeout: float | None = DEFAULT_CHAT_TIMEOUT,
+        chat_timeout: float | None = AUTO_READ_TIMEOUT,
         chat_response_max_bytes: int | None = DEFAULT_CHAT_RESPONSE_MAX_BYTES,
+        import_research_timeout: float | None = AUTO_READ_TIMEOUT,
     ):
         """Initialize the NotebookLM client.
 
         Args:
             auth: Authentication tokens from browser login.
             timeout: HTTP request timeout in seconds. Defaults to 30 seconds.
+                It is the *base* read budget for every RPC: the built-in
+                per-RPC windows below only ever lengthen it, never shorten it,
+                so ``timeout=600`` really does buy 600 s everywhere (#2205).
             chat_timeout: Per-read HTTP timeout in seconds for
-                ``client.chat.ask``. Defaults to 180 seconds because shared
-                notebooks can be slow to send the first streamed byte. Pass
-                ``None`` to inherit the normal client timeout for chat.
+                ``client.chat.ask``. Left unset it is ``max(180, timeout)`` —
+                180 s because shared notebooks can be slow to send the first
+                streamed byte, floored at ``timeout`` so a larger configured
+                budget still applies to chat. Pass an explicit value to fix
+                the chat window outright (including *below* ``timeout``, for
+                deliberately fast failure), or ``None`` to inherit ``timeout``.
+            import_research_timeout: Per-attempt read window in seconds for
+                ``client.research.import_sources``' IMPORT_RESEARCH RPC, read
+                exactly like ``chat_timeout``: left unset it is the batch-scaled
+                window (60 s + 3 s per requested source, capped at 240 s)
+                floored at ``timeout``; a value replaces both the scaling and
+                the floor; ``None`` inherits ``timeout`` verbatim. Either way an
+                attempt made by ``import_sources_with_verification`` is
+                additionally clamped to what remains of that call's
+                ``max_elapsed`` budget, and that loop stops rather than sending
+                an attempt too short to observe its own result.
+
+                A non-positive or non-finite ``chat_timeout`` /
+                ``import_research_timeout`` raises rather than silently
+                producing a window that times out instantly.
             chat_response_max_bytes: Maximum buffered response size for
                 ``client.chat.ask``. Defaults to 256 MiB because the
                 streamed chat endpoint can include notebook-state sync
@@ -269,11 +280,11 @@ class NotebookLMClient:
                 another metrics backend without this package depending on one.
             cookie_saver: Optional injectable seam overriding
                 the on-disk cookie writer used on close / refresh / keepalive.
-                ``None`` (default) preserves the current behavior of resolving
-                ``notebooklm._auth.storage.save_cookies_to_storage`` via a
-                late-bound wrapper. Must be sync (``def``, not ``async def``)
-                — it runs inside ``asyncio.to_thread``. Custom callables
-                bypass the late-bind hop entirely.
+                ``None`` (default) uses the canonical typed ``ProfileStore``
+                path. Must be sync (``def``, not ``async def``) — an explicit
+                callback runs inside ``asyncio.to_thread`` through the v0.x
+                compatibility adapter and receives ``jar``, ``path``,
+                ``original_snapshot=...``, and ``return_result=True``.
             cookie_rotator: Optional injectable seam
                 overriding the keepalive-loop cookie rotator. ``None``
                 (default) preserves the current behavior of resolving
@@ -309,16 +320,19 @@ class NotebookLMClient:
             cookie_saver=cookie_saver,
             cookie_rotator=cookie_rotator,
             chat_timeout=chat_timeout,
+            import_research_timeout=import_research_timeout,
             chat_response_max_bytes=chat_response_max_bytes,
         )
 
     #: Per-client memo for the signed-in account email so a *successful* live probe
     #: (used only when neither the in-memory ``AuthTokens`` nor persisted storage
-    #: carries one) runs at most once per process. A failed/undiscoverable probe is
-    #: NOT memoized (stays ``None``), so a genuinely account-less profile re-probes on
-    #: each call — acceptable for the rare ``include_account`` path. Assigned in
-    #: ``_assemble_client`` (factory-shell parity); ``None`` = not yet resolved.
+    #: carries one) runs at most once per account route. A failed/undiscoverable probe
+    #: is NOT memoized, so a genuinely account-less profile re-probes on each call —
+    #: acceptable for the rare ``include_account`` path. The route key invalidates a
+    #: cached email after mid-session profile reload switches or clears the account.
+    #: Assigned in ``_assemble_client`` (factory-shell parity).
     _account_email_cache: str | None
+    _account_email_cache_route: AccountEmailCacheKey | None
 
     @property
     def auth(self) -> AuthTokens:
@@ -563,6 +577,8 @@ class NotebookLMClient:
         allow_null: bool = False,
         *,
         disable_internal_retries: bool = False,
+        read_timeout: float | None = None,
+        raise_on_null_status: bool = False,
     ) -> Any:
         """Make a raw NotebookLM RPC call.
 
@@ -577,6 +593,16 @@ class NotebookLMClient:
         underlying internal-only parameters do so against the executor
         surface directly, not via this public wrapper.
 
+        ``read_timeout`` (default ``None``) overrides the client-wide read
+        timeout for this one call — useful for RPCs known to run long (e.g.
+        bulk imports) without lowering the default for every other call.
+
+        ``raise_on_null_status`` (default ``False``) pairs with
+        ``allow_null=True``: it turns a null result that the server tagged with
+        a non-OK ``google.rpc.Status`` into a raised error instead of a silent
+        ``None``, so the server's own rejection is reported rather than
+        swallowed (#2188).
+
         .. versionchanged:: 0.6.0
             The deprecated keyword arguments previously documented here
             were removed (see :doc:`/deprecations`). The default-shape
@@ -587,6 +613,8 @@ class NotebookLMClient:
             params=params,
             allow_null=allow_null,
             disable_internal_retries=disable_internal_retries,
+            read_timeout=read_timeout,
+            raise_on_null_status=raise_on_null_status,
         )
 
     @property
@@ -609,8 +637,9 @@ class NotebookLMClient:
         max_concurrent_rpcs: int | None = DEFAULT_MAX_CONCURRENT_RPCS,
         upload_timeout: httpx.Timeout | None = None,
         on_rpc_event: Callable[[RpcTelemetryEvent], object] | None = None,
-        chat_timeout: float | None = DEFAULT_CHAT_TIMEOUT,
+        chat_timeout: float | None = AUTO_READ_TIMEOUT,
         chat_response_max_bytes: int | None = DEFAULT_CHAT_RESPONSE_MAX_BYTES,
+        import_research_timeout: float | None = AUTO_READ_TIMEOUT,
         *,
         allow_headless: bool = False,
     ) -> _FromStorageContext:
@@ -662,8 +691,13 @@ class NotebookLMClient:
                 pool so back-pressure surfaces cleanly instead of as
                 opaque ``httpx.PoolTimeout``).
             chat_timeout: Per-read HTTP timeout in seconds for
-                ``client.chat.ask``. Defaults to 180 seconds. Pass ``None``
-                to inherit ``timeout`` for chat.
+                ``client.chat.ask``. Left unset it is ``max(180, timeout)``;
+                pass a value to fix it outright, or ``None`` to inherit
+                ``timeout``. See :class:`NotebookLMClient`.
+            import_research_timeout: Per-attempt read window for
+                IMPORT_RESEARCH. Unset keeps the batch-scaled window floored at
+                ``timeout``; a value replaces both; ``None`` inherits
+                ``timeout``. See :class:`NotebookLMClient`.
             chat_response_max_bytes: Maximum buffered response size for
                 ``client.chat.ask``. Defaults to 256 MiB. Pass ``None`` to
                 inherit the shared RPC response cap. Must be ``>= 1``
@@ -715,6 +749,7 @@ class NotebookLMClient:
             max_concurrent_rpcs=max_concurrent_rpcs,
             chat_timeout=chat_timeout,
             chat_response_max_bytes=chat_response_max_bytes,
+            import_research_timeout=import_research_timeout,
             upload_timeout=upload_timeout,
             on_rpc_event=on_rpc_event,
             allow_headless=allow_headless,
@@ -843,38 +878,18 @@ class NotebookLMClient:
         (calling outside ``async with``) is the only surfaced error, from
         :meth:`Kernel.get_http_client`, and only on the live-fallback path.
         """
-        if self._account_email_cache is not None:
-            return self._account_email_cache or None
-        email = self._auth.account_email
-        if not email and self._auth.storage_path is not None:
-            email = get_account_email_for_storage(self._auth.storage_path)
-        if email:
-            self._account_email_cache = email
-            return email
-        if not live_fallback:
-            return None
-        authuser = self._auth.authuser
-        try:
-            email = await _probe_authuser(self._collaborators.kernel.get_http_client(), authuser)
-        except httpx.HTTPError as e:  # transport blip → undiscoverable, not fatal
-            logger.debug("account-email live probe failed: %s", type(e).__name__)
-            return None
-        if not email:
-            return None
-        self._account_email_cache = email
-        if self._auth.storage_path is not None:
-            # Self-heal so the next call (and next process) is network-free. Blocking
-            # FileLock I/O → off the event loop. Best-effort: a corrupt storage file
-            # raises RuntimeError (not OSError), so catch both.
-            try:
-                await asyncio.to_thread(
-                    write_account_metadata,
-                    self._auth.storage_path,
-                    authuser=authuser,
-                    email=email,
-                )
-            except (OSError, RuntimeError) as e:
-                logger.debug("account-email self-heal write failed: %s", type(e).__name__)
+        email, cached_email, cached_key = await resolve_account_email(
+            auth=self._auth,
+            cached_email=self._account_email_cache,
+            cached_key=self._account_email_cache_route,
+            live_fallback=live_fallback,
+            get_cookies=self._collaborators.kernel.get_cookies,
+            get_http_client=self._collaborators.kernel.get_http_client,
+            probe=_probe_authuser,
+            to_thread=asyncio.to_thread,
+        )
+        self._account_email_cache = cached_email
+        self._account_email_cache_route = cached_key
         return email
 
 
@@ -916,18 +931,9 @@ class _FromStorageContext:
         self._owns_close = False
 
     async def _build(self) -> NotebookLMClient:
-        """Load auth and instantiate the client (no session open).
+        """Load auth and instantiate a cached, not-yet-open client.
 
-        Idempotent on success: subsequent calls return the cached
-        instance so awaiting the wrapper and then entering it as a
-        context manager — or vice versa — never re-runs the auth load.
-
-        Partial failure: if ``AuthTokens.from_storage(...)`` succeeds
-        but the ``NotebookLMClient(...)`` constructor raises, the cache
-        stays unset and a retry re-runs the auth load. That's
-        intentional — the constructor only raises on programmer error
-        (cross-validated kwargs) so the extra I/O on retry is
-        acceptable.
+        Constructor failure leaves the cache empty, so retry reloads auth.
         """
         if self._client is not None:
             return self._client
@@ -936,13 +942,20 @@ class _FromStorageContext:
         path = kwargs["path"]
         profile = kwargs["profile"]
 
-        auth_kwargs = {"allow_headless": True} if kwargs["allow_headless"] else {}
-        auth = await AuthTokens.from_storage(
-            Path(path) if path else None, profile=profile, **auth_kwargs
+        loaded = await _auth_tokens._load_stored_auth(
+            path=Path(path) if path else None,
+            profile=profile,
+            policy=_auth_tokens.LoadPolicy(allow_headless=kwargs["allow_headless"]),
+            auth_type=AuthTokens,
         )
+        match loaded:
+            case _auth_tokens.InlineLoadedAuth(auth=auth):
+                pass
+            case _auth_tokens.FileLoadedAuth(auth=auth):
+                pass
         storage_path = auth.storage_path
 
-        self._client = self._cls(
+        client = self._cls(
             auth,
             timeout=kwargs["timeout"],
             storage_path=storage_path,
@@ -955,10 +968,16 @@ class _FromStorageContext:
             max_concurrent_rpcs=kwargs["max_concurrent_rpcs"],
             chat_timeout=kwargs["chat_timeout"],
             chat_response_max_bytes=kwargs["chat_response_max_bytes"],
+            import_research_timeout=kwargs["import_research_timeout"],
             upload_timeout=kwargs["upload_timeout"],
             on_rpc_event=kwargs["on_rpc_event"],
         )
-        return self._client
+        if isinstance(loaded, _auth_tokens.FileLoadedAuth) and hasattr(client, "_collaborators"):
+            client._collaborators.cookie_persistence.register_open_baseline(
+                loaded.store, loaded.persistence_baseline
+            )
+        self._client = client
+        return client
 
     def __await__(self) -> Generator[Any, None, NotebookLMClient]:
         """Legacy await path — returns a built-but-unentered client.

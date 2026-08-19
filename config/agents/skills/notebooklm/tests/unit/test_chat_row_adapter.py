@@ -16,8 +16,13 @@ adapter:
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
 import pytest
 
+from notebooklm import ConversationTurnKey
 from notebooklm._row_adapters.chat import (
     AnswerRow,
     ChatSettingsRow,
@@ -25,16 +30,28 @@ from notebooklm._row_adapters.chat import (
     CitationRow,
     ConversationTurnRow,
     ErrorPayloadRow,
-    PassageRow,
+    NextStepSuggestionRow,
     SavedChatNoteRow,
+    StreamEnvelopeRow,
     StreamFrameRow,
-    TextLeafRow,
     unwrap_chat_settings,
     unwrap_conversation_turns,
     unwrap_last_conversation_id,
 )
 from notebooklm.exceptions import UnknownRPCMethodError
 from notebooklm.rpc import RPCMethod
+from notebooklm.rpc.decoder import _MAX_STATUS_MESSAGE_CHARS
+
+#: Live ``GenerateFreeFormStreamedResponse`` capture (#2122) — the five chunks
+#: of one real answer stream, decoded from the ``wrb.fr`` frames exactly as the
+#: parser sees them. Used instead of a hand-built envelope so the
+#: ``isFinalResponse`` / ``ConversationTurnKey`` reads below are pinned against
+#: a shape the backend actually sent.
+_CAPTURED_STREAM: list = json.loads(
+    (Path(__file__).parent / "fixtures" / "chat_stream_final_response.json").read_text(
+        encoding="utf-8"
+    )
+)["chunks"]
 
 # ---------------------------------------------------------------------------
 # 1. Position-contract pins (the canaries)
@@ -46,11 +63,31 @@ class TestAnswerRowPositionContract:
         assert (
             AnswerRow._TEXT_POS,
             AnswerRow._CONV_BLOCK_POS,
+            AnswerRow._EMPTY_ANSWER_REASON_POS,
             AnswerRow._TYPE_BLOCK_POS,
             AnswerRow._ANSWER_MARKER_POS,
             AnswerRow._CITATIONS_POS,
             AnswerRow._ANSWER_MARKER_VALUE,
-        ) == (0, 2, 4, -1, 3, 1)
+            AnswerRow._DOC_BODY_POS,
+        ) == (0, 2, 3, 4, 4, 3, 1, 0)
+
+
+class TestStreamEnvelopeRowPositionContract:
+    def test_positions_pinned(self) -> None:
+        assert (
+            StreamEnvelopeRow._IS_FINAL_RESPONSE_POS,
+            StreamEnvelopeRow._NEXT_STEPS_POS,
+            StreamEnvelopeRow._NEXT_STEPS_ROWS_POS,
+        ) == (4, 5, 0)
+
+
+class TestAnswerRowTurnKeyPositionContract:
+    def test_positions_pinned(self) -> None:
+        assert (
+            AnswerRow._TURN_KEY_SESSION_ID_POS,
+            AnswerRow._TURN_KEY_TURN_ID_POS,
+            AnswerRow._TURN_KEY_TURN_CODE_POS,
+        ) == (0, 1, 2)
 
 
 class TestCitationPositionContract:
@@ -60,20 +97,16 @@ class TestCitationPositionContract:
     def test_citation_detail_positions_pinned(self) -> None:
         assert (
             CitationDetail._SCORE_POS,
-            CitationDetail._ANSWER_RANGE_POS,
-            CitationDetail._PASSAGES_POS,
+            CitationDetail._FRAGMENT_RANGE_POS,
+            CitationDetail._FRAGMENT_POS,
             CitationDetail._SOURCE_ID_POS,
-            CitationDetail._ANSWER_RANGE_START_POS,
-            CitationDetail._ANSWER_RANGE_END_POS,
+            CitationDetail._FRAGMENT_RANGE_START_POS,
+            CitationDetail._FRAGMENT_RANGE_END_POS,
         ) == (2, 3, 4, 5, 1, 2)
 
-    def test_passage_row_positions_pinned(self) -> None:
-        assert (
-            PassageRow._PASSAGE_DATA_POS,
-            PassageRow._START_POS,
-            PassageRow._END_POS,
-            PassageRow._TEXT_PAYLOAD_POS,
-        ) == (0, 0, 1, 2)
+    def test_fragment_elements_position_pinned(self) -> None:
+        """The second level of the #2120 descent — the one that was missing."""
+        assert CitationDetail._FRAGMENT_ELEMENTS_POS == 0
 
 
 class TestFramePositionContract:
@@ -86,10 +119,12 @@ class TestFramePositionContract:
         ) == (0, 2, 2, 5)
 
     def test_error_payload_positions_pinned(self) -> None:
-        assert (ErrorPayloadRow._STATUS_POS, ErrorPayloadRow._ENTRIES_POS) == (0, 2)
-
-    def test_text_leaf_positions_pinned(self) -> None:
-        assert TextLeafRow._TEXT_POS == 2
+        # ``google.rpc.Status``: code tag 1, message tag 2, details tag 3.
+        assert (
+            ErrorPayloadRow._STATUS_POS,
+            ErrorPayloadRow._MESSAGE_POS,
+            ErrorPayloadRow._ENTRIES_POS,
+        ) == (0, 1, 2)
 
 
 class TestConversationTurnPositionContract:
@@ -144,6 +179,11 @@ class TestAnswerRow:
     def test_non_answer_marker_is_false(self) -> None:
         assert AnswerRow(_answer_record(marker=0)).is_answer is False
 
+    def test_trailing_type_field_does_not_change_answer_marker(self) -> None:
+        rec = _answer_record()
+        rec[4].append(0)
+        assert AnswerRow(rec).is_answer is True
+
     def test_absent_type_block_means_not_answer_and_no_citations(self) -> None:
         row = AnswerRow(_answer_record(marker=None))
         assert row.is_answer is False
@@ -168,6 +208,29 @@ class TestAnswerRow:
         rec = _answer_record()
         rec[4][3] = None
         assert AnswerRow(rec).citations == []
+
+
+class TestNextStepSuggestionRow:
+    def test_positions_pinned(self) -> None:
+        assert (
+            NextStepSuggestionRow._QUESTION_POS,
+            NextStepSuggestionRow._TYPE_CODE_POS,
+            NextStepSuggestionRow._MIN_LEN,
+        ) == (0, 1, 2)
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            [],
+            ["question"],
+            ["", 9],
+            [7, 9],
+            ["question", True],
+            ["question", "9"],
+        ],
+    )
+    def test_malformed_row_is_not_well_formed(self, raw: object) -> None:
+        assert NextStepSuggestionRow(raw).is_well_formed is False
 
     def test_truthy_non_list_citation_slot_raises(self) -> None:
         """A truthy non-list where the citation container belongs is wire drift.
@@ -212,69 +275,76 @@ class TestCitationRow:
 
 
 class TestCitationDetail:
-    def test_score_passages_source_id(self) -> None:
-        detail = CitationDetail([None, None, 0.75, None, [["p"]], ["src-data"]])
+    def test_score_fragment_source_id(self) -> None:
+        raw = [None, None, 0.75, None, [[["p"]]], ["src-data"]]
+        detail = CitationDetail(raw)
         assert detail.raw_score == 0.75
-        assert detail.passages == [["p"]]
+        assert detail.fragment_elements == [["p"]]
         assert detail.source_id_data == ["src-data"]
-        assert detail.raw_list == [None, None, 0.75, None, [["p"]], ["src-data"]]
+        assert detail.raw_list == raw
 
-    def test_answer_range_reads_inner_triple(self) -> None:
+    def test_fragment_range_reads_inner_triple(self) -> None:
         detail = CitationDetail([None, None, None, [[None, 5, 9]]])
-        assert detail.answer_range() == (5, 9)
+        assert detail.fragment_range() == (5, 9)
 
     @pytest.mark.parametrize(
         "raw",
         [
-            [None, None, None],  # too short for answer-range slot
+            [None, None, None],  # too short for the range slot
             [None, None, None, []],  # empty outer
             [None, None, None, ["not-a-list"]],  # inner not a list
             [None, None, None, [[None, 5]]],  # inner too short
         ],
     )
-    def test_answer_range_degrades_to_none_none(self, raw: list) -> None:
-        assert CitationDetail(raw).answer_range() == (None, None)
+    def test_fragment_range_degrades_to_none_none(self, raw: list) -> None:
+        assert CitationDetail(raw).fragment_range() == (None, None)
 
     def test_short_detail_degrades(self) -> None:
         detail = CitationDetail([None, None])
         assert detail.raw_score is None
-        assert detail.passages == []
+        assert detail.fragment_elements == []
         assert detail.source_id_data is None
 
 
 # ---------------------------------------------------------------------------
-# 4. PassageRow
+# 4. CitationDetail.fragment_elements (the #2120 two-level descent)
 # ---------------------------------------------------------------------------
 
 
-class TestPassageRow:
-    def test_unwraps_wrapper_and_reads_start_end_text(self) -> None:
-        passage = PassageRow([[10, 20, [["text"]]]])
-        assert passage.is_well_formed is True
-        assert passage.start_char == 10
-        assert passage.end_char == 20
-        assert passage.text_payload == [["text"]]
+class TestCitationDetailFragment:
+    def test_descends_through_the_fragment_message_to_its_elements(self) -> None:
+        """``cite_inner[4]`` is the message; ``[4][0]`` is the element list."""
+        detail = CitationDetail([None, None, None, None, [[[10, 20, "para"]]]])
+        assert detail.fragment_elements == [[10, 20, "para"]]
 
     @pytest.mark.parametrize(
-        "raw",
+        "fragment",
         [
-            [],  # empty wrapper
-            ["not-a-list"],  # inner not a list
-            [[10, 20]],  # inner too short (< 3)
-            "not-a-list",
-            None,
+            [],  # message present but empty
+            "not-a-list",  # message slot is not a list
+            [None],  # elements slot is null
+            ["not-a-list"],  # elements slot is not a list
         ],
+        ids=["empty-message", "non-list-message", "null-elements", "non-list-elements"],
     )
-    def test_malformed_wrapper_degrades(self, raw: object) -> None:
-        passage = PassageRow(raw)
-        assert passage.is_well_formed is False
-        assert passage.start_char is None
-        assert passage.end_char is None
-        assert passage.text_payload is None
+    def test_malformed_fragment_degrades_to_empty(self, fragment: object) -> None:
+        assert CitationDetail([None, None, None, None, fragment]).fragment_elements == []
+
+    def test_annotation_join_key_is_read_from_the_document_object(self) -> None:
+        """``Citation.objectId`` at ``cite_inner[6]`` is deliberately not read.
+
+        It repeats the id the enclosing ``DocumentObject`` already carries at
+        ``cite[0][0]``, which is the one this client surfaces as ``chunk_id``
+        and joins the answer annotation map on (#2120). Pinned so a future
+        reader does not "restore" the redundant accessor.
+        """
+        cite = [["obj-1"], [None, None, None, None, None, None, ["obj-1"]]]
+        assert CitationRow(cite).chunk_id == "obj-1"
+        assert not hasattr(CitationDetail(cite[1]), "object_id")
 
 
 # ---------------------------------------------------------------------------
-# 5. StreamFrameRow / ErrorPayloadRow / TextLeafRow
+# 5. StreamFrameRow / ErrorPayloadRow
 # ---------------------------------------------------------------------------
 
 
@@ -338,18 +408,38 @@ class TestErrorPayloadRow:
     def test_non_string_entry_type_is_none(self, entry: object) -> None:
         assert ErrorPayloadRow.entry_type(entry) is None
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            # Every captured rejection: the bare status has no message slot,
+            # and the recorded rate-limit shape holds ``None`` there (#2188).
+            [3],
+            [8, None, []],
+            [],
+            [8, 42],
+            [8, ["nested"]],
+            [8, "   "],
+        ],
+    )
+    def test_message_is_none_for_every_captured_shape(self, payload: list) -> None:
+        assert ErrorPayloadRow(payload).message is None
 
-class TestTextLeafRow:
-    def test_reads_text_value(self) -> None:
-        leaf = TextLeafRow([0, 1, "hello"])
-        assert leaf.is_well_formed is True
-        assert leaf.text_value == "hello"
+    def test_message_returns_server_text_when_present(self) -> None:
+        assert ErrorPayloadRow([8, "  Slow  down\tplease ", []]).message == "Slow down please"
 
-    @pytest.mark.parametrize("raw", [[], [0, 1], "x", None])
-    def test_short_or_non_list_degrades(self, raw: object) -> None:
-        leaf = TextLeafRow(raw)
-        assert leaf.is_well_formed is False
-        assert leaf.text_value is None
+    def test_message_is_truncated(self) -> None:
+        """Shares the decoder's cap, so the two layers cannot diverge."""
+        message = ErrorPayloadRow([8, "x" * 5000]).message
+        assert message is not None
+        assert len(message) <= _MAX_STATUS_MESSAGE_CHARS + 1
+        assert message.endswith("…")
+
+    def test_non_string_message_slot_warns(self, caplog) -> None:
+        """An unexpected type there is drift, and must not be inaudible."""
+        with caplog.at_level(logging.WARNING, logger="notebooklm.rpc.decoder"):
+            assert ErrorPayloadRow([8, ["nested"], []]).message is None
+
+        assert any("not a string" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -646,3 +736,157 @@ class TestUnwrapChatSettings:
         with pytest.raises(UnknownRPCMethodError) as excinfo:
             unwrap_chat_settings(_nb_info(99), source="ChatAPI.get_settings")
         assert excinfo.value.method_id == RPCMethod.GET_NOTEBOOK.value
+
+
+# ---------------------------------------------------------------------------
+# 12. isFinalResponse + ConversationTurnKey (#2122)
+# ---------------------------------------------------------------------------
+
+
+class TestStreamEnvelopeRowAgainstCapture:
+    """``isFinalResponse`` against the live five-chunk stream capture."""
+
+    def test_capture_marks_exactly_the_last_chunk_final(self) -> None:
+        flags = [StreamEnvelopeRow(chunk).is_final_response for chunk in _CAPTURED_STREAM]
+        assert flags == [False, False, False, False, True]
+
+    def test_capture_cannot_by_itself_discriminate_the_selection_policy(self) -> None:
+        """States a LIMIT of this fixture, so no one mistakes the capture-based
+        tests for coverage of the selection change.
+
+        Chunks 3, 4 and 5 carry the identical answer string, so longest-wins
+        and final-wins return the same text on this stream — a real property of
+        cumulative streaming, not a defect in the capture. The policy is
+        discriminated by the synthetic
+        ``test_final_marker_beats_a_longer_earlier_chunk`` in
+        ``test_streaming_chat_wire.py``; if this assertion ever fails, the
+        capture has gained that power and that test's docstring should say so.
+        """
+        texts = [AnswerRow(chunk[0]).text for chunk in _CAPTURED_STREAM]
+        final_text = texts[-1]
+        assert final_text is not None
+        longest = max((t for t in texts if t), key=len)
+        assert len(final_text) == len(longest)
+
+
+class TestStreamEnvelopeRow:
+    def test_heartbeat_envelope_is_not_final(self) -> None:
+        """Real heartbeats decode to ``[]`` and must not claim to end the stream."""
+        assert StreamEnvelopeRow([]).is_final_response is False
+
+    def test_short_envelope_is_not_final(self) -> None:
+        assert StreamEnvelopeRow([["text"], None, None, None]).is_final_response is False
+
+    def test_null_slot_is_not_final(self) -> None:
+        assert StreamEnvelopeRow([["t"], None, None, None, None]).is_final_response is False
+
+    @pytest.mark.parametrize("truthy", [1, "true", [1], {"final": True}])
+    def test_truthy_non_bool_is_not_final(self, truthy: object) -> None:
+        """Only a literal wire ``true`` selects the answer — anything else must
+        leave the longest-wins fallback in charge rather than promote a chunk."""
+        assert StreamEnvelopeRow([["t"], None, None, None, truthy]).is_final_response is False
+
+    def test_non_list_envelope_is_not_final(self) -> None:
+        assert StreamEnvelopeRow("reshaped").is_final_response is False
+
+    def test_next_step_suggestions(self) -> None:
+        row = StreamEnvelopeRow(
+            [
+                _answer_record(),
+                None,
+                None,
+                None,
+                True,
+                [[["What happens next?", 9], ["Make a report", 12]]],
+            ]
+        )
+        suggestions = row.next_step_rows
+        assert [(item.question, item.type_code) for item in suggestions] == [
+            ("What happens next?", 9),
+            ("Make a report", 12),
+        ]
+        assert all(isinstance(item, NextStepSuggestionRow) for item in suggestions)
+
+    @pytest.mark.parametrize("suggestions", [None, "bad", 7, {"rows": []}])
+    def test_malformed_next_step_container_is_optional(self, suggestions: object) -> None:
+        assert (
+            StreamEnvelopeRow(
+                [_answer_record(), None, None, None, True, suggestions]
+            ).next_step_rows
+            == []
+        )
+
+
+class TestAnswerRowTurnKeyAgainstCapture:
+    def test_capture_decodes_the_whole_key(self) -> None:
+        key = AnswerRow(_CAPTURED_STREAM[0][0]).turn_key
+        assert key == ConversationTurnKey(
+            session_id="3afea005-7d13-41d0-9257-6a9e28597818",
+            turn_id="b38d4003-5be1-487d-a121-5c5958709021",
+            turn_code=2187103311,
+        )
+
+    def test_key_is_identical_on_every_chunk_of_one_turn(self) -> None:
+        keys = {AnswerRow(chunk[0]).turn_key for chunk in _CAPTURED_STREAM}
+        assert len(keys) == 1
+
+    def test_server_conversation_id_is_the_keys_session_id(self) -> None:
+        """The pre-existing read and the new key must not disagree about slot 0.
+
+        They are the SAME wire slot, which is why ``session_id`` carries no
+        claim to be a conversation id — #659 established this slot is a
+        per-stream identifier.
+        """
+        row = AnswerRow(_CAPTURED_STREAM[0][0])
+        assert row.server_conversation_id == row.turn_key.session_id
+
+
+class TestAnswerRowTurnKey:
+    def test_absent_block_yields_no_key(self) -> None:
+        assert AnswerRow(_answer_record(conv_id=None)).turn_key is None
+
+    def test_short_row_yields_no_key(self) -> None:
+        assert AnswerRow(["only-text"]).turn_key is None
+
+    @pytest.mark.parametrize("block", [[], "reshaped", 7])
+    def test_unusable_block_yields_no_key(self, block: object) -> None:
+        rec = _answer_record()
+        rec[2] = block
+        assert AnswerRow(rec).turn_key is None
+
+    @pytest.mark.parametrize("bad_id", [None, 123, ""])
+    def test_key_without_a_usable_session_id_is_absent(self, bad_id: object) -> None:
+        """A key is addressed BY slot 0; without it the key identifies nothing,
+        so it is reported absent rather than half-populated."""
+        rec = _answer_record()
+        rec[2] = [bad_id, "turn-uuid", 7]
+        assert AnswerRow(rec).turn_key is None
+
+    def test_trailing_slots_are_optional(self) -> None:
+        rec = _answer_record()
+        rec[2] = ["conv-uuid"]
+        assert AnswerRow(rec).turn_key == ConversationTurnKey("conv-uuid", None, None)
+
+    def test_one_drifted_trailing_slot_does_not_discard_the_rest(self) -> None:
+        rec = _answer_record()
+        rec[2] = ["conv-uuid", ["nested"], 7]
+        assert AnswerRow(rec).turn_key == ConversationTurnKey("conv-uuid", None, 7)
+
+    def test_bool_turn_code_is_rejected(self) -> None:
+        """``bool`` is an ``int`` subclass; a wire ``true`` must not read as 1."""
+        rec = _answer_record()
+        rec[2] = ["conv-uuid", "turn-uuid", True]
+        assert AnswerRow(rec).turn_key == ConversationTurnKey("conv-uuid", "turn-uuid", None)
+
+
+class TestConversationTurnKeyConstructor:
+    def test_empty_session_id_is_refused(self) -> None:
+        """The class exists because the parts travel together; a key with no
+        session id addresses nothing, so it cannot be built."""
+        with pytest.raises(ValueError, match="non-empty session_id"):
+            ConversationTurnKey("")
+
+    def test_trailing_parts_stay_optional(self) -> None:
+        """A short wire block is decode-time absence, not a broken key."""
+        assert ConversationTurnKey("s").turn_id is None
+        assert ConversationTurnKey("s").turn_code is None

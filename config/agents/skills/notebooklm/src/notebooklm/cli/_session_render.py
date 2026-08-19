@@ -15,7 +15,12 @@ from rich.markup import render as render_markup
 from rich.table import Table
 
 from .error_handler import _output_error, exit_with_code
-from .rendering import console, json_error_response, json_output_response
+from .rendering import (
+    console,
+    get_notebook_access_display,
+    json_error_response,
+    json_output_response,
+)
 from .services.auth_diagnostics import AuthCheckResult
 from .services.auth_source import AUTH_JSON_ENV_NAME
 from .services.login.outcomes import BrowserCookieOutcome
@@ -26,9 +31,24 @@ def _use_notebook_table() -> Table:
     t = Table()
     t.add_column("ID", style="cyan")
     t.add_column("Title", style="green")
-    t.add_column("Owner")
+    # "Access" (not "Owner") because the column reports the caller's actual
+    # role — Owner / Editor / Viewer (#2125).
+    t.add_column("Access")
     t.add_column("Created", style="dim")
     return t
+
+
+def _render_use_notebook(notebook: Any, *, notebook_id: str, created: str) -> None:
+    """Print the one-row table ``use`` shows after selecting a notebook.
+
+    Lives here rather than inline in ``session_cmd`` so the Access-column
+    label lookup sits next to ``_use_notebook_table`` and the sibling
+    ``status`` renderer that formats the same role (ADR-0008 also keeps
+    ``session_cmd`` under its module-size budget).
+    """
+    table = _use_notebook_table()
+    table.add_row(notebook_id, notebook.title, get_notebook_access_display(notebook.role), created)
+    console.print(table)
 
 
 def _render_status(report: StatusReport, *, json_output: bool) -> None:
@@ -92,6 +112,7 @@ def _render_status(report: StatusReport, *, json_output: bool) -> None:
                         "id": ctx_view.notebook_id,
                         "title": None,
                         "is_owner": None,
+                        "role": None,
                     },
                     "conversation_id": None,
                 }
@@ -103,7 +124,7 @@ def _render_status(report: StatusReport, *, json_output: bool) -> None:
         table.add_column("Value", style="cyan")
         table.add_row("Notebook ID", ctx_view.notebook_id or "")
         table.add_row("Title", "-")
-        table.add_row("Ownership", "-")
+        table.add_row("Access", "-")
         table.add_row("Created", "-")
         table.add_row("Conversation", "[dim]None[/dim]")
         console.print(table)
@@ -117,6 +138,7 @@ def _render_status(report: StatusReport, *, json_output: bool) -> None:
                     "id": ctx_view.notebook_id,
                     "title": ctx_view.title if ctx_view.title and ctx_view.title != "-" else None,
                     "is_owner": ctx_view.is_owner if ctx_view.is_owner is not None else True,
+                    "role": ctx_view.role,
                 },
                 "conversation_id": ctx_view.conversation_id,
             }
@@ -129,9 +151,14 @@ def _render_status(report: StatusReport, *, json_output: bool) -> None:
 
     table.add_row("Notebook ID", ctx_view.notebook_id or "")
     table.add_row("Title", str(ctx_view.title or "-"))
-    is_owner = ctx_view.is_owner if ctx_view.is_owner is not None else True
-    owner_status = "Owner" if is_owner else "Shared"
-    table.add_row("Ownership", owner_status)
+    # Contexts written before the role was recorded (#2125) carry only the
+    # boolean, so fall back to it rather than showing nothing.
+    if ctx_view.role:
+        access = ctx_view.role.capitalize()
+    else:
+        is_owner = ctx_view.is_owner if ctx_view.is_owner is not None else True
+        access = "Owner" if is_owner else "Shared"
+    table.add_row("Access", access)
     table.add_row("Created", ctx_view.created_at or "-")
     if ctx_view.conversation_id:
         table.add_row("Conversation", ctx_view.conversation_id)

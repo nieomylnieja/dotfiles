@@ -83,6 +83,34 @@ def cookie_names_from_storage(storage_state: Mapping[str, Any]) -> set[str]:
 # evidence and the corrected three-way secondary-binding table.
 MINIMUM_REQUIRED_COOKIES = {"SID", "__Secure-1PSIDTS"}
 
+# Rows whose pre-POST value PSIDTS recovery observes for the compare-and-set
+# that decides whether a rotated row may replace a stored one.  PSIDTS only:
+# these are the cookies the gate reasons about as present/absent/unusable.
+#
+# One definition, two consumers (ADR-0033 / PR 0.2): ``psidts_recovery``
+# (which observes the rows before the RotateCookies POST) and ``storage``
+# (whose ``_merge_recovery_target_rows`` collapses the observed deltas back
+# into storage_state).  They previously carried value-equal copies with no
+# import between them, so a policy edit had to be made twice to stay correct.
+# It lives HERE because ``cookie_policy`` is the pure policy leaf both modules
+# already import; the reverse edge (policy importing storage/recovery) would
+# reintroduce the cycle this consolidation exists to remove.
+#
+# NOTE: ``psidts_recovery._ROTATION_MERGE_COOKIE_NAMES`` derives from this set
+# and is deliberately WIDER (it adds ``LSID``) — see the rationale at the merge
+# loop in ``psidts_recovery.recover_psidts_in_memory`` (#1977).
+_RECOVERY_TARGET_COOKIE_NAMES: frozenset[str] = frozenset({"__Secure-1PSIDTS", "__Secure-3PSIDTS"})
+
+# Cookie names whose value/domain/path state is authentication-bearing for a
+# live-vs-disk recovery decision. Ambient Google cookies (for example ``NID``)
+# may change on every rejected redirect and must not starve a valid profile
+# reload; changes to these Tier-1, rotation, or secondary-binding cookies can
+# instead represent a newer in-memory session and must not be overwritten by a
+# lagging disk sample.
+_AUTH_MATERIAL_COOKIE_NAMES: frozenset[str] = frozenset(
+    MINIMUM_REQUIRED_COOKIES | _RECOVERY_TARGET_COOKIE_NAMES | {"OSID", "APISID", "SAPISID", "LSID"}
+)
+
 
 _EXTRACTION_HINT = (
     "This typically means --browser-cookies extraction was incomplete "

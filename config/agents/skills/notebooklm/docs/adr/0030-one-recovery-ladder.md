@@ -9,6 +9,22 @@ in-process outcome-based re-mint coalescing; c-PR4 lands the opt-in mid-session
 refresh-cmd rung (L2.5) plus the refresh-cmd logging/env hardening and the
 `refresh_auth` join semantics; c-PR5 is docs + cleanup only).
 
+**Amended 2026-08-07, executed 2026-08-08** — cold start's rung order is now
+**aligned** to the documented ladder (L2.5 → L3 → L4); it ran L3 → L4 → L2.5
+before. See the amendment note under "One ladder, rung availability as policy".
+
+**Amended 2026-08-10 ([#2161](https://github.com/teng-lin/notebooklm-py/issues/2161))** —
+mid-session recovery first performs a local, network- and write-free reload when
+a file-backed profile differs from the rejected live jar. The bounded bridge
+tries a changed live jar, force-samples disk while preserving one newer
+authentication-bearing live candidate, then uses one final disk sample if that
+candidate is rejected. The selected sample's cookies and in-band account route
+are installed as one generation, and each retry rebuilds its homepage route;
+an account-only profile rewrite is therefore retryable too. Cold start already
+loads that profile, so the bridge is
+mid-session-only and precedes the existing L2.5 → L3 → L4 escalation without
+creating another credential tier.
+
 Companion to [ADR-0029](0029-canonical-storage-writer.md) (refactor (b), the
 single canonical `storage_state.json` writer). Where ADR-0029 unifies the
 **write** side, this ADR unifies the **recovery/refresh** side.
@@ -126,6 +142,7 @@ the fresh-loop-runs-full-ladder behaviour.
 ```text
 L1 homepage refresh
   → L2 RotateCookies / PSIDTS rotation
+  → persisted-profile reload    (mid-session only; no network or write)
   → L2.5 refresh-cmd            (NEW rung; promoted from cold-only [refresh-4])
   → L3 headless re-mint
   → L4 master-token re-mint
@@ -148,6 +165,122 @@ mid-session get the rungs as configured.
 - **Canonical poke key (c-PR2):** one `canonical_storage_key(path)` helper backs
   the throttle map, the poke lock, and the flock derivation, closing
   [refresh-5].
+
+*Amended (cold-start rung-order alignment, `_auth` consolidation); **executed
+2026-08-08**, so the divergence described next is history:* the order above is
+the one **mid-session** follows; **cold start did not**.
+`refresh._fetch_tokens_with_refresh` ran L3/L4 first — via
+`recovery.coalesced_cold_recovery`, whose `_run_cold_recovery` sequences headless
+then master-token — and reached the refresh-cmd rung only afterwards, further
+down the *same* `except ValueError` arm. The effective cold order was therefore
+**L3 → L4 → L2.5**: the reverse of `session.refresh_auth_session`'s explicit
+L2.5 → L3 → L4 if-chain, and the reverse of this ADR's own ladder.
+
+The history says the divergence was never chosen. The refresh-cmd arm is the
+older code: it has been the sole `except ValueError` fallback of the cold token
+fetch since #336 (2026-05-09) introduced `NOTEBOOKLM_REFRESH_CMD` — before the
+current ladder numbering existed. (#336's own `docs/troubleshooting.md` did
+number it, as *layer 2* under an older scheme in which the heavier recovery came
+after it; the current scheme's first numbered rung is #1525's "layer-3",
+2026-06-10.) #2071 (2026-08-04) added cold-start re-mint by inserting
+the redirect-only recovery block at the **top of that existing arm** — which
+fixed the reported defect and fixed the order as a side effect of where the new
+code landed. c-PR4 (#2091, 2026-08-05) then named the rungs and promoted
+refresh-cmd into the mid-session ladder *first*, per the diagram above, but left
+`_fetch_tokens_with_refresh` alone: its diff adds L2.5 to `session.py` and
+re-sequences nothing in `refresh.py`. So cold start has never matched this ADR,
+and nothing recorded an intent for it not to.
+
+**Decision (maintainer, 2026-08-07): align cold start to the documented order.**
+The cold redirect-with-a-real-storage-path case becomes L2.5 → L3 → L4. This is a
+**behavior change**, not a refactor: with `NOTEBOOKLM_REFRESH_CMD` configured,
+the operator's command now runs *before* the headless / master-token re-mints on
+a dead-cookie cold start rather than only as their backstop (a
+`_LoginRedirectError`'s message matches `_should_try_refresh`'s signals today —
+the rung is reachable on that path either way; only its position moves). It ships
+as its own PR, after the behavior-frozen step that colocates the cold fallback
+sequence into one function in `refresh.py` so the reorder is one small diff in
+one visible place, and it is verified across the live auth-matrix rotation paths.
+
+Position-first also changes the rung's **failure contract**, which a position-only
+swap would get wrong. The cold arm is terminal today: a non-zero exit raises
+`RuntimeError` and a still-redirecting retry raises `_LoginRedirectError`, and
+both propagate straight out of `_fetch_tokens_with_refresh` — harmless as the
+*last* rung. The ladder it is being aligned to does the opposite:
+`session._try_refresh_cmd_reauth` catches `(RuntimeError, OSError, ValueError)`,
+logs, and returns `False` so the chain falls through. The executing PR must
+therefore convert an L2.5 failure into a fall-through to L3/L4, matching the
+mid-session bool-per-rung shape — otherwise a broken or timing-out
+`NOTEBOOKLM_REFRESH_CMD` would mask the two re-mint rungs an operator recovers by
+today.
+
+*As executed (2026-08-08):* the fall-through **stashes** the L2.5 exception and
+re-raises it only when the re-mint rungs do not recover either. Mid-session's
+`False` lets the caller's own dead-cookie error stand, which is right there
+because the mid-session ladder has a caller holding that error; cold start has no
+such holder, and a bare fall-through would have replaced today's actionable
+`NOTEBOOKLM_REFRESH_CMD exited N (executable: …)` with the generic
+"Authentication expired" on every fully-exhausted ladder. Stashing keeps the
+exhausted-ladder error **byte-identical to the pre-alignment order** — where the
+rung ran last and raised. The alignment's observable deltas are therefore the
+rung order itself, the fact that an L2.5 failure no longer ends the ladder, and
+the two consequences recorded below: an L2.5-first success returns without
+entering `_run_cold_recovery`, so the cold generation never advances and that
+fast path stays disarmed on hosts where the command works; and the rung's
+warning now prints the original error where the pre-alignment rung printed the
+rebound retry error. The
+`raise` happens inside the caller's `except`, so the original `ValueError`
+remains the `__context__`.
+
+Where no command is configured the new first rung costs a predicate miss and
+nothing else: `_should_try_refresh` reads one `ContextVar` and two environment
+variables, then substring-matches the error text. The per-path flock, the
+single-flight claim, and the subprocess all sit *past* that gate — no network
+call, subprocess, lock acquisition, or sleep precedes it — so the default path
+gains no stall.
+
+Where a command *is* configured the cost is not only rung order. L2.5 now also
+precedes `_run_cold_recovery`'s generation-bump revalidate — a single GET that,
+on a loop which already recovered once, can heal a repeat cold redirect with no
+rung at all. Alignment pays the subprocess (and its per-path flock) before that
+free check is reachable; and because an L2.5-first success returns without
+entering `_run_cold_recovery`, the cold generation never advances, so that fast
+path stays disarmed on hosts where the command works.
+
+**Non-goal — what does not change.** L2.5's entry surface in `refresh.py` is
+strictly *wider* than a ladder rung, and the alignment reorders rung **position
+within the redirect-with-a-real-path case only**. Two roles survive untouched:
+(1) the arm still fires for any refresh-eligible `ValueError`, not just a
+`_LoginRedirectError` — the recovery block is guarded by an `isinstance` check
+that other `ValueError`s skip straight past; (2) it still runs when
+`storage_path is None` and the path is resolved from the profile/default, a case
+the same guard excludes and `_run_cold_recovery`'s `Path`-typed contract cannot
+accept. Moving the arm into `recovery.py`, or injecting it inside the cold
+flight's coalescing boundary, would change both; the alignment does not.
+
+*Phase 12A ownership extraction (2026-08-09):* the internal, one-shot
+`recovery.ColdRecoveryCoordinator` now owns the L2.5 decision/attempt and delegation into the
+combined cold flow. `refresh._cold_fallbacks` remains the sole production adapter and supplies
+late-bound closures, so the exact DEBUG environment-auth skip and WARNING start/failure messages,
+route lookup timing, and wider plain-`ValueError` entry surface remain in `refresh.py`. L2.5 still
+runs outside the shared cold flight. The existing `recovery._run_cold_recovery` continues to own
+the L3 → L4 sequence, per-loop lock/generation state, and same-sample replacement baseline; its
+coalesced wrapper and `single_flight` retain flight settlement until Phase 12C. Cancellation before
+caller-jar replacement leaves that jar
+untouched; after either arm synchronously replaces it, a later cancelled route/fetch does not roll
+the mutation back. A failed L2.5 exception is still retained by identity, later cold success still
+wins, and an exhausted ladder still selects that retained failure over the original redirect.
+
+A third role does **not** survive, and the executing PR must not try to preserve
+it. Today the arm is also the post-ladder backstop, reached from two rebind
+sites: the ladder-exhausted path (`coalesced_cold_recovery` re-raises
+`last_redirect`) and the successful-re-mint-with-failed-revalidation path.
+Alignment *consumes* that role — L2.5 runs once, before the ladder — and keeping
+a second post-ladder invocation would spawn a **second subprocess**, because
+`_REFRESH_ATTEMPTED_CONTEXT` is reset in the `finally` so the gate passes again,
+and the per-path success epoch does not deduplicate a caller's own re-entry
+(`_coalesced_run_refresh_cmd` re-captures the epoch per call, and the claim skips
+only on a *strictly greater* one).
 
 ### Mid-session refresh-cmd rung (L2.5), opt-in for one release (c-PR4)
 
@@ -189,6 +322,13 @@ its single unkeyed task slot; its internals are untouched.
 - `_auth/_browser_cookie_filter.py` logs to `notebooklm.auth`
   (not `__name__`) so its dropped-cookie / malformed-row warnings reach the
   documented auth logger (core-F10 / ADR-0016).
+  **Amended (ADR-0033 PR 4.2):** the filter now lives in `_auth/storage.py`
+  (`_auth/_browser_cookie_filter.py` is a re-export shim). The contract is
+  unchanged and still holds — `storage.py` binds its logger by the same
+  `notebooklm.auth` *name*, not `__name__`, so no warning changed namespace in
+  the move. Any future relocation of this code must preserve that; a module
+  whose logger follows `__name__` would silently reroute these warnings to a
+  private child no operator subscribes to.
 
 ### Boundary — what this ADR does NOT touch
 
@@ -217,6 +357,11 @@ its single unkeyed task slot; its internals are untouched.
   false-`SUCCESS`.
 - The refresh-cmd rung is reachable mid-session (opt-in for one release), with
   tighter default logging and full secret-env scrubbing for server contexts.
+- Cold start and mid-session now walk the **same** rung order (L2.5 → L3 → L4),
+  so "the ladder" is one sequence rather than two. With a command configured, a
+  dead-cookie cold start pays the operator's command (and its per-path flock)
+  before the re-mint rungs and before `_run_cold_recovery`'s generation-bump
+  revalidate; with none, the extra rung costs one predicate miss.
 - Two whitebox pinning suites (`test_refresh_lock_registry.py`,
   `test_refresh_cmd_race.py`) were **migrated** in c-PR2 — each pinned guarantee
   (the four epochs above, plus lock identity) is re-expressed against
@@ -260,3 +405,6 @@ its single unkeyed task slot; its internals are untouched.
   `notebooklm.auth` logger namespace the browser-cookie filter now targets.
 - [ADR-0023](0023-master-token-headless-auth.md) — the L4 master-token re-mint
   rung.
+- [ADR-0033](0033-auth-consolidation-policy.md) — the `_auth` consolidation
+  policy governing the effort that carries the rung-order alignment (and the
+  colocation step preceding it).

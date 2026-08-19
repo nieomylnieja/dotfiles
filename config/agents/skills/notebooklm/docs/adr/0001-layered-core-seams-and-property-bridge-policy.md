@@ -63,6 +63,7 @@ The chosen mechanism is a *property-bridge policy*. Each migrated attribute keep
 def _save_lock(self) -> threading.Lock:
     return self.cookie_persistence.save_lock
 
+
 @_save_lock.setter
 def _save_lock(self, value: threading.Lock) -> None:
     self.cookie_persistence.save_lock = value

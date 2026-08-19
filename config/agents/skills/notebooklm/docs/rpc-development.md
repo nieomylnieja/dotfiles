@@ -1,7 +1,7 @@
 # RPC Development Guide
 
 **Status:** Active
-**Last Updated:** 2026-06-11
+**Last Updated:** 2026-08-05
 
 This guide covers everything about NotebookLM's RPC protocol: capturing calls, debugging issues, and implementing new methods.
 
@@ -84,6 +84,7 @@ console.log("Params:", JSON.parse(outer[0][0][1]));
 import json
 from urllib.parse import unquote
 
+
 def decode_f_req(encoded: str) -> dict:
     decoded = unquote(encoded)
     outer = json.loads(decoded)
@@ -102,6 +103,7 @@ Best for systematic capture and CI integration.
 from playwright.async_api import async_playwright
 import json
 from urllib.parse import unquote, parse_qs
+
 
 async def setup_capture_session():
     playwright = await async_playwright().start()
@@ -219,6 +221,7 @@ Source IDs have different nesting requirements:
 import json
 import re
 
+
 def parse_response(text: str, rpc_id: str):
     """Parse batchexecute response."""
     # Strip anti-XSSI prefix
@@ -295,9 +298,9 @@ async def new_method(self, notebook_id: str, param: str) -> SomeResult:
         Description of return value.
     """
     params = [
-        param,           # Position 0
-        notebook_id,     # Position 1
-        [2],             # Position 2: Fixed flag
+        param,  # Position 0
+        notebook_id,  # Position 1
+        [2],  # Position 2: Fixed flag
     ]
 
     result = await self._rpc.rpc_call(
@@ -336,12 +339,15 @@ def test_encode_new_method():
 **Unit test with a fake RPC executor** (`tests/unit/`):
 ```python
 @pytest.mark.asyncio
-async def test_new_method(mock_client):
+async def test_new_method():
     mock_response = ["result_id", "Result Title"]
-    with patch('notebooklm._rpc_executor.RpcExecutor.rpc_call', new_callable=AsyncMock) as mock:
-        mock.return_value = mock_response
-        result = await mock_client.some_api.new_method("nb_id", "param")
-        assert result.id == "result_id"
+    fake = make_fake_core(rpc_call=AsyncMock(return_value=mock_response))
+    api = SomeAPI(fake.rpc_executor)
+
+    result = await api.new_method("nb_id", "param")
+
+    assert result.id == "result_id"
+    fake.rpc_executor.rpc_call.assert_awaited_once()
 ```
 
 **VCR-backed integration test** (`tests/integration/`) or authenticated E2E
@@ -359,7 +365,7 @@ async def test_new_method_e2e(client, read_only_notebook_id):
 Update `docs/rpc-reference.md`:
 
 ```markdown
-### NEW_METHOD (`AbCdEf`)
+### RPC: NEW_METHOD (`AbCdEf`)
 
 **Purpose:** Short description
 
@@ -374,7 +380,7 @@ params = [
 
 **Response:** Description of response structure
 
-**Source:** `_some_api.py:123`
+**Source:** `_some_api.py::new_method()`
 ```
 
 ---
@@ -502,6 +508,15 @@ error:
 - **RPC ID mismatch** issues (exit code 1): labeled `bug, rpc-breakage, automated`.
 - **Auth failure** issues (exit code 2): labeled `bug, automated` (no `rpc-breakage`
   label — auth is an operational concern, not a protocol break).
+- **Frontend bundle drift** is a separate live monitor. Its exit code 1 is
+  reserved for confirmed ABSENT RPC IDs or CHANGED/STALE studio enums. If its
+  authenticated homepage request instead lands on login, CookieMismatch, or the
+  region/anti-abuse gate—or the app/CDN cannot be read—it exits 2, says that no
+  drift conclusion was possible, and joins the authentication/infrastructure
+  issue lane. The script also writes a classified outcome file; the workflow
+  opens `Studio enum / RPC drift detected` only for the explicit `drift`
+  outcome. A Python, dependency, or runner failure that exits 1 before writing
+  that outcome is therefore treated as infrastructure, never as protocol drift.
 - **Non-transient ERROR detected** issues (exit code 3): labeled `rpc-error, bug,
   automated`. Opened when `check_rpc_health.py` surfaces failures that survive
   the rate-limit / `RESOURCE_EXHAUSTED` filter (timeouts, parse failures,
@@ -560,6 +575,7 @@ import asyncio, httpx
 from notebooklm._auth.cookies import _build_httpx_cookies_from_storage_strict
 from notebooklm._env import DEFAULT_BL, extract_build_label, get_base_url
 
+
 async def main():
     # The strict loader is deliberate: build_httpx_cookies_from_storage triggers a
     # PSIDTS RotateCookies round-trip and a disk write, so it is not safe here.
@@ -568,6 +584,7 @@ async def main():
         r = await c.get(f"{get_base_url()}/")
     print("pinned:", DEFAULT_BL)
     print("served:", extract_build_label(r.text))
+
 
 asyncio.run(main())
 ```

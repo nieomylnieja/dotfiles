@@ -1272,7 +1272,7 @@ class TestArtifactErrorPaths:
             "Report",
             2,  # REPORT type
             None,
-            1,  # PROCESSING status
+            2,  # PROCESSING status (ARTIFACT_STATUS_PROCESSING) — #2127
         ]
         response = build_rpc_response(RPCMethod.LIST_ARTIFACTS, [[artifact]])
         httpx_mock.add_response(content=response.encode())
@@ -1797,15 +1797,16 @@ class TestRetryFailedArtifact:
     """Tests for ArtifactsAPI.retry_failed (RETRY_ARTIFACT, issue #1319)."""
 
     @pytest.mark.asyncio
-    async def test_retry_failed_accepted_returns_in_progress(
+    async def test_retry_failed_accepted_returns_pending(
         self,
         auth_tokens,
         httpx_mock: HTTPXMock,
         build_rpc_response,
     ):
-        """An accepted retry returns the same artifact id as in_progress."""
+        """An accepted retry returns the same artifact id, re-queued as pending."""
         # Captured wire shape: the artifact row at index 0 carries the same id
-        # (row[0]) and status code 1 (row[4] → PROCESSING → in_progress).
+        # (row[0]) and status code 1 (row[4] → ARTIFACT_STATUS_INITIALIZED →
+        # "pending"; the worker has not picked the retry up yet — #2127).
         retry_response = build_rpc_response(
             RPCMethod.RETRY_ARTIFACT,
             [["artifact_456", "Video Overview", 3, [[["src_001"]]], 1]],
@@ -1819,7 +1820,7 @@ class TestRetryFailedArtifact:
             )
 
         assert result.task_id == "artifact_456"
-        assert result.status == "in_progress"
+        assert result.status == "pending"
 
     @pytest.mark.asyncio
     async def test_retry_failed_null_result_raises_feature_unavailable(

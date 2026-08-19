@@ -47,7 +47,7 @@ Google rotates `__Secure-1PSIDTS` (the freshness partner of `__Secure-1PSID`) on
 6. **Manual re-login** — `notebooklm login`; the legacy `notebooklm login --master-token-refresh` remains for an unconditional master-token re-mint.
 7. **External scheduler** — `notebooklm auth refresh` driven by cron / launchd / systemd / Task Scheduler / k8s CronJob, for idle profiles with no Python process running. Recommended cadence: 15–20 minutes.
 
-> **Master-token troubleshooting:** `MasterTokenError: ... re-bootstrap` means the master token was revoked (password change / Google security action) — re-run `notebooklm login --master-token`. `... needs gpsoauth` means the `[headless]` extra isn't installed (`pip install "notebooklm-py[headless]"`). A minted jar "missing required cookies" indicates a MergeSession change — file an issue.
+> **Master-token troubleshooting:** `MasterTokenError: ... re-bootstrap` means the master token was revoked (password change / Google security action) — re-run `notebooklm login --master-token`. `MissingDependencyError: ... needs gpsoauth` means the `[headless]` extra isn't installed (`pip install "notebooklm-py[headless]"`); recovery stops with that configuration error instead of misreporting rejected credentials. A minted jar "missing required cookies" indicates a MergeSession change — file an issue.
 >
 > **"This browser or app may not be secure" during `--master-token` sign-in:** Google blocks sign-in inside the automated browser the auto-capture launches. The client drops the obvious automation flags, but Google may still block — use one of the reliable paths instead:
 > - **Attach to your own Chrome (recommended):** quit Chrome, relaunch it with `--remote-debugging-port=9222`, then `notebooklm login --master-token --account you@gmail.com --cdp-url http://127.0.0.1:9222`. It opens an EmbeddedSetup tab in your real (non-automated) browser, so Google allows sign-in, and scrapes the `oauth_token`.
@@ -309,6 +309,7 @@ Or in Python:
 
 ```python
 import os
+
 os.environ["NOTEBOOKLM_RPC_OVERRIDES"] = '{"LIST_NOTEBOOKS": "newId123"}'
 
 from notebooklm import NotebookLMClient
@@ -320,7 +321,7 @@ from notebooklm import NotebookLMClient
 - The override is applied at BOTH the URL `rpcids=` query parameter AND the
   request body `f.req` payload, so the wire format stays consistent.
 - The override is gated on the configured base host being a known Google
-  NotebookLM endpoint (`notebooklm.google.com` or
+  NotebookLM endpoint (`notebook.google.com`, `notebooklm.google.com`, or
   `notebooklm.cloud.google.com`). Overrides do NOT apply to non-Google
   hosts, so this env var cannot be weaponised to leak custom RPC IDs to a
   hostile endpoint.
@@ -353,6 +354,7 @@ Or in Python, set the env var before instantiating the client:
 
 ```python
 import os
+
 os.environ["NOTEBOOKLM_DEBUG"] = "1"
 
 from notebooklm import NotebookLMClient
@@ -626,6 +628,7 @@ status = await with_rate_limit_retry(
     max_retries=3,
 )
 
+
 # For non-artifact RPC calls, retry by passing a fresh callable each attempt
 async def retry_rpc_call(make_call, max_retries=3):
     for attempt in range(max_retries + 1):
@@ -635,6 +638,7 @@ async def retry_rpc_call(make_call, max_retries=3):
             if attempt >= max_retries:
                 raise
             await asyncio.sleep(2**attempt)
+
 
 notebook = await retry_rpc_call(lambda: client.notebooks.create("Research Notes"))
 ```

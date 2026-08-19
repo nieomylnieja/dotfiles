@@ -3,7 +3,7 @@
 A discrete verb, deliberately NOT folded into ``source_add(source_type="drive")``:
 that path REQUIRES an explicit ``mime_type`` and only ingests Google-native
 Docs/Slides/Sheets + PDF by reference (#1827), whereas this tool downloads the
-upload-only Drive types (epub/docx/txt/md/rtf/odt/csv/tsv/pdf) server-side and
+upload-only Drive types (epub/docx/pptx/txt/md/rtf/odt/csv/tsv/pdf) server-side and
 uploads them. Kept in its own module (with its own ``register``) so the ceiling'd
 ``mcp/tools/sources.py`` doesn't grow (ADR-0025 discrete-verb rationale).
 
@@ -40,7 +40,7 @@ def register(mcp: Any) -> None:
         wait: bool = False,
     ) -> dict[str, Any]:
         """Add a Google Drive file by downloading it server-side and uploading it (supports
-        epub/docx/txt/md/rtf/odt/csv/tsv/pdf).
+        epub/docx/pptx/txt/md/rtf/odt/csv/tsv/pdf).
 
         Probes the Drive file and routes: a downloadable type is fetched server-side and
         uploaded; a Google-native Doc/Slides/Sheet isn't downloadable and returns a pointer

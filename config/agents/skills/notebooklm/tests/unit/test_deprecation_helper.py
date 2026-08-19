@@ -1,13 +1,148 @@
 """Unit tests for the ``notebooklm._deprecation`` warn helper + quiet gate."""
 
+import inspect
 import warnings
+from dataclasses import FrozenInstanceError, fields, replace
 
 import pytest
 
+from notebooklm import AuthTokens
 from notebooklm._deprecation import (
+    DEPRECATION_SPECS,
+    DeprecationSpec,
     deprecations_quiet,
     warn_deprecated,
+    warn_registered_deprecation,
 )
+
+_FROM_STORAGE_MESSAGE = (
+    "AuthTokens.from_storage(...) is deprecated; use "
+    "notebooklm.NotebookLMClient.from_storage(...) and access client.auth within the managed "
+    "client lifecycle instead. It will be removed in v1.0."
+)
+_SYNC_CONSTRUCTION_MESSAGE = (
+    "Constructing AuthTokens(..., storage_path=..., cookie_jar=None) is deprecated because it "
+    "performs synchronous storage/recovery I/O; use "
+    "notebooklm.NotebookLMClient.from_storage(...) and access client.auth within the managed "
+    "client lifecycle instead. It will be removed in v1.0."
+)
+_FLAT_COOKIES_MESSAGE = (
+    "AuthTokens.flat_cookies is deprecated because its name-only projection discards domain/path "
+    "siblings; use AuthTokens.jar for bootstrap cookie questions and managed NotebookLMClient "
+    "request APIs for HTTP. It will be removed in v1.0."
+)
+
+
+def _auth_tokens() -> AuthTokens:
+    return AuthTokens(
+        cookies={"SID": "secret", "__Secure-1PSIDTS": "secret-ts"},
+        csrf_token="csrf",
+        session_id="session",
+    )
+
+
+def test_auth_storage_registry_is_exact_frozen_and_immutable() -> None:
+    assert tuple(DEPRECATION_SPECS) == (
+        "auth_tokens_from_storage",
+        "auth_tokens_sync_storage_construction",
+        "auth_tokens_flat_cookies",
+    )
+    assert [field.name for field in fields(DeprecationSpec)] == [
+        "key",
+        "message",
+        "category",
+        "replacement",
+        "since",
+        "removal",
+        "stacklevel",
+    ]
+    expected = {
+        "auth_tokens_from_storage": (
+            _FROM_STORAGE_MESSAGE,
+            "notebooklm.NotebookLMClient.from_storage",
+            3,
+        ),
+        "auth_tokens_sync_storage_construction": (
+            _SYNC_CONSTRUCTION_MESSAGE,
+            "notebooklm.NotebookLMClient.from_storage",
+            4,
+        ),
+        "auth_tokens_flat_cookies": (
+            _FLAT_COOKIES_MESSAGE,
+            "notebooklm.AuthTokens.jar",
+            3,
+        ),
+    }
+    for key, spec in DEPRECATION_SPECS.items():
+        message, replacement, stacklevel = expected[key]
+        assert spec == DeprecationSpec(
+            key=key,
+            message=message,
+            category=DeprecationWarning,
+            replacement=replacement,
+            since="0.8.1",
+            removal="1.0",
+            stacklevel=stacklevel,
+        )
+    with pytest.raises(TypeError):
+        DEPRECATION_SPECS["extra"] = DEPRECATION_SPECS["auth_tokens_from_storage"]  # type: ignore[index]
+    with pytest.raises(FrozenInstanceError):
+        DEPRECATION_SPECS["auth_tokens_from_storage"].key = "changed"  # type: ignore[misc]
+
+
+def test_direct_flat_cookies_access_warns_once_at_public_caller() -> None:
+    auth = _auth_tokens()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        frame = inspect.currentframe()
+        assert frame is not None
+        caller_line = frame.f_lineno + 1
+        assert auth.flat_cookies["SID"] == "secret"
+
+    assert len(caught) == 1
+    assert str(caught[0].message) == _FLAT_COOKIES_MESSAGE
+    assert caught[0].filename == __file__
+    assert caught[0].lineno == caller_line
+
+
+def test_flat_cookies_quiet_gate_is_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    auth = _auth_tokens()
+    monkeypatch.setenv("NOTEBOOKLM_QUIET_DEPRECATIONS", "1")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert auth.flat_cookies["SID"] == "secret"
+
+
+def test_other_cookie_compatibility_and_dataclass_operations_stay_quiet() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        auth = _auth_tokens()
+        assert auth.cookies
+        assert auth.cookie_jar is not None
+        assert auth.jar
+        assert auth.cookie_header
+        assert auth.cookie_header_for("https://notebook.google.com/")
+        assert repr(auth)
+        assert auth == auth
+        assert replace(auth) == auth
+
+
+def test_registered_emitter_uses_live_quiet_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOTEBOOKLM_QUIET_DEPRECATIONS", "1")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_registered_deprecation("auth_tokens_from_storage")
+    monkeypatch.delenv("NOTEBOOKLM_QUIET_DEPRECATIONS")
+    with pytest.warns(DeprecationWarning, match="NotebookLMClient.from_storage"):
+        warn_registered_deprecation("auth_tokens_from_storage")
+
+
+def test_registered_emitter_rejects_unknown_key_without_warning() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(KeyError, match="not_registered"):
+            warn_registered_deprecation("not_registered")
+    assert caught == []
 
 
 class TestWarnDeprecated:

@@ -1307,7 +1307,7 @@ wheels = [
 
 [[package]]
 name = "notebooklm-py"
-version = "0.8.0"
+version = "0.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1344,7 +1344,7 @@ browser = [
     { name = "playwright" },
 ]
 cookies = [
-    { name = "rookiepy" },
+    { name = "rookie-cookies" },
 ]
 dev = [
     { name = "mypy" },
@@ -1405,7 +1405,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'dev'", specifier = ">=1.0.0,<2" },
     { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.20,<1" },
     { name = "rich", specifier = ">=13.0.0,<16" },
-    { name = "rookiepy", marker = "extra == 'cookies'", specifier = ">=0.1.0,<1" },
+    { name = "rookie-cookies", marker = "extra == 'cookies'", specifier = ">=0.1.0,<1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.1" },
     { name = "tomli", marker = "python_full_version < '3.11' and extra == 'dev'", specifier = ">=2.0.0,<3" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.34,<1" },
@@ -2067,44 +2067,20 @@ wheels = [
 ]
 
 [[package]]
-name = "rookiepy"
-version = "0.5.6"
+name = "rookie-cookies"
+version = "0.5.8"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/52/b7/b75e3bb8cdd0210a0ffb106002b678170c9a3a50ae1dc1c9bc1f701b4452/rookiepy-0.5.6.tar.gz", hash = "sha256:efa6a93b119478a96b3d8c4454215c4f1af316a24b3b3b3015b73c1c1d887078", size = 45225, upload-time = "2024-11-01T19:28:37.537Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/20/be8d86b642a187098b10478530781deef462a5449bc7e2bcf3e350de3b52/rookie_cookies-0.5.8.tar.gz", hash = "sha256:70702125e790fbc30aa1014e64980b7ed14400ad1b05456659ec6ff8f05b898d", size = 83164, upload-time = "2026-08-11T17:48:02.357Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/64/6d8c3a530da92abed05cf12ec80a9765f6fbb5657013624b16a0f7a3a7d7/rookiepy-0.5.6-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:b138d59447317438564475b3bfa80ea6adbbdc65edfa44f14c1565b90ce64257", size = 1403633, upload-time = "2024-11-01T19:25:42.113Z" },
-    { url = "https://files.pythonhosted.org/packages/66/77/58d20e6e45b38f9950486ca6bd8629eb0385ec9f68aadbee67db03e4fd48/rookiepy-0.5.6-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:ed2c39cb06b8b2edb186d7b0afe08dbb3257bba94f2b18e3bb3ae8a80b77e01b", size = 1312421, upload-time = "2024-11-01T19:25:45.329Z" },
-    { url = "https://files.pythonhosted.org/packages/72/4b/d3ef49aefb2e73ed86d64ffdc90e369eae119321715c259ccbe8dc050a5f/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3b547cd5ebf875635bd96d8c3365be3f2c664bbab45fda36c8c5b880a4d17512", size = 2678357, upload-time = "2024-11-01T19:25:47.681Z" },
-    { url = "https://files.pythonhosted.org/packages/bb/34/770004fc5b6c77d2d3708f4c3938e9939b0248d06f8dfeee124e128f99e3/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:65e6e6939d7d87942795d8275d56a17a7c046732420aa10c05e2b63ee6345e93", size = 2583944, upload-time = "2024-11-01T19:25:50.241Z" },
-    { url = "https://files.pythonhosted.org/packages/7e/d0/493838aae78dfeca1b3246515cb67b53f55997026b4372bf80ea81bb9206/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c370e4eb33f8848e686b4a14183078411fccb882fc9040823e30a8597ee00b8a", size = 2992938, upload-time = "2024-11-01T19:25:52.56Z" },
-    { url = "https://files.pythonhosted.org/packages/75/19/412239d02d4f73baea9e9f7f2b21ebd187c3bf38ef4ec517bb2a839e0183/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:d2e2be75c052375b9f489fefbf359935f1882fd7f80b724a976d2dd1ec462d9d", size = 2870215, upload-time = "2024-11-01T19:25:55.182Z" },
-    { url = "https://files.pythonhosted.org/packages/69/85/b46d140837570114a7cdb57626775ea5b456beb4ce30dc9972a616cdd709/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c73b5de7db85fc5f398d1f50bc6b1e3672ddeb76fd2c9721980eaeb530e69d13", size = 2979196, upload-time = "2024-11-01T19:25:57.615Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/39/7594b696befce2aa5e50dd6f7a632b50ea94d9ec14651f1b4651f1ed24e1/rookiepy-0.5.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:67391fca6afc3251c8bbd4a395f287ebfcb35652cf9a4aadf5b4df73481fac08", size = 2800928, upload-time = "2024-11-01T19:25:59.902Z" },
-    { url = "https://files.pythonhosted.org/packages/c5/b9/65d5ae2ee2b86a3992b9d10eeecc822c590e311fff4f25eed5eeb05b4cfc/rookiepy-0.5.6-cp310-none-win_amd64.whl", hash = "sha256:9ea86008705ff0dbbb1f74cf4847c71a6c6a848427797e0086401d9ef0117432", size = 2440815, upload-time = "2024-11-01T19:26:02.336Z" },
-    { url = "https://files.pythonhosted.org/packages/65/26/26bc3e2f519f14fd95f1cfeeef533c5c3f2bc356e01e8599e2cbfcba926f/rookiepy-0.5.6-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:265bb767edd2e4e47d3de534871f94181572236d2ae3925597f4ceba557a1525", size = 1403708, upload-time = "2024-11-01T19:26:04.704Z" },
-    { url = "https://files.pythonhosted.org/packages/cc/73/234f2c42b4f73b96e4b5722afae664c0870e69f14dd1408ca06a5015b3a2/rookiepy-0.5.6-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:89253f803fcd4fbfa9f06961af9bc59efeade69b377d0d7569f5591e2e9a1b0e", size = 1312473, upload-time = "2024-11-01T19:26:07.5Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/1c/30ed2342b68c3e1db1d362e2e05577318c2fdc580a41026ddf8d504cbb7f/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8d2dc1770c2d77f84961ea01dce6fab32f771fb84066c94f372a69d26f61981a", size = 2678396, upload-time = "2024-11-01T19:26:11.229Z" },
-    { url = "https://files.pythonhosted.org/packages/21/7a/5dd1f2b95180bd45b7c49eb15d189d16445255dbc192b4565c56bcd8b13d/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:8e69d53476ac66171823935f4fc93adf30556be37f77b775931f7c5a6d841260", size = 2583956, upload-time = "2024-11-01T19:26:13.962Z" },
-    { url = "https://files.pythonhosted.org/packages/87/56/d5f40ec7b29949db27c5d7da3c2f9f8d3b9fe5cb19341a899f0fa3c065b2/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1bd868521032ae24c44946906c88518fc9bb941befe8f6d7e1d8ff355f67b598", size = 2992867, upload-time = "2024-11-01T19:26:16.801Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/83/b382531f0e8cb3d827158f788a73b014050f5b0fd0f725a4f1994ec08311/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:f29a324c8b44a8b7bbef632001c76b1764d647164aaaf165b5496310f57328cc", size = 2870293, upload-time = "2024-11-01T19:26:19.499Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/49/43915b3e2b21b1455b6edacc71f27056c87b311325268465bf45f56393ca/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:dd95eb157acee95e3079f86a26cadf720f1d7ef4900735c8b5ff3a12c29f7880", size = 2979356, upload-time = "2024-11-01T19:26:21.891Z" },
-    { url = "https://files.pythonhosted.org/packages/00/92/e58af41f1847f746fbcda17dec454e1f249f931ca38ecb426ef93f315c3d/rookiepy-0.5.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:afb0fa7a973d5cf7833ddd46854d823dad70027457fff44f3161d0128d884e17", size = 2800937, upload-time = "2024-11-01T19:26:24.051Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/2e/5def20a848e855c1c10bf86a3e2db7008d242b4e117846a635ba6e006d75/rookiepy-0.5.6-cp311-none-win_amd64.whl", hash = "sha256:d1ba846c1d066530a32a77fc48b8e4197795151ab8940dea86f319849b544d5b", size = 2440816, upload-time = "2024-11-01T19:26:26.716Z" },
-    { url = "https://files.pythonhosted.org/packages/de/f3/70737571ed2fb7cd9e360b0ec6ce637c8894d712632f7e13b442f5286eef/rookiepy-0.5.6-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:96737f44eab781d5a010b71f7cd70ef43c6a6977dc1c54d019158b8fcfe57167", size = 1404166, upload-time = "2024-11-01T19:26:29.356Z" },
-    { url = "https://files.pythonhosted.org/packages/05/ae/9b69ca2821149cdb5061d6d3098a003affd7ca71b79166e98aed5d7beac8/rookiepy-0.5.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:37a8fc437f49672387d4a512df5522a724c4440442e64cad84680f1718f68c50", size = 1311996, upload-time = "2024-11-01T19:26:31.659Z" },
-    { url = "https://files.pythonhosted.org/packages/d7/29/3a7a44027d542c889f9605843d5c7f8df105eb0b79ad45750d7c0b18875b/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:22d0ece1ef732045f0482f72bc199cad81878154ceb62780c1e2f297c62df7e2", size = 2678772, upload-time = "2024-11-01T19:26:33.995Z" },
-    { url = "https://files.pythonhosted.org/packages/6b/62/fb0a8267604f11e7df565509834279b179eadb785e4d5e0b99cc096a27f4/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:307943d5780492c533bfeb6bc89d1a4b3e5b91b25af6fc1de280acc1e2ff16f6", size = 2583775, upload-time = "2024-11-01T19:26:36.665Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/0b/c1f85445a00107f97f488f5f14ac25f1994c8436c543263e43865380e553/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c607eef14f64ba284f3754449b6eb079aa8aaa66b443d0cdd2ec9aaa1814a8da", size = 2993272, upload-time = "2024-11-01T19:26:39.668Z" },
-    { url = "https://files.pythonhosted.org/packages/4c/b4/7ca3ab1860f38e1d79df051aad6e8826732f3dee77fd694f226e20e8389c/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:19f4b95436705b38e4a55cfa9f3d999bb4edc6a7f91ba13b1b90bb14b1796fdb", size = 2871214, upload-time = "2024-11-01T19:26:42.24Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/36/f45c3a833595285d790d91de20e64dff5ae1780a407033a018f0efccf852/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:95b881f2f3d93bb56808eaaf8ac9e0e5e3245dda837edab194834a3caaadcbe7", size = 2971688, upload-time = "2024-11-01T19:26:44.341Z" },
-    { url = "https://files.pythonhosted.org/packages/19/c4/59b5e0b6efcd919683578605bfac4bc112ac34de5a871094fe3efa58896b/rookiepy-0.5.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2c49a0b59bc0329928a369a479f9b1c16cbe3a2548dd8273b13515c7ced73449", size = 2801469, upload-time = "2024-11-01T19:26:47.997Z" },
-    { url = "https://files.pythonhosted.org/packages/e4/38/bba16936ece960db7ed10f8ebf05dc6228959511d3837020da1e9b7dcdf6/rookiepy-0.5.6-cp312-none-win_amd64.whl", hash = "sha256:6bb956c9f2dece5101aafc7a715bc672c5b30ddcaa55c9926d12440635d89cfc", size = 2441230, upload-time = "2024-11-01T19:26:50.486Z" },
-    { url = "https://files.pythonhosted.org/packages/a4/e1/2ea594498b77ba420213f67f096c8876523c352aaa23899279f290966418/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e5bc244f1f170be075a9c52c8f5581ea75b93b449154633194185ffb059e1399", size = 2678887, upload-time = "2024-11-01T19:27:50.796Z" },
-    { url = "https://files.pythonhosted.org/packages/fd/fa/0a2741fadd2585344ecf9a0045a864997dc4f463f83592e01ffdab9146bb/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:e934109fed936d35f0457016f180ef60e9cb65fd2c0cb5af4889ceb287701e63", size = 2583523, upload-time = "2024-11-01T19:27:53.351Z" },
-    { url = "https://files.pythonhosted.org/packages/45/65/e9338bc9a17eff505d7854d38ce05e20e5d372a3292cb6e5cd9b6eb118e1/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:9853429d6c1d05b3224fe6bae0790122998819e46e607b5e8b6899a8a72442eb", size = 2993909, upload-time = "2024-11-01T19:27:56.444Z" },
-    { url = "https://files.pythonhosted.org/packages/48/fa/150ba5a15e90ad6391d283a7923fee038ab350abfdeff52c1fd7280889df/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:ac5dbd9d2e292760a987a2de148e9553e0c1799caa66751bb103be4698021bd1", size = 2870849, upload-time = "2024-11-01T19:27:59.019Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/a4/b1d54a67105c04630d6748eccd2665fe8964dddf18ecd52970cf5aea8466/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:d83261b8843482dd229eba19423a6388bdd0c662b9fc6660f9258223d3e33003", size = 2979858, upload-time = "2024-11-01T19:28:01.484Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/20/4d5199f0e4e250730f09c5aad9b278a653415c7baf084a9cd1306e8db09e/rookiepy-0.5.6-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3daa59bbd9bff7c653ec5c8b13fdc6e7f20ca9b47c73ff8f8f0eee9b2549b067", size = 2801757, upload-time = "2024-11-01T19:28:03.902Z" },
+    { url = "https://files.pythonhosted.org/packages/59/5d/43b0f6db2e9788dd072b5ab073b834b0ce5644e32c805394b1af1e61673e/rookie_cookies-0.5.8-cp37-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4ab3da4050e74c544297995fd2e2a0e8754c11423f37c6f7564933fd30804bb7", size = 1465733, upload-time = "2026-08-11T17:47:48.416Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/10/43b788b35e2bb95c9d873d0f7807e6d2e862bc547f5cf504d9a7f3cd3727/rookie_cookies-0.5.8-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:70fe07936566927a87385915c101eec3f9d6aabca5f9460d38012237b2a09081", size = 1414392, upload-time = "2026-08-11T17:47:50.034Z" },
+    { url = "https://files.pythonhosted.org/packages/db/41/b9d7e01104adf2b322b546fdb010a9d0930be4d0fc4adb4f6d02de717e5d/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:db7acf123cfee39aaf3a1bfca09e36100742b1fed0e90d49a71f3a5154d6743e", size = 2751016, upload-time = "2026-08-11T17:47:51.435Z" },
+    { url = "https://files.pythonhosted.org/packages/22/b5/8525af76cf595ab3d74c3067d7cbb1f479c836d71360f04ebd66f6c5657f/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:f37e26c19b889650846ce0a362a5da8ea112055601873e3dbddcec9afc1d9605", size = 2657451, upload-time = "2026-08-11T17:47:53.43Z" },
+    { url = "https://files.pythonhosted.org/packages/16/5b/c68afcea0cb6ba1e2b0bef62289ec25a32a5f38c60daab82511a2353e6e1/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8cd4455624d7d26ac0ea5db72e4bb3d803b5bccf49c10fa8d542e13eb4a19739", size = 3095824, upload-time = "2026-08-11T17:47:55.101Z" },
+    { url = "https://files.pythonhosted.org/packages/76/df/ff1c37cd40f47312466ab04c441158edf5e46c096c572665a09b227331e3/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:ad7d395282c420ee9210a328334f8a1558aef0e37e40514cf686365702d8b6c5", size = 3119857, upload-time = "2026-08-11T17:47:56.689Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/ea/43baf9542849a985b9bb08fa3dcafd71bf12702dbff72fa6124435b20871/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:37802e55c58d05d94faccf992b669a3bbbcc0db409bd991e81bf62bafa2bf72c", size = 2835496, upload-time = "2026-08-11T17:47:58.201Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/8d/0d0162c34398a410df76334f862b11536ddd5547a5323572f58313909d54/rookie_cookies-0.5.8-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2ddacf937b6522ba8ccf6bdc8485754f61547fd03a0dc19c7be84539be782a28", size = 2828191, upload-time = "2026-08-11T17:47:59.603Z" },
+    { url = "https://files.pythonhosted.org/packages/85/97/381f9caa0a6ce8a32bba03a1193e871ee209368cebde054bbd98e7564988/rookie_cookies-0.5.8-cp37-abi3-win_amd64.whl", hash = "sha256:9aea49ac602fe64ab9468a98b17dff3c743dd357cfeb8fad579d90f403f6f88e", size = 2520474, upload-time = "2026-08-11T17:48:01.135Z" },
 ]
 
 [[package]]

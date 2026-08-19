@@ -35,7 +35,13 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 
-from .._app.errors import CATEGORY_HINTS, ErrorCategory, classify, did_you_mean_hint
+from .._app.errors import (
+    CATEGORY_HINTS,
+    UNCONFIRMED_HINT,
+    ErrorCategory,
+    classify,
+    did_you_mean_hint,
+)
 from .._redact import redact
 from ..exceptions import NotebookLMError
 
@@ -116,6 +122,13 @@ def tool_error_payload(exc: BaseException) -> dict[str, Any]:
     # them structurally AND replace the generic NOT_FOUND hint with a "Did you
     # mean …" one that names the titles inline — the FastMCP wire flattens this
     # payload to a string, so the inline titles are what a flat-string client sees.
+    # An UNCONFIRMED create (#2220) is forced to the RPC category, whose hint is
+    # None — so without this the client sees only an opaque message (often a bare
+    # connection error) and ``retriable: false``, with nothing saying a source may
+    # already exist. Surface the state structurally AND as the hint.
+    if getattr(exc, "unconfirmed", False):
+        payload["unconfirmed"] = True
+        hint = UNCONFIRMED_HINT
     candidates = list(getattr(exc, "candidates", ()) or ())
     if candidates:
         payload["candidates"] = candidates
@@ -134,12 +147,20 @@ def to_tool_error(exc: BaseException) -> ToolError:
     branch on the leading ``CODE:`` token and the ``retriable`` flag; the full
     payload (including ``hint``) is available via :func:`tool_error_payload` for
     structured consumers.
+
+    ``unconfirmed=true`` is flattened into that same parenthesis (#2220). Only
+    the *batch* result shapes carry the payload dict to the wire; a single tool
+    call is serialized through this ``ToolError`` message alone, so a marker
+    left in the dict would never reach the client for the ordinary
+    notebook/source create — exactly the caller most at risk of retrying a write
+    that may already exist.
     """
     payload = tool_error_payload(exc)
     suffix = f" hint: {payload['hint']}" if "hint" in payload else ""
+    unconfirmed = " unconfirmed=true" if payload.get("unconfirmed") else ""
     return ToolError(
         f"{payload['code']}: {payload['message']} "
-        f"(retriable={str(payload['retriable']).lower()}){suffix}"
+        f"(retriable={str(payload['retriable']).lower()}{unconfirmed}){suffix}"
     )
 
 

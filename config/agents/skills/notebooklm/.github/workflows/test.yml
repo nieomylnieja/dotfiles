@@ -91,7 +91,14 @@ jobs:
       run: uv run pre-commit run --all-files
 
     - name: Run type checking
-      run: uv run mypy src/notebooklm --ignore-missing-imports
+      # `scripts/_live_auth_scenarios` is included deliberately: those modules
+      # are the live-auth matrix cells that used to be `python -c` source
+      # strings (#2180). Type-checking them is most of the point of extracting
+      # them — they cannot be exercised without live Google credentials, so the
+      # checker is the only thing standing between a typo and a maintainer's
+      # release run. `--ignore-missing-imports` keeps this green on the lean
+      # install this job uses (no `mcp`/`server` extras).
+      run: uv run mypy src/notebooklm scripts/_live_auth_scenarios --ignore-missing-imports
 
     - name: Assert workflow permissions are scoped
       run: uv run python scripts/check_workflow_permissions.py
@@ -206,8 +213,8 @@ jobs:
         # `src/notebooklm/{mcp,server}/**` and `_curl_cffi_transport.py` real
         # coverage in coverage.json (no 0% blind spot) across the full
         # 3.10–3.14 × 3-OS matrix, which also proves curl_cffi's native wheels
-        # resolve on every OS/Python. `cookies` is deliberately excluded:
-        # rookiepy fails on Python 3.13/3.14 (see check_ci_install_parity.py).
+        # resolve on every OS/Python.
+        # `cookies` is now included since rookie-cookies supports all Python versions.
         #
         # Tradeoff: the deleted MCP/server jobs each enforced a *scoped*
         # `--cov=src/notebooklm/{mcp,server} --cov-fail-under=90`. mcp/server (and
@@ -217,7 +224,7 @@ jobs:
         # `[tool.notebooklm.per_file_coverage_floors]` if that backstop is
         # wanted back.
         attempt=1; max=3
-        until uv sync --frozen --extra browser --extra dev --extra markdown --extra mcp --extra server --extra impersonate; do
+        until uv sync --frozen --extra browser --extra dev --extra markdown --extra mcp --extra server --extra impersonate --extra cookies; do
           if [ "$attempt" -ge "$max" ]; then
             echo "::error::uv sync failed after $max attempts" >&2
             exit 1
@@ -234,6 +241,17 @@ jobs:
       # rather than fail. This makes a broken native import a hard error.
       shell: bash
       run: uv run python -c "import curl_cffi"
+
+    - name: Assert rookie-cookies imports (native wheel; no mock-only pass)
+      # The cookie behavior tests replace this optional native module with
+      # fakes. Import the installed wheel and pin the two entry points used by
+      # production so a broken ABI wheel or incompatible package API fails on
+      # every supported OS/Python pair.
+      shell: bash
+      run: >-
+        uv run python -c "import rookie_cookies;
+        assert callable(rookie_cookies.load);
+        assert callable(rookie_cookies.any_browser)"
 
     - name: Get Playwright version
       id: playwright-version
@@ -266,6 +284,12 @@ jobs:
           echo "::warning::Continuing so the non-browser test matrix can run."
         fi
 
+    - name: Run required external-reality probes
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      run: >-
+        uv run pytest tests/unit/cli/test_playwright_login_coverage.py
+        -m reality --require-reality
+
     - name: Assert cassettes are sanitized
       # Runs on all matrix entries (ubuntu, macos, windows × 5 Python versions).
       # An earlier bash-only gate was replaced by a portable Python invocation
@@ -289,7 +313,7 @@ jobs:
       # (Google auth tokens + API keys) without tripping on the intentional
       # placeholder content (``"Scrubbed ..."`` names, test emails) that fills
       # those fixtures.
-      run: uv run python tests/scripts/check_cassettes_clean.py --secrets-only --recursive tests/fixtures
+      run: uv run python tests/scripts/check_cassettes_clean.py --secrets-only --recursive tests/fixtures tests/unit/fixtures
 
     - name: Run tests with coverage
       # ``-n auto --dist loadgroup`` parallelizes the ~11k-test suite across the

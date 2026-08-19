@@ -6,16 +6,27 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from notebooklm.rpc.types import (
     BATCHEXECUTE_URL,
     QUERY_URL,
     ArtifactStatus,
     ArtifactTypeCode,
+    DiscoveryMode,
+    DriveSourceStatus,
+    GrpcStatusCode,
     RPCMethod,
+    SharePermission,
     SourceStatus,
     artifact_status_to_str,
+    discovery_mode_to_str,
+    drive_source_status_to_str,
     get_batchexecute_url,
     get_query_url,
+    normalize_grpc_status,
+    normalize_rpc_code,
+    share_permission_to_str,
     source_status_to_str,
 )
 
@@ -177,33 +188,52 @@ class TestArtifactTypeCode:
         assert isinstance(ArtifactTypeCode.AUDIO.value, int)
 
 
+#: The backend ``ArtifactStatus`` enum, code by code, as recovered in
+#: ``docs/mobile/enums.txt`` and corrected against live traces in #2127.
+#: ``(wire code, member name, public status string)``.
+_ARTIFACT_STATUS_TABLE = [
+    (0, "UNKNOWN", "unknown"),
+    (1, "PENDING", "pending"),
+    (2, "PROCESSING", "in_progress"),
+    (3, "COMPLETED", "completed"),
+    (4, "FAILED", "failed"),
+    (5, "SUGGESTED", "suggested"),
+    (6, "PENDING_REVIEW", "pending_review"),
+]
+
+
 class TestArtifactStatusToStr:
-    """Tests for artifact_status_to_str helper function."""
+    """Pin every backend ``ArtifactStatus`` code to its member and status string."""
 
-    def test_processing_status(self):
-        """Test status code 1 (PROCESSING) returns 'in_progress'."""
-        assert artifact_status_to_str(ArtifactStatus.PROCESSING) == "in_progress"
-        assert artifact_status_to_str(1) == "in_progress"
+    @pytest.mark.parametrize(
+        ("code", "member_name", "expected"),
+        _ARTIFACT_STATUS_TABLE,
+        ids=[name for _code, name, _s in _ARTIFACT_STATUS_TABLE],
+    )
+    def test_code_maps_to_member_and_string(self, code, member_name, expected):
+        member = ArtifactStatus(code)
+        assert member.name == member_name
+        assert artifact_status_to_str(code) == expected
+        assert artifact_status_to_str(member) == expected
 
-    def test_pending_status(self):
-        """Test status code 2 (PENDING) returns 'pending'."""
-        assert artifact_status_to_str(ArtifactStatus.PENDING) == "pending"
-        assert artifact_status_to_str(2) == "pending"
+    def test_enum_covers_exactly_the_backend_codes(self):
+        """No member is missing, and none was invented beyond the backend enum."""
+        assert {member.value for member in ArtifactStatus} == {
+            code for code, _name, _s in _ARTIFACT_STATUS_TABLE
+        }
 
-    def test_completed_status(self):
-        """Test status code 3 (COMPLETED) returns 'completed'."""
-        assert artifact_status_to_str(ArtifactStatus.COMPLETED) == "completed"
-        assert artifact_status_to_str(3) == "completed"
+    def test_transitional_codes_are_not_transposed(self):
+        """#2127 regression pin: 1 is queued, 2 is actively generating.
 
-    def test_failed_status(self):
-        """Test status code 4 (FAILED) returns 'failed'."""
-        assert artifact_status_to_str(ArtifactStatus.FAILED) == "failed"
-        assert artifact_status_to_str(4) == "failed"
+        Two independent live traces observed ``2 -> 3`` on a generating
+        artifact, and every recorded CREATE_ARTIFACT row starts at 1.
+        """
+        assert ArtifactStatus.PENDING == 1
+        assert ArtifactStatus.PROCESSING == 2
 
-    def test_unknown_status_codes(self):
-        """Test unknown status codes return 'unknown'."""
-        assert artifact_status_to_str(0) == "unknown"
-        assert artifact_status_to_str(5) == "unknown"
+    def test_unrecognized_status_codes_degrade_to_unknown(self):
+        """Codes outside the backend enum still fail closed rather than raise."""
+        assert artifact_status_to_str(7) == "unknown"
         assert artifact_status_to_str(99) == "unknown"
         assert artifact_status_to_str(-1) == "unknown"
 
@@ -213,6 +243,7 @@ class TestSourceStatusToStr:
 
     def test_all_status_codes(self):
         """Test all SourceStatus enum values map correctly."""
+        assert source_status_to_str(SourceStatus.UNKNOWN) == "unknown"
         assert source_status_to_str(SourceStatus.PROCESSING) == "processing"
         assert source_status_to_str(1) == "processing"
         assert source_status_to_str(SourceStatus.READY) == "ready"
@@ -222,13 +253,161 @@ class TestSourceStatusToStr:
         assert source_status_to_str(SourceStatus.PREPARING) == "preparing"
         assert source_status_to_str(5) == "preparing"
 
-    def test_gap_status_code(self):
-        """Test gap status code 4 returns 'unknown'."""
-        assert source_status_to_str(4) == "unknown"
-
     def test_unknown_status_codes(self):
         """Test unknown status codes return 'unknown'."""
         assert source_status_to_str(0) == "unknown"
+        assert source_status_to_str(4) == "unknown"
         assert source_status_to_str(6) == "unknown"
         assert source_status_to_str(99) == "unknown"
         assert source_status_to_str(-1) == "unknown"
+
+
+class TestSharePermissionToStr:
+    """Tests for the share_permission_to_str helper function."""
+
+    def test_all_permission_codes(self):
+        """Every displayable SharePermission member maps to its label."""
+        assert share_permission_to_str(SharePermission.OWNER) == "owner"
+        assert share_permission_to_str(1) == "owner"
+        assert share_permission_to_str(SharePermission.EDITOR) == "editor"
+        assert share_permission_to_str(2) == "editor"
+        assert share_permission_to_str(SharePermission.VIEWER) == "viewer"
+        assert share_permission_to_str(3) == "viewer"
+
+    def test_remove_sentinel_is_not_a_label(self):
+        """``_REMOVE`` is a write-only share-mutation sentinel, not a role.
+
+        It must never surface as a displayable permission, so it degrades like
+        any other unmapped code rather than leaking a private enum name.
+        """
+        assert share_permission_to_str(SharePermission._REMOVE) == "unknown"
+        assert share_permission_to_str(4) == "unknown"
+
+    def test_unknown_permission_codes(self):
+        """Unrecognized codes return 'unknown' (future-proofing)."""
+        assert share_permission_to_str(0) == "unknown"
+        assert share_permission_to_str(5) == "unknown"
+        assert share_permission_to_str(99) == "unknown"
+        assert share_permission_to_str(-1) == "unknown"
+
+
+class TestDriveSourceStatusToStr:
+    """Tests for the drive_source_status_to_str helper function (#2111)."""
+
+    def test_every_member_has_a_label(self):
+        """No member falls through to the "unknown" default by accident."""
+        assert {member: drive_source_status_to_str(member) for member in DriveSourceStatus} == {
+            DriveSourceStatus.UNKNOWN: "unknown",
+            DriveSourceStatus.INACCESSIBLE: "inaccessible",
+            DriveSourceStatus.SYNCING: "syncing",
+            DriveSourceStatus.ACTIVE: "active",
+            DriveSourceStatus.DELETED: "deleted",
+            DriveSourceStatus.GEN_AI_ACCESS_DENIED: "gen_ai_access_denied",
+        }
+
+    def test_accepts_raw_wire_codes(self):
+        """The backend UserDriveSourceStatus integers map without an enum wrap."""
+        assert drive_source_status_to_str(1) == "inaccessible"
+        assert drive_source_status_to_str(2) == "syncing"
+        assert drive_source_status_to_str(3) == "active"
+        assert drive_source_status_to_str(4) == "deleted"
+        assert drive_source_status_to_str(5) == "gen_ai_access_denied"
+
+    def test_unknown_codes_degrade(self):
+        """Unrecognized codes return 'unknown' (future-proofing)."""
+        # 0 is the backend UNSPECIFIED, deliberately unmodelled: the decoder
+        # normalizes it to None before a label is ever asked for.
+        assert drive_source_status_to_str(0) == "unknown"
+        assert drive_source_status_to_str(6) == "unknown"
+        assert drive_source_status_to_str(99) == "unknown"
+        assert drive_source_status_to_str(-2) == "unknown"
+
+
+class TestDiscoveryModeToStr:
+    """Tests for the discovery_mode_to_str helper function (#2122)."""
+
+    def test_every_member_has_a_label(self):
+        """No member falls through to the "unknown" default by accident."""
+        assert {member: discovery_mode_to_str(member) for member in DiscoveryMode} == {
+            DiscoveryMode.UNKNOWN: "unknown",
+            DiscoveryMode.DEFAULT_LLM_SEARCH: "default_llm_search",
+            DiscoveryMode.RAW_SEARCH: "raw_search",
+            DiscoveryMode.CURIOUS_SEARCH: "curious_search",
+            DiscoveryMode.CURIOUS_RAW_SEARCH: "curious_raw_search",
+            DiscoveryMode.DEEP_RESEARCH: "deep_research",
+            DiscoveryMode.LITE_LLM_SEARCH: "lite_llm_search",
+        }
+
+    def test_accepts_raw_wire_codes(self):
+        """The backend DiscoveryMode integers map without an enum wrap."""
+        assert discovery_mode_to_str(1) == "default_llm_search"
+        assert discovery_mode_to_str(5) == "deep_research"
+
+    def test_unknown_codes_degrade(self):
+        """Unrecognized codes return 'unknown' (future-proofing)."""
+        # 0 is the backend UNSPECIFIED, deliberately unmodelled: the decoder
+        # normalizes it to None before a label is ever asked for.
+        assert discovery_mode_to_str(0) == "unknown"
+        assert discovery_mode_to_str(7) == "unknown"
+        assert discovery_mode_to_str(-2) == "unknown"
+
+
+class TestGrpcStatusCode:
+    """The canonical gRPC status table and its two coercion helpers."""
+
+    def test_values_match_the_google_rpc_code_table(self):
+        # Wire contract: these numbers come from google.rpc.Code and are what
+        # the backend embeds at index 5 of a wrb.fr entry.
+        assert GrpcStatusCode.NOT_FOUND == 5
+        assert GrpcStatusCode.PERMISSION_DENIED == 7
+        assert GrpcStatusCode.OK == 0
+        assert GrpcStatusCode.UNAUTHENTICATED == 16
+
+    def test_is_a_separate_namespace_from_rpc_error_code(self):
+        """``NOT_FOUND`` means 5 here and 404 in the HTTP-style enum.
+
+        The two enums share member names, so anything comparing a wire status
+        has to say which namespace it means. Pins that they did not get merged.
+        """
+        from notebooklm.rpc.decoder import RPCErrorCode
+
+        assert RPCErrorCode.NOT_FOUND == 404
+        assert GrpcStatusCode.NOT_FOUND == 5
+
+    def test_decoder_status_labels_cover_every_member(self):
+        """Every status has wording; a new member cannot go unlabelled."""
+        from notebooklm.rpc.decoder import _GRPC_STATUS_MESSAGES
+
+        assert set(_GRPC_STATUS_MESSAGES) == {int(code) for code in GrpcStatusCode}
+
+    def test_normalize_grpc_status_accepts_both_wire_forms(self):
+        assert normalize_grpc_status(5) is GrpcStatusCode.NOT_FOUND
+        assert normalize_grpc_status("5") is GrpcStatusCode.NOT_FOUND
+        assert normalize_grpc_status(7) is GrpcStatusCode.PERMISSION_DENIED
+
+    def test_normalize_grpc_status_rejects_non_statuses(self):
+        # rpc_code also carries non-numeric labels and may be absent entirely;
+        # neither may raise, and neither is a status.
+        assert normalize_grpc_status(None) is None
+        assert normalize_grpc_status("USER_DISPLAYABLE_ERROR") is None
+        assert normalize_grpc_status(999) is None
+        # An HTTP status is numeric but is not a gRPC code.
+        assert normalize_grpc_status(500) is None
+
+    def test_bool_is_not_a_status(self):
+        """``True`` must not normalize to CANCELLED (1) via the int subclass."""
+        assert normalize_grpc_status(True) is None
+        assert normalize_rpc_code(True) is None
+
+    def test_normalize_rpc_code_keeps_http_statuses(self):
+        """The wider helper passes 5xx through — the transient check needs it.
+
+        Narrowing this one to the gRPC table would silently drop every HTTP
+        status to ``None`` and disable the ``500 <= code < 600`` branch in the
+        neutral error classifier.
+        """
+        assert normalize_rpc_code(500) == 500
+        assert normalize_rpc_code("503") == 503
+        assert normalize_rpc_code(5) == 5
+        assert normalize_rpc_code(None) is None
+        assert normalize_rpc_code("USER_DISPLAYABLE_ERROR") is None

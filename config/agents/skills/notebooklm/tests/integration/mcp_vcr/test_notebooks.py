@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import pytest
 
+from notebooklm.types import SharePermission
 from tests.integration.conftest import skip_no_cassettes
 from tests.vcr_config import notebooklm_vcr
 
@@ -40,6 +41,31 @@ CREATE_TITLE = "VCR Test Notebook"
 DESCRIBE_NOTEBOOK_ID = "167481cd-23a3-4331-9a45-c8948900bf91"  # notebooks_get_description.yaml
 RENAME_NOTEBOOK_ID = "f66923f0-1df4-4ffe-9822-3ed63c558b1c"  # notebooks_rename.yaml
 DELETE_NOTEBOOK_ID = "fc9cc125-fc20-439b-9f3d-d801c5b0de38"  # notebooks_delete.yaml
+
+
+@pytest.mark.asyncio
+@notebooklm_vcr.use_cassette("notebooks_list.yaml")
+async def test_mcp_notebook_list_crosses_adapter_to_client_boundary() -> None:
+    """A representative MCP composition path reaches the real client and decoder.
+
+    This is driven through the in-memory FastMCP client and a real
+    ``NotebookLMClient``. VCR only replaces HTTP, so the test fails if the MCP
+    tool skips the client namespace, sends the wrong RPC, or fabricates output.
+    The existing cassette keeps the check deterministic and credential-free.
+    """
+    async with build_mcp_client() as mcp_client:
+        result = await mcp_client.call_tool("notebook_list", {})
+
+    structured = result.structured_content
+    assert isinstance(structured, dict)
+    notebooks = structured["notebooks"]
+    assert isinstance(notebooks, list) and notebooks
+    assert isinstance(notebooks[0], dict)
+    assert notebooks[0]["id"] == "f66923f0-1df4-4ffe-9822-3ed63c558b1c"
+    assert (
+        notebooks[0]["title"]
+        == "GENERATION: Claude Code Deep Dive: Skills, Agents, Commands & Plugins"
+    )
 
 
 @pytest.mark.asyncio
@@ -68,7 +94,7 @@ async def test_mcp_notebook_create_over_vcr() -> None:
     # ``id`` renamed to ``notebook_id``. Asserting the exact set (not just
     # ``in`` checks) is the load-bearing guard: it catches BOTH a regression
     # back to the nested ``{"notebook": ...}`` shape AND a silently dropped
-    # field such as ``modified_at`` ("no metadata is dropped"). A new Notebook
+    # field such as ``last_viewed_at`` ("no metadata is dropped"). A new Notebook
     # field will fail this assertion by design, forcing a conscious wire-shape
     # decision.
     assert set(structured) == {
@@ -79,13 +105,25 @@ async def test_mcp_notebook_create_over_vcr() -> None:
         "sources_count",
         "is_owner",
         "modified_at",
+        "role",
+        "last_viewed_at",
+        # ``role_label`` is not a dataclass field — it is the agent-readable
+        # projection ``_app.views.notebook_view`` adds next to the raw code.
+        "role_label",
     }
-    # #1699: CREATE_NOTEBOOK returns null created_at/modified_at; the tool's
+    # #1699: CREATE_NOTEBOOK returns null created_at/last_viewed_at; the tool's
     # GET_NOTEBOOK re-read populates them. Asserting NON-null is the load-bearing
     # guard that the enrichment actually ran — a regression to the create result
     # (or a silent fallback) would leave these null and fail here.
     assert structured["created_at"] is not None, "created_at should be populated by the re-read"
-    assert structured["modified_at"] is not None, "modified_at should be populated by the re-read"
+    assert structured["last_viewed_at"] is not None, (
+        "last_viewed_at should be populated by the re-read"
+    )
+    # The deprecated ``modified_at`` alias is still emitted, same value (#2126).
+    assert structured["modified_at"] == structured["last_viewed_at"]
+    # The creating account owns what it just created (#2125).
+    assert structured["role"] == SharePermission.OWNER.value
+    assert structured["role_label"] == "owner"
 
 
 @pytest.mark.asyncio

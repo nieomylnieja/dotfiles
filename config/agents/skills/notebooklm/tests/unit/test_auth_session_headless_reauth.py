@@ -19,6 +19,7 @@ network is touched.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -26,6 +27,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from notebooklm._auth.cookie_types import CookieJar
 from notebooklm._auth.headless_reauth import HeadlessReauthResult, HeadlessReauthStatus
 from notebooklm._auth.session import refresh_auth_session
 from notebooklm._runtime.auth import AuthRefreshCoordinator
@@ -33,6 +35,32 @@ from notebooklm.auth import AuthTokens
 
 REFRESH_HTML = '"SNlM0e":"new_csrf_token_123" "FdrFJe":"new_session_id_456"'
 LOGIN_REDIRECT = "https://accounts.google.com/signin/v2/identifier"
+
+
+def _write_recovered_storage(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "cookies": [
+                    {
+                        "name": "SID",
+                        "value": "fresh-sid",
+                        "domain": ".google.com",
+                        "path": "/",
+                    },
+                    {
+                        "name": "__Secure-1PSIDTS",
+                        "value": "fresh-ts",
+                        "domain": ".google.com",
+                        "path": "/",
+                        "secure": True,
+                    },
+                ],
+                "origins": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _auth(storage_path: Path | None = None) -> AuthTokens:
@@ -69,8 +97,37 @@ class _RecordingAuthCoord:
         auth.csrf_token = csrf
         auth.session_id = session_id
 
+    async def install_profile_session(
+        self,
+        *,
+        auth: AuthTokens,
+        target_cookie_jar: httpx.Cookies,
+        source_cookie_jar: httpx.Cookies,
+        expected_cookie_jar: CookieJar,
+        expected_authuser: int,
+        expected_account_email: str | None,
+        expected_generation: int,
+        authuser: int,
+        account_email: str | None,
+    ) -> bool | None:
+        return auth._replace_profile_session(
+            target_cookie_jar=target_cookie_jar,
+            source_cookie_jar=source_cookie_jar,
+            expected_cookie_jar=expected_cookie_jar,
+            expected_authuser=expected_authuser,
+            expected_account_email=expected_account_email,
+            expected_generation=expected_generation,
+            authuser=authuser,
+            account_email=account_email,
+        )
+
     def update_auth_headers(self, *, auth: AuthTokens, kernel: Any) -> None:
         self.ops.append("headers")
+
+
+class _RecordingCookiePersistence:
+    async def _adopt_reloaded_baseline(self, path: Path, expected: Any, *, to_thread: Any) -> None:
+        del path, expected, to_thread
 
 
 def _bundle(http_client: httpx.AsyncClient, auth: AuthTokens) -> dict[str, Any]:
@@ -79,7 +136,7 @@ def _bundle(http_client: httpx.AsyncClient, auth: AuthTokens) -> dict[str, Any]:
         "kernel": _RecordingKernel(http_client),
         "auth_coord": _RecordingAuthCoord(),
         "lifecycle": _RecordingLifecycle(),
-        "cookie_persistence": object(),
+        "cookie_persistence": _RecordingCookiePersistence(),
     }
 
 
@@ -195,7 +252,7 @@ async def test_dead_cookies_optin_success_retries_and_refreshes(
     monkeypatch, tmp_path: Path
 ) -> None:
     storage = tmp_path / "storage_state.json"
-    storage.write_text('{"cookies": [], "origins": []}', encoding="utf-8")
+    _write_recovered_storage(storage)
     state: dict[str, int] = {}
     import notebooklm._auth.headless_reauth as hr
 
@@ -203,16 +260,10 @@ async def test_dead_cookies_optin_success_retries_and_refreshes(
         # Simulate the headless re-mint "healing" the dead-cookie homepage.
         state["healed"] = 1
         assert kwargs["storage_path"] == storage
+        _write_recovered_storage(storage)
         return HeadlessReauthResult(HeadlessReauthStatus.SUCCESS, "ok", storage_path=storage)
 
     monkeypatch.setattr(hr, "attempt_headless_reauth", _fake_attempt)
-    # Avoid touching the real cookie reload (no real cookies on disk).
-    # ``_try_headless_reauth`` imports this function-locally from ``.cookies``,
-    # so patch the owning module, not ``session_mod``.
-    import notebooklm._auth.cookies as cookies_mod
-
-    monkeypatch.setattr(cookies_mod, "build_httpx_cookies_from_storage", lambda p: httpx.Cookies())
-
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(_redirect_then_ok_handler(state)),
         follow_redirects=True,
@@ -241,7 +292,7 @@ async def test_concurrent_refreshes_coalesce_to_one_browser(monkeypatch, tmp_pat
     headless browser drive.
     """
     storage = tmp_path / "storage_state.json"
-    storage.write_text('{"cookies": [], "origins": []}', encoding="utf-8")
+    _write_recovered_storage(storage)
     state: dict[str, int] = {}
     drives = {"count": 0}
     import notebooklm._auth.headless_reauth as hr
@@ -249,13 +300,10 @@ async def test_concurrent_refreshes_coalesce_to_one_browser(monkeypatch, tmp_pat
     def _fake_attempt(**kwargs):
         drives["count"] += 1
         state["healed"] = 1
+        _write_recovered_storage(storage)
         return HeadlessReauthResult(HeadlessReauthStatus.SUCCESS, "ok", storage_path=storage)
 
     monkeypatch.setattr(hr, "attempt_headless_reauth", _fake_attempt)
-    import notebooklm._auth.cookies as cookies_mod
-
-    monkeypatch.setattr(cookies_mod, "build_httpx_cookies_from_storage", lambda p: httpx.Cookies())
-
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(_redirect_then_ok_handler(state)),
         follow_redirects=True,

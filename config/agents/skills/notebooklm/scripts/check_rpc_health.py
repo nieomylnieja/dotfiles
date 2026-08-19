@@ -85,6 +85,7 @@ from uuid import uuid4
 import httpx
 
 from notebooklm._artifact.payloads import build_retry_artifact_params
+from notebooklm._auth.tokens import LoadPolicy, _load_stored_auth
 from notebooklm._chat.wire import (
     build_streaming_chat_request,
     parse_streaming_chat_response,
@@ -341,8 +342,8 @@ def describe_cookie_scopes(auth: AuthTokens) -> str:
 async def load_auth(storage_path: Path | None) -> AuthTokens:
     """Load auth from environment or storage file, preserving cookie domains.
 
-    Routes through :meth:`AuthTokens.from_storage` — the same loader the CLI
-    and library use — which handles:
+    Routes through the storage owner underlying the managed client loader,
+    which handles:
 
     - the profile storage file (what CI and local dev both use) and the
       short-lived ``NOTEBOOKLM_AUTH_JSON`` env var, via ``storage_path``
@@ -367,7 +368,13 @@ async def load_auth(storage_path: Path | None) -> AuthTokens:
     old ``fetch_tokens`` call.
     """
     try:
-        return await AuthTokens.from_storage(storage_path)
+        loaded = await _load_stored_auth(
+            path=storage_path,
+            profile=None,
+            policy=LoadPolicy(),
+            auth_type=AuthTokens,
+        )
+        return loaded.auth
     except FileNotFoundError as e:
         # ``e`` names the storage path that was actually checked — under
         # profiles that is the only way to see which one the script resolved.

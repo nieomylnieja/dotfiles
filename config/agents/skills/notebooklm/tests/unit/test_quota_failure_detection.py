@@ -9,7 +9,29 @@ Root causes:
    from the list (the API removes quota-rejected artifacts).
 2. wait_for_completion() had no mechanism to detect a sustained run of
    "artifact not found" responses and would spin until timeout.
-3. Failed artifacts had no error message surfaced to the caller.
+3. A quota rejection at generation time had to fail fast instead of polling
+   to a timeout.
+
+Where a failure reason does and does not come from (#2134 / #2188 / #2193)
+--------------------------------------------------------------------------
+Root cause 3 used to read "failed artifacts had no error message surfaced to
+the caller", and the tests below tried to surface one from the artifact row.
+No such field exists. ``Artifact`` in ``docs/mobile/schema.proto`` has no error
+or failure field at all: index 3 is ``sources`` and index 5 is
+``isPubliclyReadable``, and #2134 deleted the reader that pretended otherwise.
+
+A reason exists in exactly one place — the ``google.rpc.Status`` on the
+``CreateArtifact`` RPC at generation time, which is why ``RETRY_ARTIFACT``
+exists at all: the resource remembers nothing, so retry is the only affordance
+left. Two consequences are pinned here:
+
+* ``TestRejectionAtGenerationTime`` — a rejected ``CreateArtifact`` reaches the
+  ``generate_*`` caller as an exception, through the REAL decoder, so #239's
+  fail-fast guarantee has a regression test again.
+* ``TestLateFailureHasNoReason`` — an artifact accepted at create time that
+  only later flips to FAILED carries ``error=None`` forever, and the user-facing
+  string comes from the generic ``"{Type} generation failed"`` fallback in
+  ``_app/generate_retry.py``.
 """
 
 from contextlib import asynccontextmanager
@@ -17,23 +39,38 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from notebooklm._app.generate_retry import generation_outcome_from_status
 from notebooklm._artifacts import ArtifactsAPI
-from notebooklm.rpc.types import ArtifactStatus
+from notebooklm.exceptions import ArtifactFeatureUnavailableError, RateLimitError, RPCError
+from notebooklm.rpc.decoder import decode_response, extract_rpc_result
+from notebooklm.rpc.types import ArtifactStatus, RPCMethod
 from notebooklm.types import GenerationStatus
+from tests._fixtures.rpc_error_frames import (
+    CREATE_ARTIFACT_METHOD_ID,
+    LIVE_CREATE_ARTIFACT_INVALID_ARGUMENT_BODY,
+    LIVE_RETRY_ARTIFACT_NOT_FOUND_BODY,
+    LIVE_REVISE_SLIDE_NOT_FOUND_BODY,
+    raw_batchexecute_body,
+    user_displayable_rejection_chunks,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_api():
-    """Return an ArtifactsAPI with mocked runtime + mind-map services."""
+def _make_api(rpc_call: AsyncMock | None = None):
+    """Return an ArtifactsAPI with mocked runtime + mind-map services.
+
+    ``rpc_call`` overrides the RPC seam so a test can answer with a real
+    decoded response instead of a bare mock return value.
+    """
     from notebooklm._mind_map import NoteBackedMindMapService
     from notebooklm._note_service import NoteService
     from tests._fixtures.fake_core import make_fake_core
 
     core = make_fake_core(
-        rpc_call=AsyncMock(),
+        rpc_call=rpc_call if rpc_call is not None else AsyncMock(),
         operation_scope=MagicMock(side_effect=lambda _label: _noop_operation_scope()),
     )
     # ``ArtifactsAPI`` constructs its own ``PollRegistry`` internally; the fake
@@ -57,10 +94,9 @@ async def _noop_operation_scope():
     yield None
 
 
-def _art(artifact_id: str, status: int, artifact_type: int = 1, error_at_3: str | None = None):
-    """Build a minimal raw artifact list entry."""
-    entry = [artifact_id, "Title", artifact_type, error_at_3, status]
-    return entry
+def _art(artifact_id: str, status: int, artifact_type: int = 1, sources: list | None = None):
+    """Build a constructed artifact row; index 3 models ``Artifact.sources`` (#2134)."""
+    return [artifact_id, "Title", artifact_type, sources, status]
 
 
 # ---------------------------------------------------------------------------
@@ -129,66 +165,6 @@ class TestPollStatusNotFound:
 
         assert result.status == "failed"
         assert result.is_failed is True
-
-
-# ---------------------------------------------------------------------------
-# poll_status: extracts error message from failed artifacts
-# ---------------------------------------------------------------------------
-
-
-class TestPollStatusErrorExtraction:
-    """poll_status surfaces error details from failed artifacts."""
-
-    @pytest.mark.asyncio
-    async def test_error_string_at_index_3_is_surfaced(self):
-        """When art[3] is a non-empty string, it becomes error in GenerationStatus."""
-        api = _make_api()
-        api._list_raw = AsyncMock(
-            return_value=[_art("task_abc", ArtifactStatus.FAILED, error_at_3="Daily limit reached")]
-        )
-
-        result = await api.poll_status("nb1", "task_abc")
-
-        assert result.status == "failed"
-        assert result.error == "Daily limit reached"
-
-    @pytest.mark.asyncio
-    async def test_no_error_at_index_3_error_is_none(self):
-        """When art[3] is None, error field remains None."""
-        api = _make_api()
-        api._list_raw = AsyncMock(return_value=[_art("task_abc", ArtifactStatus.FAILED)])
-
-        result = await api.poll_status("nb1", "task_abc")
-
-        assert result.status == "failed"
-        assert result.error is None
-
-    @pytest.mark.asyncio
-    async def test_art5_fallback_end_to_end(self):
-        """Error in art[5] is surfaced through poll_status (end-to-end, not just helper)."""
-        api = _make_api()
-        # art[3] is None, error is in art[5] nested list
-        art = ["task_abc", "Title", 1, None, ArtifactStatus.FAILED, ["Veo daily limit hit"]]
-        api._list_raw = AsyncMock(return_value=[art])
-
-        result = await api.poll_status("nb1", "task_abc")
-
-        assert result.status == "failed"
-        assert result.error == "Veo daily limit hit"
-
-    @pytest.mark.asyncio
-    async def test_error_extraction_only_for_failed_status(self):
-        """Error extraction is skipped for non-failed statuses."""
-        api = _make_api()
-        # art[3] has content, but status is PROCESSING — should not surface error
-        art = _art("task_abc", ArtifactStatus.PROCESSING, error_at_3="some stray text")
-        api._list_raw = AsyncMock(return_value=[art])
-
-        result = await api.poll_status("nb1", "task_abc")
-
-        # Status is in_progress; error should not be set
-        assert result.status == "in_progress"
-        assert result.error is None
 
 
 # ---------------------------------------------------------------------------
@@ -586,47 +562,206 @@ class TestGenerationStatusIsRemoved:
 
 
 # ---------------------------------------------------------------------------
-# _extract_artifact_error helper
+# #239 / #2193: a rejection at generation time reaches the caller
 # ---------------------------------------------------------------------------
 
 
-class TestExtractArtifactError:
-    """Unit tests for the static _extract_artifact_error helper."""
+class TestRejectionAtGenerationTime:
+    """A ``CreateArtifact`` rejection fails fast, through the real decoder.
 
-    def test_string_at_index_3_is_returned(self):
-        art = ["id", "title", 1, "Quota exceeded", 4]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result == "Quota exceeded"
+    These tests deliberately do **not** stub the decode step. The rejection is
+    handed to the production decoder as the server sent it, and the assertion
+    is on what ``generate_audio`` raises — the chain decoder → ``rpc_call`` →
+    ``ArtifactGenerationService`` → ``ArtifactsAPI`` is exactly where the #239
+    regression lived, and stubbing the decoder would have hidden it.
+    """
 
-    def test_none_at_index_3_returns_none(self):
-        art = ["id", "title", 1, None, 4]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result is None
+    @staticmethod
+    def _api_answering_with(decoded):
+        """Build an API whose RPC seam runs ``decoded(method_id)`` for real."""
 
-    def test_empty_string_at_index_3_returns_none(self):
-        art = ["id", "title", 1, "   ", 4]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result is None
+        async def rpc_call(method, *_args, **kwargs):
+            method_id = getattr(method, "value", method)
+            return decoded(method_id, **kwargs)
 
-    def test_short_artifact_no_index_3_returns_none(self):
-        art = ["id", "title"]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result is None
+        return _make_api(rpc_call=AsyncMock(side_effect=rpc_call))
 
-    def test_nested_string_at_index_5_is_returned(self):
-        """Error text in art[5] as nested list is extracted."""
-        art = ["id", "title", 1, None, 4, ["Daily cinematic limit reached"]]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result == "Daily cinematic limit reached"
+    @pytest.mark.asyncio
+    async def test_quota_rejection_raises_rate_limit_error_to_the_caller(self):
+        """#239: a UserDisplayableError rejection raises before any polling."""
+        api = self._api_answering_with(
+            lambda method_id, **_kw: extract_rpc_result(
+                user_displayable_rejection_chunks(method_id), method_id
+            )
+        )
 
-    def test_deeply_nested_string_at_index_5(self):
-        """Error text in art[5] as doubly nested list is extracted."""
-        art = ["id", "title", 1, None, 4, [["Veo quota exhausted"]]]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result == "Veo quota exhausted"
+        with pytest.raises(RateLimitError) as exc_info:
+            await api.generate_audio("nb1")
 
-    def test_index_3_takes_priority_over_index_5(self):
-        """When both art[3] and art[5] contain strings, art[3] wins."""
-        art = ["id", "title", 1, "Primary error", 4, ["Secondary error"]]
-        result = ArtifactsAPI._extract_artifact_error(art)
-        assert result == "Primary error"
+        assert exc_info.value.rpc_code == "USER_DISPLAYABLE_ERROR"
+        message = str(exc_info.value)
+        # The condition and the remedy are both named. Both halves of this
+        # sentence are CLIENT-authored: the recorded rejection carries no
+        # server text at all (see USER_DISPLAYABLE_RATE_LIMIT_STATUS).
+        assert "quota" in message.lower()
+        assert "retry" in message.lower()
+        # The upstream gRPC label is kept for diagnosis; the raw code is not.
+        assert "Resource exhausted" in message
+
+    @pytest.mark.asyncio
+    async def test_quota_rejection_reaches_the_caller_only_from_create_artifact(self):
+        """The rejection travels on ``CREATE_ARTIFACT``, not a later poll."""
+        seen: list[str] = []
+
+        def decoded(method_id, **_kw):
+            seen.append(method_id)
+            return extract_rpc_result(user_displayable_rejection_chunks(method_id), method_id)
+
+        api = self._api_answering_with(decoded)
+
+        with pytest.raises(RateLimitError):
+            await api.generate_audio("nb1")
+
+        assert seen == [RPCMethod.CREATE_ARTIFACT.value]
+
+    @pytest.mark.asyncio
+    async def test_live_captured_invalid_argument_rejection_reports_the_server_status(self):
+        """The server's own status survives to the caller (#2188).
+
+        Drives the verbatim body a live ``CREATE_ARTIFACT`` returned for an
+        Audio Overview on a source-less notebook (2026-08-13) through
+        ``decode_response``. Before #2188 the ``allow_null=True`` decode
+        swallowed the ``[3]`` and the caller reported "Audio generation is
+        unavailable" — a client-invented reason that contradicted the one the
+        server actually gave.
+        """
+        api = self._api_answering_with(
+            lambda method_id, **kwargs: decode_response(
+                LIVE_CREATE_ARTIFACT_INVALID_ARGUMENT_BODY,
+                method_id,
+                allow_null=kwargs.get("allow_null", False),
+                raise_on_null_status=kwargs.get("raise_on_null_status", False),
+            )
+        )
+
+        with pytest.raises(RPCError) as exc_info:
+            await api.generate_audio("nb1")
+
+        assert not isinstance(exc_info.value, ArtifactFeatureUnavailableError)
+        assert exc_info.value.rpc_code == 3
+        assert "invalid argument" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("body", "call"),
+        [
+            pytest.param(
+                LIVE_RETRY_ARTIFACT_NOT_FOUND_BODY,
+                lambda api: api.retry_failed("nb1", "no-such-artifact-id"),
+                id="retry_artifact",
+            ),
+            pytest.param(
+                LIVE_REVISE_SLIDE_NOT_FOUND_BODY,
+                lambda api: api.revise_slide("nb1", "no-such-artifact-id", 0, "tweak it"),
+                id="revise_slide",
+            ),
+        ],
+    )
+    async def test_retry_and_revise_also_report_the_server_status(self, body, call):
+        """The other two opt-in call sites are evidence-backed too (#2188).
+
+        Live probe 2026-08-13: both answer ``[5]`` NOT_FOUND for an unknown
+        artifact id. Before the opt-in each reported "… generation is
+        unavailable", which says nothing about the id being wrong.
+        """
+        api = self._api_answering_with(
+            lambda method_id, **kwargs: decode_response(
+                body,
+                method_id,
+                allow_null=kwargs.get("allow_null", False),
+                raise_on_null_status=kwargs.get("raise_on_null_status", False),
+            )
+        )
+
+        with pytest.raises(RPCError) as exc_info:
+            await call(api)
+
+        assert not isinstance(exc_info.value, ArtifactFeatureUnavailableError)
+        assert exc_info.value.rpc_code == 5
+        assert "not found" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_null_result_without_a_status_still_reports_feature_unavailable(self):
+        """A reasonless null keeps its existing "unavailable" surface.
+
+        The server sometimes answers a create with nothing at all — no payload
+        and no status. There is no reason to report there, so the client's own
+        wording remains the honest ceiling and must not regress into a bare
+        decode error.
+        """
+        body = raw_batchexecute_body(
+            [["wrb.fr", CREATE_ARTIFACT_METHOD_ID, None, None, None, None, "generic"]]
+        )
+        api = self._api_answering_with(
+            lambda method_id, **kwargs: decode_response(
+                body,
+                method_id,
+                allow_null=kwargs.get("allow_null", False),
+                raise_on_null_status=kwargs.get("raise_on_null_status", False),
+            )
+        )
+
+        with pytest.raises(ArtifactFeatureUnavailableError) as exc_info:
+            await api.generate_audio("nb1")
+
+        assert exc_info.value.artifact_type == "audio"
+
+
+# ---------------------------------------------------------------------------
+# #2193: an artifact that fails LATE carries no reason — pin the fallback
+# ---------------------------------------------------------------------------
+
+
+class TestLateFailureHasNoReason:
+    """An accepted-then-FAILED artifact has no reason, and the CLI says so."""
+
+    @pytest.mark.asyncio
+    async def test_failed_row_polls_to_status_failed_with_no_error(self):
+        """``Artifact`` has no failure field, so ``error`` stays ``None``."""
+        api = _make_api()
+        api._list_raw = AsyncMock(return_value=[_art("task_abc", ArtifactStatus.FAILED)])
+
+        status = await api.poll_status("nb1", "task_abc")
+
+        assert status.is_failed is True
+        assert status.error is None
+        assert status.error_code is None
+
+    @pytest.mark.asyncio
+    async def test_late_failure_renders_the_generic_fallback_message(self):
+        """The reasonless poll result still gives the user *something*.
+
+        Links a late-FAILED poll to ``generate_retry.generation_outcome_from_status``,
+        whose ``or f"{artifact_type.title()} generation failed"`` fallback is the
+        only thing standing between the user and an empty error string.
+        """
+        api = _make_api()
+        api._list_raw = AsyncMock(return_value=[_art("task_abc", ArtifactStatus.FAILED)])
+
+        status = await api.poll_status("nb1", "task_abc")
+        outcome = generation_outcome_from_status(status, "audio")
+
+        assert outcome.status == "failed"
+        assert outcome.error == "Audio generation failed"
+
+    def test_a_server_reason_would_win_over_the_fallback(self):
+        """The fallback is a fallback: a real reason is preferred if one exists.
+
+        Nothing on the artifact resource can populate ``error`` today (that is
+        the point of the test above), so this pins the *precedence* rather than
+        a reachable path — if a future RPC is ever shown to carry a reason,
+        wiring it into ``GenerationStatus.error`` is all that is required.
+        """
+        status = GenerationStatus(task_id="x", status="failed", error="Daily limit reached")
+
+        assert generation_outcome_from_status(status, "audio").error == "Daily limit reached"

@@ -28,6 +28,7 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import json
+import re
 import warnings
 from pathlib import Path
 from typing import Any, cast
@@ -36,6 +37,8 @@ import pytest
 
 from notebooklm._app.serialize import to_jsonable
 from notebooklm._artifact.payloads import (
+    DEFAULT_QUIZ_DIFFICULTY,
+    DEFAULT_QUIZ_QUANTITY,
     build_audio_artifact_params,
     build_cinematic_video_artifact_params,
     build_data_table_artifact_params,
@@ -65,6 +68,7 @@ from notebooklm.exceptions import (
     RateLimitError,
     RPCError,
     UnknownRPCMethodError,
+    ValidationError,
 )
 from notebooklm.rpc.decoder import (
     collect_rpc_ids,
@@ -623,7 +627,8 @@ def _expected_rpc_envelope(method: RPCMethod, params: list[Any]) -> list[Any]:
                     None,
                     [
                         None,
-                        [1, None, "Use short prompts", None, None, None, [1, 2]],
+                        # [quantity, difficulty] — asymmetric on purpose (#2116).
+                        [1, None, "Use short prompts", None, None, None, [2, 1]],
                     ],
                 ],
             ],
@@ -825,6 +830,124 @@ def test_artifact_payload_builders_match_golden_rpc_envelopes(
 
     assert params == expected
     assert encode_rpc_request(method, params) == _expected_rpc_envelope(method, expected)
+
+
+def test_quiz_and_flashcards_agree_on_option_order() -> None:
+    """Both builders emit ``[quantity, difficulty]`` — they must not drift apart.
+
+    The two option pairs live at different slots (quiz ``[7]``, flashcards
+    ``[6]``) of otherwise near-identical payloads, which is exactly how the
+    flashcards builder came to be transposed (#2116) while the quiz one stayed
+    correct. Asserting them side by side with an asymmetric fixture makes any
+    future transposition of either builder fail.
+    """
+    kwargs: dict[str, Any] = {
+        "instructions": None,
+        "quantity": QuizQuantity.FEWER,
+        "difficulty": QuizDifficulty.HARD,
+    }
+    quiz = build_quiz_artifact_params("nb_payload", ["src_alpha"], **kwargs)
+    flashcards = build_flashcards_artifact_params("nb_payload", ["src_alpha"], **kwargs)
+
+    expected = [QuizQuantity.FEWER.value, QuizDifficulty.HARD.value]
+    assert expected == [1, 3]
+    assert quiz[2][9][1][7] == expected
+    assert flashcards[2][9][1][6] == expected
+
+
+def test_quiz_quantity_more_is_distinct_on_the_wire() -> None:
+    """``MORE`` emits 3, not the ``STANDARD`` value it used to alias (#2117)."""
+    assert QuizQuantity.MORE.value == 3
+    assert QuizQuantity.MORE is not QuizQuantity.STANDARD
+
+    quiz = build_quiz_artifact_params(
+        "nb_payload",
+        ["src_alpha"],
+        instructions=None,
+        quantity=QuizQuantity.MORE,
+        difficulty=QuizDifficulty.EASY,
+    )
+    flashcards = build_flashcards_artifact_params(
+        "nb_payload",
+        ["src_alpha"],
+        instructions=None,
+        quantity=QuizQuantity.MORE,
+        difficulty=QuizDifficulty.EASY,
+    )
+
+    assert quiz[2][9][1][7] == [3, 1]
+    assert flashcards[2][9][1][6] == [3, 1]
+
+
+def test_omitted_quiz_options_are_sent_as_explicit_client_defaults() -> None:
+    """``None`` means "this client's default", and that default goes on the wire.
+
+    The alternative — omitting the option message so the backend picks — is
+    accepted by the server (live-probed: generation completes normally), but
+    what it then chose is unobservable: the stored options echo back as
+    ``null``. #2196 resolves that trade in favour of a value we can name, echo
+    and assert, matching every sibling builder in ``payloads.py`` and the web
+    UI, which always sends an explicit pair.
+
+    Asserted against the named constants rather than the literals so the
+    documented default and the transmitted default cannot drift apart. (This
+    particular pair cannot detect a transposition — ``STANDARD`` and ``MEDIUM``
+    are both 2 — which is why the ordering is pinned by the asymmetric fixtures
+    above instead.)
+    """
+    quiz = build_quiz_artifact_params(
+        "nb_payload", ["src_alpha"], instructions=None, quantity=None, difficulty=None
+    )
+    flashcards = build_flashcards_artifact_params(
+        "nb_payload", ["src_alpha"], instructions=None, quantity=None, difficulty=None
+    )
+
+    for pair in (quiz[2][9][1][7], flashcards[2][9][1][6]):
+        assert isinstance(pair, list), "the option message must be sent, not omitted"
+        assert pair[0] == DEFAULT_QUIZ_QUANTITY.value
+        assert pair[1] == DEFAULT_QUIZ_DIFFICULTY.value
+
+    assert DEFAULT_QUIZ_QUANTITY is QuizQuantity.STANDARD
+    assert DEFAULT_QUIZ_DIFFICULTY is QuizDifficulty.MEDIUM
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [build_quiz_artifact_params, build_flashcards_artifact_params],
+    ids=["quiz", "flashcards"],
+)
+@pytest.mark.parametrize(
+    ("kwargs", "expected_message"),
+    [
+        ({"quantity": 2}, "quantity must be a QuizQuantity member or None"),
+        ({"difficulty": 2}, "difficulty must be a QuizDifficulty member or None"),
+        ({"quantity": "standard"}, "quantity must be a QuizQuantity member or None"),
+        # The cross-enum case is the interesting one: QuizDifficulty.HARD and
+        # QuizQuantity.MORE are both 3, so this used to encode silently as MORE.
+        ({"quantity": QuizDifficulty.HARD}, "quantity must be a QuizQuantity member or None"),
+        ({"difficulty": QuizQuantity.FEWER}, "difficulty must be a QuizDifficulty member or None"),
+    ],
+    ids=[
+        "int-quantity",
+        "int-difficulty",
+        "str-quantity",
+        "swapped-quantity",
+        "swapped-difficulty",
+    ],
+)
+def test_non_enum_quiz_options_raise_a_typed_error(
+    builder: Any, kwargs: dict[str, Any], expected_message: str
+) -> None:
+    """Bad option input fails as ``ValidationError``, not ``AttributeError``.
+
+    Before #2196 a bare ``int`` reached ``.value`` and produced
+    ``AttributeError: 'int' object has no attribute 'value'`` — an internal
+    error shape leaking through a public keyword argument.
+    """
+    call_kwargs: dict[str, Any] = {"instructions": None, "quantity": None, "difficulty": None}
+    call_kwargs.update(kwargs)
+    with pytest.raises(ValidationError, match=re.escape(expected_message)):
+        builder("nb_payload", ["src_alpha"], **call_kwargs)
 
 
 def test_video_style_values_match_live_web_ui() -> None:
@@ -1616,9 +1739,10 @@ class TestSourceKindAndStatusGroundTruth:
         row = SourceRow.from_entry([["ID"], "TITLE_AT_1", None, ["DECOY_AT_3_0", status_code]])
         assert row.status is expected_status
 
-    def test_unknown_status_code_falls_back_to_ready(self) -> None:
-        row = SourceRow.from_entry([["ID"], "TITLE_AT_1", None, [None, 99]])
-        assert row.status is SourceStatus.READY
+    @pytest.mark.parametrize("status_code", [0, 4, 99])
+    def test_unknown_status_code_falls_back_to_unknown(self, status_code: int) -> None:
+        row = SourceRow.from_entry([["ID"], "TITLE_AT_1", None, [None, status_code]])
+        assert row.status is SourceStatus.UNKNOWN
 
 
 # ---------------------------------------------------------------------------
@@ -1789,9 +1913,9 @@ class TestSourceFieldConfusionHasTeeth:
         [
             # correct pairing
             (9, 1, SourceType.YOUTUBE, SourceStatus.PROCESSING),
-            # swapped: the YOUTUBE code now sits in the status slot and vice
-            # versa, so kind/status must change accordingly.
-            (1, 9, SourceType.GOOGLE_DOCS, SourceStatus.READY),
+            # swapped: the YOUTUBE type code now sits in the status slot and
+            # must fail closed rather than being asserted ready.
+            (1, 9, SourceType.GOOGLE_DOCS, SourceStatus.UNKNOWN),
         ],
     )
     def test_type_status_swap_flips_decoded_enums(

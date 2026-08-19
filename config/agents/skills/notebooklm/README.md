@@ -261,6 +261,7 @@ Use `--prompt-file PATH` with `ask`, prompt-based `generate` commands, and `sour
 import asyncio
 from notebooklm import NotebookLMClient, MindMapKind
 
+
 async def main():
     async with NotebookLMClient.from_storage() as client:
         # Create notebook and add sources
@@ -286,6 +287,7 @@ async def main():
         # completion by default) or MindMapKind.NOTE_BACKED JSON. Both export via:
         mm = await client.mind_maps.generate(nb.id, kind=MindMapKind.INTERACTIVE)
         await client.artifacts.download_mind_map(nb.id, "mindmap.json", mm.id)
+
 
 asyncio.run(main())
 ```

@@ -16,7 +16,7 @@ import notebooklm.cli.resolve as resolve_module
 from notebooklm.exceptions import NotebookLimitError, RPCError
 from notebooklm.notebooklm_cli import cli
 from notebooklm.rpc import RPCMethod
-from notebooklm.types import AskResult, Notebook
+from notebooklm.types import AskResult, Notebook, SharePermission
 
 from .conftest import (
     create_mock_client,
@@ -94,6 +94,49 @@ class TestNotebookList:
         assert "First Notebook" in result.output
         assert "Second Notebook" in result.output
 
+    def test_notebook_list_renders_each_role_distinctly(self, runner, mock_auth):
+        """#2125: owner / editor / viewer must be distinguishable in the table.
+
+        Pre-fix, all three collapsed onto "Owner" vs "Shared", so a read-only
+        collaborator looked identical to a full editor.
+        """
+        mock_client = create_mock_client()
+        mock_client.notebooks.list = AsyncMock(
+            return_value=[
+                Notebook(id="nb_own", title="Mine", role=SharePermission.OWNER),
+                Notebook(id="nb_edit", title="Theirs (edit)", role=SharePermission.EDITOR),
+                Notebook(id="nb_view", title="Theirs (read)", role=SharePermission.VIEWER),
+            ]
+        )
+
+        with patch.object(
+            auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = ("csrf", "session")
+            result = runner.invoke(cli, ["list", "--no-truncate"], obj=inject_client(mock_client))
+
+        assert result.exit_code == 0
+        assert "Access" in result.output
+        for label in ("Owner", "Editor", "Viewer"):
+            assert label in result.output, f"{label!r} missing from:\n{result.output}"
+        assert "Shared" not in result.output
+
+    def test_notebook_list_unknown_role_renders_as_owner(self, runner, mock_auth):
+        """An unstated role renders "Owner", matching ``is_owner``'s soft-degrade."""
+        mock_client = create_mock_client()
+        mock_client.notebooks.list = AsyncMock(
+            return_value=[Notebook(id="nb_x", title="No Role Stated")]
+        )
+
+        with patch.object(
+            auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = ("csrf", "session")
+            result = runner.invoke(cli, ["list"], obj=inject_client(mock_client))
+
+        assert result.exit_code == 0
+        assert "Owner" in result.output
+
     def test_notebook_list_json_output(self, runner, mock_auth):
         mock_client = create_mock_client()
         mock_client.notebooks.list = AsyncMock(
@@ -103,6 +146,7 @@ class TestNotebookList:
                     title="Test Notebook",
                     created_at=datetime(2024, 1, 1),
                     is_owner=True,
+                    role=SharePermission.OWNER,
                 ),
             ]
         )
@@ -123,10 +167,13 @@ class TestNotebookList:
             "id",
             "title",
             "is_owner",
+            "role",
             "created_at",
+            "last_viewed_at",
             "modified_at",
         ]
         assert data["notebooks"][0]["id"] == "nb_1"
+        assert data["notebooks"][0]["role"] == "owner"
 
     def test_notebook_list_limit_caps_rows(self, runner, mock_auth):
         """`--limit N` returns at most N data rows in text output."""
@@ -302,7 +349,10 @@ class TestNotebookCreate:
         mock_client = create_mock_client()
         mock_client.notebooks.create = AsyncMock(
             return_value=Notebook(
-                id="new_nb_id", title="Test Notebook", created_at=datetime(2024, 1, 1)
+                id="new_nb_id",
+                title="Test Notebook",
+                created_at=datetime(2024, 1, 1),
+                role=SharePermission.OWNER,
             )
         )
 
@@ -317,6 +367,19 @@ class TestNotebookCreate:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["notebook"]["id"] == "new_nb_id"
+        # One notebook shape across `create` / `list` / `use` --json (#2125).
+        assert data["notebook"]["role"] == "owner"
+        # Exact key set, like the `list` and `use` envelopes: this is the third
+        # ``notebook_viewed_keys`` call site, and without a pin the splat could
+        # be dropped here with the whole suite still green (#2126).
+        assert set(data["notebook"]) == {
+            "id",
+            "title",
+            "role",
+            "created_at",
+            "last_viewed_at",
+            "modified_at",
+        }
         assert not mock_context_file.exists()
 
     def test_notebook_create_with_use_flag(self, runner, mock_auth, mock_context_file):
@@ -1259,6 +1322,7 @@ class TestNotebookMetadata:
             id="nb_1",
             title="Test Notebook",
             created_at=datetime(2024, 1, 1),
+            role=SharePermission.EDITOR,
         )
         # Override notebooks.list to return only our test notebook (avoid partial ID conflicts)
         mock_client.notebooks.list = AsyncMock(return_value=[notebook])
@@ -1294,6 +1358,9 @@ class TestNotebookMetadata:
         assert "Test Notebook" in result.output
         assert "[pdf]" in result.output
         assert "nb_1" in result.output
+        # The Access line reports the caller's real role, not Owner/Shared (#2125).
+        assert "Access:" in result.output
+        assert "Editor" in result.output
 
     def test_metadata_json_output(self, runner, mock_auth):
         """Test JSON output with --json flag."""
@@ -1309,6 +1376,7 @@ class TestNotebookMetadata:
             notebook=notebook,
             sources=[SourceSummary(kind=SourceType.PDF, title="test.pdf")],
         )
+        assert metadata.to_dict()["role"] is None  # unstated role stays null in JSON
 
         # Use side_effect to avoid potential pickling issues with enums
         async def return_metadata(nb_id):

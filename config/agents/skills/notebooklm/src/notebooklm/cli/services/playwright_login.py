@@ -31,6 +31,7 @@ wrappers render + exit. Entry points: :class:`PlaywrightLoginPlan`,
 
 from __future__ import annotations
 
+import inspect
 import logging
 import shutil
 import subprocess
@@ -42,6 +43,10 @@ from typing import Any, NoReturn, Protocol
 
 import httpx
 
+from ..._app.profile import (
+    ProfileRepairRequest,
+    repair_playwright_account,
+)
 from ..._auth.browser_capture import (
     BROWSER_CLOSED_HELP,
     CHANNEL_BROWSERS,
@@ -104,36 +109,6 @@ ACCOUNT_METADATA_REMEDIATION = (
 # ---------------------------------------------------------------------------
 
 
-def _select_playwright_account(
-    accounts: list[Any],
-    *,
-    active_email: str | None,
-) -> tuple[Any | None, str | None]:
-    """Select the account Playwright just logged into, or return an ambiguity reason."""
-    if active_email:
-        normalized = active_email.casefold()
-        matches = [
-            account
-            for account in accounts
-            if isinstance(getattr(account, "email", None), str)
-            and account.email.casefold() == normalized
-        ]
-        if len(matches) == 1:
-            return matches[0], None
-        if matches:
-            return None, f"multiple discovered accounts matched {active_email}"
-        return None, f"current NotebookLM page email {active_email} was not discovered"
-
-    if len(accounts) == 1:
-        return accounts[0], None
-    if accounts:
-        return (
-            None,
-            "multiple Google accounts were discovered but the active page email was unavailable",
-        )
-    return None, "no Google accounts were discovered"
-
-
 def repair_playwright_account_metadata(
     storage_path: Path,
     io: LoginIO,
@@ -150,56 +125,57 @@ def repair_playwright_account_metadata(
     ``quiet`` stays a service-level parameter (the Protocol has no silencing
     concept). Returns ``True`` when metadata was written, ``False`` when it
     was cleared or left absent.
-    """
-    from ...auth import (
-        build_httpx_cookies_from_storage,
-        clear_account_metadata,
-        enumerate_accounts,
-        extract_email_from_html,
-        write_account_metadata,
-    )
 
-    active_email = extract_email_from_html(page_html) if isinstance(page_html, str) else None
+    The coarse app operation owns the public repair invocation and neutral
+    result classification; this wrapper owns only ``LoginIO`` presentation.
+    ``io.run_async`` itself is still wrapped here (not just the coroutine's own
+    handling): a scheduling ``RuntimeError`` must degrade to the historical
+    best-effort warning rather than aborting login/refresh.
+    """
+    request: ProfileRepairRequest | None = None
+    operation = None
+    result = None
     try:
         if not quiet:
             io.emit("[dim]Identifying Google account...[/dim]")
-        jar = build_httpx_cookies_from_storage(storage_path)
-        accounts = io.run_async(enumerate_accounts(jar))
-        selected, reason = _select_playwright_account(accounts, active_email=active_email)
-        if selected is None:
-            clear_account_metadata(storage_path)
+        request = ProfileRepairRequest(storage_path=storage_path, page_html=page_html)
+        operation = repair_playwright_account(request)
+        try:
+            try:
+                result = io.run_async(operation)
+            except BaseException:
+                if inspect.getcoroutinestate(operation) == inspect.CORO_CREATED:
+                    operation.close()
+                raise
+        except (OSError, ValueError, RuntimeError, httpx.HTTPError) as exc:
             if not quiet:
                 io.emit(
-                    "[yellow]Warning: account metadata was not written; "
-                    f"{reason}. {ACCOUNT_METADATA_REMEDIATION}[/yellow]"
+                    "[yellow]Warning: account metadata was not written. "
+                    "NotebookLM auth still saved, but multi-account routing may "
+                    "fall back to authuser=0. "
+                    f"{ACCOUNT_METADATA_REMEDIATION} Details: {exc}[/yellow]"
                 )
             return False
-        write_account_metadata(
-            storage_path,
-            authuser=selected.authuser,
-            email=selected.email,
-        )
-    except (OSError, ValueError, RuntimeError, httpx.HTTPError) as exc:
-        try:
-            clear_account_metadata(storage_path)
-        except Exception as clear_exc:
-            logger.warning(
-                "Failed to clear stale account metadata for %s: %s",
-                storage_path,
-                clear_exc,
-            )
+        if result.status == "WRITTEN":
+            if not quiet:
+                io.emit(f"[green]Account:[/green] {result.email}")
+            return True
         if not quiet:
-            io.emit(
-                "[yellow]Warning: account metadata was not written. "
-                "NotebookLM auth still saved, but multi-account routing may "
-                "fall back to authuser=0. "
-                f"{ACCOUNT_METADATA_REMEDIATION} Details: {exc}[/yellow]"
-            )
+            if result.status == "ERROR":
+                io.emit(
+                    "[yellow]Warning: account metadata was not written. "
+                    "NotebookLM auth still saved, but multi-account routing may "
+                    "fall back to authuser=0. "
+                    f"{ACCOUNT_METADATA_REMEDIATION} Details: {result.detail}[/yellow]"
+                )
+            else:
+                io.emit(
+                    "[yellow]Warning: account metadata was not written; "
+                    f"{result.detail}. {ACCOUNT_METADATA_REMEDIATION}[/yellow]"
+                )
         return False
-
-    if not quiet:
-        io.emit(f"[green]Account:[/green] {selected.email}")
-    return True
+    finally:
+        del storage_path, io, page_html, request, operation, result
 
 
 # ---------------------------------------------------------------------------
@@ -480,12 +456,14 @@ class PlaywrightLoginPlan:
         storage_path: Destination for the captured ``storage_state.json``.
         include_domains: Optional ``--include-domains`` labels; ``None`` /
             empty means "only required Google cookies + regional ccTLDs."
+        login_timeout_s: Human-interaction window before headed login fails.
     """
 
     browser: str
     browser_profile: Path
     storage_path: Path
     include_domains: set[str] | None = None
+    login_timeout_s: int = 300
 
 
 def run_playwright_login(plan: PlaywrightLoginPlan, io: LoginIO) -> None:
@@ -527,6 +505,7 @@ def run_playwright_login(plan: PlaywrightLoginPlan, io: LoginIO) -> None:
             browser_profile=plan.browser_profile,
             storage_path=plan.storage_path,
             include_domains=plan.include_domains,
+            login_timeout_s=plan.login_timeout_s,
         ),
         io,
         headless=False,

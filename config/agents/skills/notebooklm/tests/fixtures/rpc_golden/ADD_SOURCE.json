@@ -148,6 +148,15 @@
     "url": null,
     "_type_code": null,
     "created_at": null,
-    "status": 2
+    "status": -1,
+    "drive_document_id": null,
+    "drive_status": null,
+    "download_url": null,
+    "viewer_url": null,
+    "content_mime": null,
+    "word_count": null,
+    "revision_id": null,
+    "revision_timestamp": null,
+    "last_modified_at": null
   }
 }

@@ -3,7 +3,7 @@
 import asyncio
 import builtins
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path
 from time import monotonic
 from typing import IO, Any, Literal
@@ -18,6 +18,7 @@ from ._runtime.contracts import RpcCaller
 from ._settings import build_get_user_settings_params, extract_account_limits
 from ._source import upload as _source_upload
 from ._source.add import SourceAddService, honor_requested_title_if_fresh
+from ._source.batch import SourceBatchAddService, SourceUrlBatchItem
 from ._source.content import SourceContentRenderer
 from ._source.drive_import import DriveFetcher, DriveImportService
 from ._source.listing import SourceLister
@@ -31,6 +32,8 @@ from .rpc import RPCMethod
 from .types import (
     Source,
     SourceFulltext,
+    SourceStatus,
+    SourceType,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +98,7 @@ class SourcesAPI:
         # historical attributes for callers that introspect the instance.
         self._rpc = rpc
         self._adder = SourceAddService()
+        self._batch_adder = SourceBatchAddService()
         self._content = SourceContentRenderer(self._rpc, logger=logger)
         self._lister = SourceLister(self._rpc)
         self._poller = SourcePoller()
@@ -133,18 +137,35 @@ class SourcesAPI:
             operation_variant=operation_variant,
         )
 
-    async def list(self, notebook_id: str, *, strict: bool = False) -> list[Source]:
+    async def list(
+        self,
+        notebook_id: str,
+        *,
+        strict: bool = False,
+        statuses: Collection[SourceStatus] | None = None,
+        types: Collection[SourceType] | None = None,
+    ) -> list[Source]:
         """List all sources in a notebook.
 
         Args:
             notebook_id: The notebook ID.
-            strict: Retained for call-site clarity; malformed source-list
-                responses always raise ``RPCError``. Empty notebooks return ``[]``.
+            strict: Reject malformed source rows and conflicting duplicate IDs.
+                Malformed response envelopes always raise ``RPCError``. Use
+                ``strict=True`` when ``len(result)`` must be an exact count of
+                uniquely addressable matching sources.
+            statuses: Optional collection of accepted statuses. Members are ORed.
+            types: Optional collection of accepted source types. Members are ORed.
+                When both filters are supplied, a source must match both.
 
         Returns:
-            List of Source objects.
+            Source objects in backend order after normalization and filtering.
         """
-        return await self._lister.list(notebook_id, strict=strict)
+        return await self._lister.list(
+            notebook_id,
+            strict=strict,
+            statuses=statuses,
+            types=types,
+        )
 
     async def get(self, notebook_id: str, source_id: str) -> Source:
         """Get details of a specific source.
@@ -388,6 +409,9 @@ class SourcesAPI:
 
         Automatically detects YouTube URLs and uses the appropriate method.
 
+        Fires one ``GET_NOTEBOOK`` before the create for the retry probe (#2204);
+        that read bumps Recent position (#2126). See the service method's docs.
+
         Args:
             notebook_id: The notebook ID.
             url: The URL to add.
@@ -417,7 +441,32 @@ class SourcesAPI:
             logger=logger,
             return_result=True,
         )
-        return await honor_requested_title_if_fresh(self.rename, notebook_id, result, title, logger)
+        # Baseline-filtered probe ⇒ even a PROBED result is ours to rename (#2204).
+        return await honor_requested_title_if_fresh(
+            self.rename, notebook_id, result, title, logger, probe_proves_freshness=True
+        )
+
+    async def _add_urls_batch(
+        self,
+        notebook_id: str,
+        urls: builtins.list[str],
+    ) -> builtins.list[SourceUrlBatchItem]:
+        """Add validated URL entries with one batch-capable ``ADD_SOURCE`` RPC.
+
+        Internal adapter seam for the existing MCP/REST batch endpoints.  The
+        public single-item :meth:`add_url` contract remains unchanged; in
+        particular, it retains precise probe-then-create recovery.  This bulk
+        path never replays an uncertain write and returns typed positional
+        outcomes after reconciling silently omitted failures.
+        """
+        return await self._batch_adder.add_urls(
+            notebook_id,
+            urls,
+            rpc=self._rpc,
+            list_sources=self.list,
+            extract_youtube_video_id=self._extract_youtube_video_id,
+            logger=logger,
+        )
 
     async def add_text(
         self,
@@ -485,13 +534,11 @@ class SourcesAPI:
     ) -> Source:
         """Add a file source to a notebook using Google's resumable upload.
 
-        Registers the source, opens an upload session, streams the file body
-        (memory-efficient for large files), and — if a custom ``title`` is given —
-        issues a follow-up ``UPDATE_SOURCE`` rename (the file-add RPC has no title
-        slot). Uploads run under the Sources-owned semaphore
-        (``max_concurrent_uploads``, default 4), which also caps open file
-        descriptors; the path is resolved before admission and opened exactly once
-        (a single open pins the bytes, so a later path swap cannot alter the upload).
+        Registers the source, opens an upload session, streams the file body (memory-efficient for
+        large files), and — if a custom ``title`` is given — issues a follow-up ``UPDATE_SOURCE``
+        rename (the file-add RPC has no title slot). Uploads run under the Sources-owned semaphore
+        (``max_concurrent_uploads``, default 4), which also caps open descriptors; the path is
+        resolved before admission but opened after it, so a swap while queued still lands.
 
         Args:
             notebook_id: The notebook ID.
@@ -511,12 +558,14 @@ class SourcesAPI:
                 callback during the upload body; its exceptions abort the upload.
 
         Returns:
-            The created Source object. If wait=False, status may be PROCESSING.
+            The created Source object; if wait=False, status may be PROCESSING.
 
         Raises:
             ValidationError: If the path is not a regular file, the title is
                 empty, or the file is an HTML-family type the upload endpoint
-                rejects (convert to text/Markdown/PDF first).
+                rejects (convert to text/Markdown/PDF first). A failure *after*
+                registration raises its real type unwrapped, carrying
+                ``source_id`` / ``stage`` attributes naming the retained row.
         """
         return await self._uploader.add_file(
             notebook_id,
@@ -540,17 +589,16 @@ class SourcesAPI:
     ) -> Source:
         """Add a Google Drive document as a source.
 
+        Fires one ``GET_NOTEBOOK`` before the create for the retry probe (#2113);
+        that read bumps Recent position (#2126). See the service method's docs.
+
         Args:
             notebook_id: The notebook ID.
             file_id: The Google Drive file ID.
-            title: Display title. Native Drive imports re-derive the title from
-                live Drive metadata server-side, so a supplied ``title`` is honored
-                via a best-effort follow-up :meth:`rename` (non-fatal; #1960).
-            mime_type: MIME type of the Drive document. Common values:
-                - application/vnd.google-apps.document (Google Docs)
-                - application/vnd.google-apps.presentation (Slides)
-                - application/vnd.google-apps.spreadsheet (Sheets)
-                - application/pdf (PDF files in Drive)
+            title: Display title. Drive imports re-derive it server-side, so a
+                supplied ``title`` is honored via a follow-up :meth:`rename` (#1960).
+            mime_type: Drive MIME type (Docs / Slides / Sheets /
+                ``application/pdf``) — see :class:`~notebooklm.types.DriveMimeType`.
             wait: If True, wait for source to be ready before returning.
             wait_timeout: Maximum seconds to wait if wait=True (default: 120).
 
@@ -559,10 +607,8 @@ class SourcesAPI:
 
         Example:
             from notebooklm.types import DriveMimeType
-
-            source = await client.sources.add_drive(
-                notebook_id, file_id="1abc123xyz", title="My Document",
-                mime_type=DriveMimeType.GOOGLE_DOC.value, wait=True)
+            source = await client.sources.add_drive(notebook_id, file_id="1abc123xyz",
+                title="My Document", mime_type=DriveMimeType.GOOGLE_DOC.value, wait=True)
         """
         result = await self._adder.add_drive(
             notebook_id,
@@ -577,7 +623,10 @@ class SourcesAPI:
             logger=logger,
             return_result=True,
         )
-        return await honor_requested_title_if_fresh(self.rename, notebook_id, result, title, logger)
+        # Baseline-filtered probe ⇒ even a PROBED result is ours to rename (#2113).
+        return await honor_requested_title_if_fresh(
+            self.rename, notebook_id, result, title, logger, probe_proves_freshness=True
+        )
 
     async def add_drive_file(
         self,
@@ -590,7 +639,9 @@ class SourcesAPI:
     ) -> Source:
         """Auto-route an upload-only Google Drive file: download it, then upload (#1884).
 
-        Covers the upload-only Drive file types (epub/docx/txt/md/rtf/odt/csv/tsv/pdf);
+        Covers the upload-only Drive file types
+        (epub/docx/pptx/txt/md/rtf/odt/csv/tsv/pdf; the rejection error names the
+        full accepted set, derived from one declaration);
         a Drive PDF can also go by reference via :meth:`add_drive`. Fetches the file
         SERVER-SIDE using the same live ``.google.com`` cookie jar the upload leg
         uses (so it works in stdio AND remote MCP mode with no ``upload_required``
@@ -798,8 +849,8 @@ class SourcesAPI:
 
         Note:
             Source type codes include: 1=google_docs, 2=google_slides, 3=pdf,
-            4=pasted_text, 5=web_page, 8=markdown, 9=youtube, 10=media,
-            11=docx, 13=image, 14=google_spreadsheet, 16=csv, 17=epub.
+            4=pasted_text, 5=web_page, 6=powerpoint, 8=markdown, 9=youtube,
+            10=media, 11=docx, 13=image, 14=google_spreadsheet, 16=csv, 17=epub.
 
             The ``"markdown"`` format works by requesting the HTML rendition
             from the API (params ``[3],[3]`` instead of ``[2],[2]``) and

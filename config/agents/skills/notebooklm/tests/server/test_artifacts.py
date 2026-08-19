@@ -73,6 +73,65 @@ def test_poll_transitions_to_completed(authed_client: TestClient, fake_client: F
     assert done.json()["status"] == "completed"
 
 
+@pytest.mark.parametrize(
+    "state",
+    [
+        GenerationState.PENDING,
+        GenerationState.IN_PROGRESS,
+        GenerationState.UNKNOWN,
+        GenerationState.SUGGESTED,
+        GenerationState.PENDING_REVIEW,
+    ],
+    ids=lambda s: s.value,
+)
+def test_poll_still_running_states_keep_the_task_in_the_registry(
+    authed_client: TestClient, fake_client: FakeClient, state: GenerationState
+) -> None:
+    """#2127: none of these says generation finished, so none may evict the task.
+
+    Evicting on a non-terminal state would make the *next* benign NOT_FOUND poll
+    (post-create lag, transient delisting) 404 instead of projecting — so the
+    second half of each case is the one that matters. ``PENDING`` / ``IN_PROGRESS``
+    are included because the route stopped naming them once it switched to
+    ``is_terminal``; they must reach the same branch as the rare states.
+    """
+    task_id = _generate_audio(authed_client)
+    fake_client.poll_states[("nb-1", task_id)] = state
+    resp = authed_client.get(f"/v1/notebooks/nb-1/artifacts/{task_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == state.value
+
+    fake_client.poll_states[("nb-1", task_id)] = GenerationState.NOT_FOUND
+    lagged = authed_client.get(f"/v1/notebooks/nb-1/artifacts/{task_id}")
+    assert lagged.status_code == 200, f"{state.value} evicted the task from the registry"
+    assert lagged.json()["status"] == "not_found"
+
+
+@pytest.mark.parametrize("state", ["completed", "failed", "removed"])
+def test_poll_terminal_states_do_evict_the_task_from_the_registry(
+    authed_client: TestClient, fake_client: FakeClient, state: str
+) -> None:
+    """The mirror of the test above: a terminal poll MUST drop the registry entry.
+
+    Without this, ``pending.drop`` could become a no-op (or a refactor could
+    return before reaching it) and every other server test would stay green,
+    while a finished task's id resolved 200 forever instead of 404ing once the
+    post-generate lag window is over.
+
+    Passing the state as a plain ``str`` also exercises the route's
+    raw-string-permissive path — ``GenerationStatus.status`` is documented to
+    accept one, and the route's ``is_terminal`` check resolves by hashing.
+    """
+    task_id = _generate_audio(authed_client)
+    fake_client.poll_states[("nb-1", task_id)] = state
+    authed_client.get(f"/v1/notebooks/nb-1/artifacts/{task_id}")
+
+    # Registry entry is gone, so a later NOT_FOUND is an unknown id, not a lag.
+    fake_client.poll_states[("nb-1", task_id)] = GenerationState.NOT_FOUND
+    after = authed_client.get(f"/v1/notebooks/nb-1/artifacts/{task_id}")
+    assert after.status_code == 404, f"{state} left the task in the pending registry"
+
+
 def test_poll_removed_is_410(authed_client: TestClient, fake_client: FakeClient) -> None:
     task_id = _generate_audio(authed_client)
     fake_client.poll_states[("nb-1", task_id)] = GenerationState.REMOVED

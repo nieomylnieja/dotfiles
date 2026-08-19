@@ -65,6 +65,7 @@ _ARTIFACT_TYPE_HYPHEN: dict[ArtifactType, str] = {
     ArtifactType.SLIDE_DECK: "slide-deck",
     ArtifactType.MIND_MAP: "mind-map",
     ArtifactType.DATA_TABLE: "data-table",
+    ArtifactType.FANTASY_MAP: "fantasy-map",
 }
 
 

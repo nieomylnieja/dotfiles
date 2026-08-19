@@ -89,6 +89,77 @@ def test_status_7_is_not_routed_to_404() -> None:
     assert resp.json()["error"]["category"] == "rpc"
 
 
+def _client_with_real_notebooks(error: BaseException) -> TestClient:
+    """REST app whose ``notebooks`` namespace is the **real** ``NotebooksAPI``.
+
+    The tests above inject a bare ``ClientError`` in place of the whole
+    namespace, so they project ``classify`` faithfully but never execute
+    ``NotebooksAPI.get()``. Only the ``rpc_call`` seam raises here, so the GET
+    route runs the real translation from a status-5 rejection to
+    ``NotebookNotFoundError`` — the path an actual missing notebook takes.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from notebooklm._notebooks import NotebooksAPI
+    from tests._fixtures.fake_core import make_fake_core
+
+    fake = FakeClient()
+    core = make_fake_core(rpc_call=AsyncMock(side_effect=error))
+    fake.notebooks = NotebooksAPI(core.rpc_executor, sources_api=MagicMock())  # type: ignore[assignment]
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[FakeClient]:
+        yield fake
+
+    app = create_app(client_factory=factory)
+    headers = {"Authorization": f"Bearer {TEST_TOKEN}", "Host": "127.0.0.1"}
+    client = TestClient(
+        app, headers=headers, client=("127.0.0.1", 5555), raise_server_exceptions=False
+    )
+    client.__enter__()
+    return client
+
+
+def test_get_route_status_5_keeps_the_routing_hint_through_the_translation() -> None:
+    """GET /v1/notebooks/{id} preserves the hint *after* the typed translation.
+
+    ``server/_errors.py`` documents that the status-5 account-routing hint is
+    preserved verbatim in the 404 body. Once ``NotebooksAPI.get()`` converts
+    that rejection into ``NotebookNotFoundError``, keeping the promise depends
+    on the translation carrying the diagnostic onto the typed error — the
+    renderers print ``str(exc)``, never ``__cause__``.
+    """
+    hint = "commonly an account-routing mismatch"
+    client = _client_with_real_notebooks(
+        exc.ClientError(f"The server rejected this request (not found). {hint}", rpc_code=5)
+    )
+    try:
+        resp = client.get("/v1/notebooks/nb-missing")
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 404
+    body = resp.json()["error"]
+    assert body["category"] == "not_found"
+    assert hint in body["message"], f"routing hint dropped from the 404 body: {body['message']!r}"
+
+
+def test_get_route_status_7_is_not_reported_as_a_missing_notebook() -> None:
+    """A notebook the caller may not read must not project as 404 through GET.
+
+    The decoder routes PERMISSION_DENIED through the same ``ClientError``
+    branch as NOT_FOUND, so this pins that the translation did not widen.
+    """
+    client = _client_with_real_notebooks(exc.ClientError("denied", rpc_code=7))
+    try:
+        resp = client.get("/v1/notebooks/nb-forbidden")
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 502
+    assert resp.json()["error"]["category"] == "rpc"
+
+
 def _error_body(exc_obj: BaseException) -> dict[str, object]:
     import json
 
@@ -102,6 +173,34 @@ def test_error_body_carries_retriable_flag() -> None:
     assert retriable.status_code == 429
     assert _error_body(exc.RateLimitError("slow down"))["retriable"] is True
     assert _error_body(exc.ValidationError("bad"))["retriable"] is False
+
+
+@pytest.mark.parametrize(
+    ("cause", "status", "category", "retriable"),
+    [
+        (exc.NetworkError("offline"), 502, "network", True),
+        (exc.ServerError("unavailable"), 502, "server", True),
+        (exc.AuthError("expired"), 401, "auth", False),
+        (exc.RateLimitError("slow down"), 429, "rate_limited", True),
+        (exc.ValidationError("rejected file"), 400, "validation", False),
+    ],
+)
+def test_partial_upload_error_preserves_cause_projection(
+    cause: Exception, status: int, category: str, retriable: bool
+) -> None:
+    """``raise_partial_upload_failure()`` attaches ``source_id``/``stage`` directly
+    to the real cause rather than wrapping it, so it must project exactly like an
+    ordinary instance of its own type.
+    """
+    cause.source_id = "source-1"  # type: ignore[attr-defined]
+    cause.stage = "upload_finalize"  # type: ignore[attr-defined]
+
+    response = error_response(cause)
+    body = _error_body(cause)
+
+    assert response.status_code == status
+    assert body["category"] == category
+    assert body["retriable"] is retriable
 
 
 def test_error_body_carries_hint_where_present() -> None:
@@ -225,3 +324,22 @@ def test_request_validation_message_has_no_source_paths(authed_client: object) -
     # The missing field is named, but no server path / source file leaks.
     assert "question" in message
     assert ".py" not in message and "/home/" not in message and 'File "' not in message
+
+
+def test_unconfirmed_create_is_surfaced_in_the_rest_body() -> None:
+    """REST parity with the MCP projection (#2220).
+
+    Forced to RPC (HTTP 502), whose category hint is ``None``, so without the
+    override the caller gets a bare message and ``retriable: false`` with
+    nothing indicating a source may already exist.
+    """
+    from notebooklm._app.errors import UNCONFIRMED_HINT
+    from notebooklm._idempotency import mark_unconfirmed
+    from notebooklm.server._errors import error_item
+
+    body = error_item(mark_unconfirmed(exc.NetworkError("connection reset")))
+
+    assert body["unconfirmed"] is True
+    assert body["retriable"] is False
+    assert body["hint"] == UNCONFIRMED_HINT
+    assert "unconfirmed" not in error_item(exc.NetworkError("connection reset"))

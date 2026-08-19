@@ -15,7 +15,7 @@ from pytest_httpx import HTTPXMock
 from notebooklm import auth
 from notebooklm._app.auth_check import AuthCheckPlan, run_auth_check
 from notebooklm._auth import (
-    browser_state_validation,
+    browser_capture,
     cookie_semantics,
     cookies,
     psidts_recovery,
@@ -99,6 +99,14 @@ def _rotate_requests(httpx_mock: HTTPXMock) -> list[httpx.Request]:
         (0, 0, False),
         (12.9, 12, False),
         ("12.9", 12, False),
+        # Firefox 142+ (schema >= 16) expiry read through the unscoped
+        # ``rookie_cookies.firefox()``/``any_browser()`` path arrives in
+        # milliseconds with no unit tag. Anything past year 3000 as seconds
+        # is implausible for a browser cookie, so it is rescaled.
+        (1_755_000_000_000, 1_755_000_000, False),
+        (1_755_000_000_000_000, 1_755_000_000, False),  # raw microseconds: rescaled twice
+        (32_503_680_000, 32_503_680_000, False),  # exactly year 3000: not rescaled
+        (32_503_680_001, 32_503_680, False),  # one second past: rescaled
     ],
 )
 def test_cookie_expiry_normalization_preserves_session_and_epoch(
@@ -164,7 +172,7 @@ def test_captured_state_validation_preserves_same_site_attributes() -> None:
     state["cookies"][-1]["sameSite"] = "Lax"
     state["cookies"][0]["sameSite"] = "Strict"
 
-    validated, error = browser_state_validation.heal_captured_state(state)
+    validated, error = browser_capture.heal_captured_state(state)
     assert error is None
 
     same_site = {row["name"]: row["sameSite"] for row in validated["cookies"]}
@@ -468,6 +476,7 @@ def test_fresh_routed_loader_does_not_post(tmp_path: Path, httpx_mock: HTTPXMock
 def test_route_unusable_rookiepy_row_recovers_in_memory_without_file_save(
     httpx_mock: HTTPXMock,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     psidts_overrides: dict[str, object],
 ) -> None:
     rookiepy_rows = [
@@ -482,11 +491,7 @@ def test_route_unusable_rookiepy_row_recovers_in_memory_without_file_save(
             **psidts_overrides,
         },
     ]
-    monkeypatch.setattr(
-        storage,
-        "save_cookies_to_storage",
-        lambda *args, **kwargs: pytest.fail("in-memory recovery must not save to disk"),
-    )
+    monkeypatch.setenv("NOTEBOOKLM_HOME", str(tmp_path))
     httpx_mock.add_response(url=_ROTATE_URL, **_rotate_response())
 
     state, error = psidts_recovery.validate_with_recovery(rookiepy_rows)
@@ -497,6 +502,7 @@ def test_route_unusable_rookiepy_row_recovers_in_memory_without_file_save(
         for row in state["cookies"]
     )
     assert len(_rotate_requests(httpx_mock)) == 1
+    assert not list(tmp_path.rglob("*")), "in-memory recovery must not create profile state"
 
 
 def test_contended_recovery_requires_routed_disk_state(
@@ -506,13 +512,12 @@ def test_contended_recovery_requires_routed_disk_state(
     initial = _required_state()
     app_only = _required_state({"domain": ".notebooklm.google.com", "expires": time.time() + 3600})
     path.write_text(json.dumps(initial), encoding="utf-8")
-    loads = iter([initial, app_only])
-    monkeypatch.setattr(psidts_recovery, "_load_storage_state", lambda _path: next(loads))
 
     from contextlib import contextmanager
 
     @contextmanager
     def contended(_lock_path: Path):
+        path.write_text(json.dumps(app_only), encoding="utf-8")
         yield False
 
     monkeypatch.setattr(psidts_recovery, "_file_lock_try_exclusive", contended)

@@ -94,6 +94,7 @@
     ],
     "research": [
       "cancel",
+      "import",
       "status",
       "wait"
     ],
@@ -492,7 +493,9 @@
               "infographic",
               "data-table",
               "mind-map",
-              "report"
+              "report",
+              "fantasy-map",
+              "file"
             ],
             "name": "choice"
           }
@@ -7647,6 +7650,27 @@
           }
         },
         {
+          "default": 300,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Seconds to wait for a human to complete browser sign-in.",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "browser_timeout",
+          "opts": [
+            "--browser-timeout"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "clamp": false,
+            "max": null,
+            "min": 1,
+            "name": "integer range"
+          }
+        },
+        {
           "default": null,
           "envvar": null,
           "has_custom_shell_complete": false,
@@ -8755,6 +8779,7 @@
       "class": "Group",
       "commands": [
         "cancel",
+        "import",
         "status",
         "wait"
       ],
@@ -8812,6 +8837,142 @@
         }
       ],
       "short_help": "Cancel an in-flight research run."
+    },
+    "research import": {
+      "class": "Command",
+      "params": [
+        {
+          "default": null,
+          "envvar": "NOTEBOOKLM_NOTEBOOK",
+          "has_custom_shell_complete": true,
+          "help": "Notebook ID (uses current if not set). Supports partial IDs.",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "notebook_id",
+          "opts": [
+            "-n",
+            "--notebook"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "text"
+          }
+        },
+        {
+          "default": null,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Run to import. Omit it and the notebook's single research run is used; with more than one run this errors rather than guessing, so pass the id ('research status' shows it).",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "run_id",
+          "opts": [
+            "--run-id"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "text"
+          }
+        },
+        {
+          "default": false,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Import only report-cited sources",
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "cited_only",
+          "opts": [
+            "--cited-only"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "boolean"
+          }
+        },
+        {
+          "default": 1800,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Seconds budget for the import retry loop (default: 1800). The command never waits for the RUN to finish, but IMPORT_RESEARCH itself commonly outlives a single client timeout on deep payloads and is retried with reconciliation; this bounds that. Matches 'research wait --timeout'.",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "timeout",
+          "opts": [
+            "--timeout"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "integer"
+          }
+        },
+        {
+          "default": null,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Import at most N sources (default: all)",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "max_sources",
+          "opts": [
+            "--max-sources"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "clamp": false,
+            "max": null,
+            "min": 1,
+            "name": "integer range"
+          }
+        },
+        {
+          "default": false,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Re-add sources whose URL is already in the notebook",
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "allow_duplicate",
+          "opts": [
+            "--allow-duplicate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "boolean"
+          }
+        },
+        {
+          "default": false,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Output as JSON",
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "name": "boolean"
+          }
+        }
+      ],
+      "short_help": "Import a completed research run's sources."
     },
     "research status": {
       "class": "Command",
@@ -8879,10 +9040,10 @@
           }
         },
         {
-          "default": 300,
+          "default": 1800,
           "envvar": null,
           "has_custom_shell_complete": false,
-          "help": "Maximum seconds to wait (default: 300)",
+          "help": "Per-phase seconds budget for (a) the research-completion poll loop and (b) the --import-all retry loop (default: 1800). Each phase gets the full budget independently, so worst-case total wall time is up to 2\u00d7 this value. Matches 'source add-research --timeout' semantics.",
           "is_flag": false,
           "kind": "option",
           "multiple": false,
@@ -10848,6 +11009,32 @@
           "secondary_opts": [],
           "type": {
             "name": "text"
+          }
+        },
+        {
+          "default": null,
+          "envvar": null,
+          "has_custom_shell_complete": false,
+          "help": "Only list sources with this status. Use 'preparing' to find rows a failed add left behind.",
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "status_filter",
+          "opts": [
+            "--status"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": {
+            "case_sensitive": true,
+            "choices": [
+              "unknown",
+              "processing",
+              "ready",
+              "error",
+              "preparing"
+            ],
+            "name": "choice"
           }
         },
         {

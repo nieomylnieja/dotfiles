@@ -30,11 +30,22 @@ from pathlib import Path
 
 import pytest
 
+from tests.cassette_patterns import find_credential_leaks, is_clean
+
 pytestmark = pytest.mark.repo_lint
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECKER = REPO_ROOT / "tests" / "scripts" / "check_cassettes_clean.py"
-FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
+#: Every directory that holds committed response fixtures. ``tests/fixtures``
+#: was the only one scanned until #2120 landed live-captured payloads in
+#: ``tests/unit/fixtures`` — a directory the CI secrets step did not cover, and
+#: whose first new fixture arrived carrying signed Google download URLs and a
+#: Drive capability token. Adding a fixture directory means adding it here.
+FIXTURE_DIRS = (
+    REPO_ROOT / "tests" / "fixtures",
+    REPO_ROOT / "tests" / "unit" / "fixtures",
+)
+FIXTURES_DIR = FIXTURE_DIRS[0]
 # Deliberately-unscrubbed fixture used as a positive control (a real-looking
 # ``SID`` cookie value beginning with ``S`` — the exact shape the legacy
 # "starts with S" heuristic missed; see the file's own header comment).
@@ -65,17 +76,25 @@ def test_all_cassettes_clean_strict_recursive() -> None:
     )
 
 
-def test_fixture_dirs_have_no_credential_shapes() -> None:
-    """No Google auth-token / API-key shapes anywhere under ``tests/fixtures``.
+@pytest.mark.parametrize("fixture_dir", FIXTURE_DIRS, ids=lambda d: d.name and str(d.parent.name))
+def test_fixture_dirs_have_no_credential_shapes(fixture_dir: Path) -> None:
+    """No Google auth-token / API-key shapes in any committed fixture directory.
 
-    Mirrors the CI ``--secrets-only --recursive tests/fixtures`` step. This
-    catches a credential shape smuggled into a non-cassette fixture (golden
-    ``.json`` / ``.html`` / ``.txt``) that the cassette-only ``.yaml`` scan
-    above would miss.
+    Mirrors the CI ``--secrets-only --recursive`` step. This catches a
+    credential shape smuggled into a non-cassette fixture (golden ``.json`` /
+    ``.html`` / ``.txt``) that the cassette-only ``.yaml`` scan above would
+    miss.
+
+    ``tests/unit/fixtures`` joined the sweep in #2120: it had never been
+    scanned, and the live-captured source payload added there arrived carrying
+    signed ``usercontent.google.com`` download URLs and a ``drive.google.com``
+    capability token in its descriptor row. Those are scrubbed now, but the
+    reason they survived review is that nothing was looking.
     """
-    result = _run_guard("--secrets-only", "--recursive", str(FIXTURES_DIR))
+    assert fixture_dir.is_dir(), f"fixture directory missing: {fixture_dir}"
+    result = _run_guard("--secrets-only", "--recursive", str(fixture_dir))
     assert result.returncode == 0, (
-        f"credential shape found under tests/fixtures:\n{result.stdout}\n{result.stderr}"
+        f"credential shape found under {fixture_dir}:\n{result.stdout}\n{result.stderr}"
     )
 
 
@@ -150,3 +169,54 @@ def test_guard_detects_novel_high_entropy_token(tmp_path: Path) -> None:
         f"exit 1 but no high-entropy leak reported — the entropy detector may be "
         f"dead or the guard crashed:\n{result.stdout}\n{result.stderr}"
     )
+
+
+# --- Signed blob-capability URLs (#2120 / #2215) ---------------------------
+# These must be caught in BOTH scan modes. ``--secrets-only`` reaches the
+# detector via ``_CREDENTIAL_DETECTORS``; the full cassette scan routes through
+# ``is_clean`` instead, so a detector registered in only one place leaves the
+# other gate blind. The negative cases pin the query-delimiter anchoring: a
+# ``\b`` boundary would match ``c=`` inside a *value* (``?redirect=-c=1``) and
+# reject valid content.
+_CAPABILITY_POSITIVE = [
+    pytest.param(
+        "https://contribution.usercontent.google.com/download?c=AIP70Bshort&filename=x.md",
+        id="download-capability",
+    ),
+    pytest.param("https://drive.google.com/viewer/upload?ck=a&ds=1&p=2", id="viewer-wrapper"),
+    pytest.param(
+        "/blobstore/prod/contrib_service/blobrefs/notebooklm/nos_files/x", id="blobrefs-path"
+    ),
+    pytest.param(
+        "https://contribution.usercontent.google.com/download?x=1&amp;c=AIP70B",
+        id="amp-escaped-delimiter",
+    ),
+]
+
+_CAPABILITY_NEGATIVE = [
+    pytest.param(
+        "https://contribution.usercontent.google.com/download?redirect=-c=1",
+        id="c-inside-a-value-not-a-key",
+    ),
+    pytest.param(
+        "https://drive.google.com/viewer/upload?redirect=-ds=1", id="ds-inside-a-value-not-a-key"
+    ),
+    pytest.param(
+        "https://drive.google.com/file/d/1FDW_u2QKNxpYBBvs-k03F4n039Ufuiv2/view",
+        id="benign-public-file-id",
+    ),
+]
+
+
+@pytest.mark.parametrize("text", _CAPABILITY_POSITIVE)
+def test_capability_urls_are_caught_in_both_scan_modes(text: str) -> None:
+    """A signed capability must fail --secrets-only AND the full scan."""
+    assert find_credential_leaks(text), "missed by --secrets-only (find_credential_leaks)"
+    assert not is_clean(text)[0], "missed by the full cassette scan (is_clean)"
+
+
+@pytest.mark.parametrize("text", _CAPABILITY_NEGATIVE)
+def test_capability_detector_does_not_fire_on_lookalikes(text: str) -> None:
+    """Parameter-like text inside a value is not a capability."""
+    assert not find_credential_leaks(text), "false positive in --secrets-only"
+    assert is_clean(text)[0], "false positive in the full cassette scan"

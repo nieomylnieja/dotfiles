@@ -24,9 +24,11 @@ from notebooklm.exceptions import (  # noqa: E402 - after importorskip guard
     RPCError,
 )
 from notebooklm.types import (  # noqa: E402 - after importorskip guard
+    AskResult,
     ChatGoal,
     ChatResponseLength,
     ChatSettings,
+    ConversationTurnKey,
 )
 
 from .conftest import AsyncMock  # noqa: E402 - after importorskip guard
@@ -780,3 +782,41 @@ async def test_suggest_prompts_rejects_bad_surface(mcp_call, mock_client) -> Non
     with pytest.raises(ToolError):
         await mcp_call("suggest_prompts", {"notebook": NB_ID, "surface": "podcast"})
     mock_client.notebooks.suggest_prompts.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ConversationTurnKey on the ask payload (#2122)
+# ---------------------------------------------------------------------------
+
+
+async def test_ask_surfaces_the_conversation_turn_key(mcp_call, mock_client) -> None:
+    """An agent can read the three parts back out to build a SubmitFeedback call.
+
+    ``chat_ask`` post-processes the ``ask_result_view`` payload, so the key
+    reaching MCP is not implied by the CLI/REST tests covering the same view.
+    """
+    mock_client.chat.ask = AsyncMock(
+        return_value=AskResult(
+            answer="an answer",
+            conversation_id="conv-1",
+            turn_number=1,
+            is_follow_up=False,
+            turn_key=ConversationTurnKey("sess-1", "turn-1", 2187103311),
+        )
+    )
+    content = (await mcp_call("chat_ask", {"notebook": NB_ID, "question": "q"})).structured_content
+    assert content["turn_key"] == {
+        "session_id": "sess-1",
+        "turn_id": "turn-1",
+        "turn_code": 2187103311,
+    }
+
+
+async def test_ask_reports_no_turn_key_when_the_stream_carried_none(mcp_call, mock_client) -> None:
+    mock_client.chat.ask = AsyncMock(
+        return_value=AskResult(
+            answer="an answer", conversation_id="conv-1", turn_number=1, is_follow_up=False
+        )
+    )
+    content = (await mcp_call("chat_ask", {"notebook": NB_ID, "question": "q"})).structured_content
+    assert content["turn_key"] is None

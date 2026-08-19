@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 import click
 
+from .._app.profile import observe_profile_account
 from .error_handler import exit_with_code
 from .rendering import console, json_error_response
 from .runtime import run_async
@@ -167,14 +168,6 @@ def repair_after_refresh(
     )
 
 
-def _is_valid_account_metadata(metadata: dict[str, Any]) -> bool:
-    raw_authuser = metadata.get("authuser")
-    if type(raw_authuser) is not int or raw_authuser < 0:
-        return False
-    raw_email = metadata.get("email")
-    return raw_email is None or isinstance(raw_email, str) and bool(raw_email.strip())
-
-
 def refresh_stored_session(
     storage_path: Path,
     profile: str | None,
@@ -198,11 +191,7 @@ def refresh_stored_session(
     else:
         run_async(fetch_tokens(storage_path, profile, allow_headless=allow_headless))
 
-    from ..auth import read_account_metadata
-
-    if storage_path.exists() and not _is_valid_account_metadata(
-        read_account_metadata(storage_path)
-    ):
+    if storage_path.exists() and not observe_profile_account(storage_path).metadata_valid:
         repair_after_refresh(storage_path, quiet=quiet)
     if not quiet:
         console.print(f"[green]ok[/green] refreshed: {storage_path}")

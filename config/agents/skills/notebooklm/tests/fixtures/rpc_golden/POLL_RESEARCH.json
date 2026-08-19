@@ -72,7 +72,8 @@
           "url": "https://scrubbed.example.com/research/page-1",
           "title": "Scrubbed Research Source Title",
           "result_type": 1,
-          "research_task_id": "SCRUBBED_RESEARCH_001"
+          "research_task_id": "SCRUBBED_RESEARCH_001",
+          "hint": "Scrubbed snippet."
         }
       ],
       "summary": "Scrubbed research summary.",

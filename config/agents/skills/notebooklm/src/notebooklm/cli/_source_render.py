@@ -31,7 +31,7 @@ from .._app.source_wait import (
     SourceWaitReady,
     SourceWaitTimeout,
 )
-from ..types import Source, source_status_to_str
+from ..types import Source, drive_source_status_to_str
 from .error_handler import _output_error, current_json_output, exit_with_code
 from .rendering import (
     cli_print,
@@ -55,6 +55,7 @@ from .services.source_research import SourceAddResearchResult
 from .services.source_serializers import (
     source_fulltext_payload,
     source_kind_value,
+    source_row_payload,
     source_summary_payload,
 )
 
@@ -108,17 +109,7 @@ def _render_source_get_result(result: SourceGetResult, *, json_output: bool) -> 
         raise AssertionError("unreachable")  # pragma: no cover
 
     if json_output:
-        json_output_response(
-            {
-                "source": {
-                    **source_summary_payload(src),
-                    "status": source_status_to_str(src.status),
-                    "status_id": src.status,
-                    "created_at": (src.created_at.isoformat() if src.created_at else None),
-                },
-                "found": True,
-            }
-        )
+        json_output_response({"source": source_row_payload(src), "found": True})
         return
 
     console.print(f"[bold cyan]Source:[/bold cyan] {src.id}")
@@ -128,6 +119,48 @@ def _render_source_get_result(result: SourceGetResult, *, json_output: bool) -> 
         console.print(f"[bold]URL:[/bold] {src.url}")
     if src.created_at:
         console.print(f"[bold]Created:[/bold] {src.created_at.strftime('%Y-%m-%d %H:%M')}")
+    _print_drive_lines(src)
+
+
+def _print_drive_lines(src: Source) -> None:
+    """Print the Drive-only lines of ``source get`` text output.
+
+    Emitted only for a source that actually carries a Drive claim, so the
+    non-Drive output (the overwhelming majority) is byte-identical to before.
+    ``drive_document_id`` is the sole handle on a Drive source — the backend
+    leaves the URL slots empty, so ``source get`` previously showed no way to
+    tie the row back to its Drive file (#2113). The Drive status line exists
+    because ``Type``/``Created`` say nothing about a file that was deleted or
+    unshared after ingestion completed (#2111).
+
+    The two lines are gated **independently**, and that is load-bearing rather
+    than defensive: the id and the status decode from structurally unrelated
+    wire slots, and the only Drive row this project has captured
+    (``tests/cassettes/sources_add_drive.yaml``) carries an id with **no**
+    health slot at all. Gating the id on the status would blank #2113's whole
+    reason for existing on the most common real shape.
+    """
+    if src.drive_document_id is not None:
+        console.print(f"[bold]Drive File ID:[/bold] {src.drive_document_id}")
+    if src.drive_status is None:
+        return
+    drive_label = drive_source_status_to_str(src.drive_status)
+    if src.is_drive_degraded:
+        # Deliberately says nothing about ingestion: the two axes are
+        # independent, so a degraded Drive file can sit on a source that is
+        # still processing or that errored outright. Asserting "ingestion
+        # finished" here would be confidently wrong on those rows.
+        # No "Status above" cross-reference: this text view prints Source /
+        # Title / Type / URL / Created and no ingestion status at all, so
+        # pointing at one would send the reader looking for a line that is not
+        # there. Name the axis instead.
+        console.print(
+            f"[bold]Drive Status:[/bold] [yellow]{drive_label}[/yellow] "
+            "(Drive-side health, not NotebookLM's ingestion status — answers "
+            "grounded on this source may be stale)"
+        )
+    else:
+        console.print(f"[bold]Drive Status:[/bold] {drive_label}")
 
 
 def _available_output_path(path: Path) -> Path:
@@ -655,10 +688,14 @@ def _render_add_research_result(result: SourceAddResearchResult, *, json_output:
                 payload["poll_task_id"] = result.poll_task_id
             json_output_response(payload)
             return
+        # This is THE --no-wait success path, so it names both follow-ups: the
+        # blocking one and the standalone import (#2206). Pointing only at
+        # 'research wait' told a user who just opted out of waiting to go wait.
         console.print(
             "[green]Research started.[/green] "
-            "Run 'notebooklm research wait --import-all' to commit "
-            "sources once it completes, otherwise the NotebookLM web "
+            "Commit its sources once it completes with "
+            "'notebooklm research import' (or 'notebooklm research wait "
+            "--import-all' to block until then), otherwise the NotebookLM web "
             "UI will keep an 'Add sources?' modal open."
         )
         return
@@ -673,10 +710,21 @@ def _render_add_research_result(result: SourceAddResearchResult, *, json_output:
 
     if result.outcome in ("failed", "timeout"):
         message = "Research timed out" if result.outcome == "timeout" else "Research failed"
+        # Explain WHY and what to do next when the poll named a termination
+        # reason — an empty Drive search is not a broken run (issue #1964).
+        extra: dict[str, Any] = {}
+        if result.reason_message:
+            extra["reason_message"] = result.reason_message
+        if result.hint:
+            extra["hint"] = result.hint
         if json_output:
-            _exit_with_add_research_status(result.outcome, message)
+            _exit_with_add_research_status(result.outcome, message, **extra)
         else:
             console.print(f"[red]{message}[/red]")
+            if result.reason_message:
+                console.print(result.reason_message)
+            if result.hint:
+                console.print(f"[dim]{result.hint}[/dim]")
             exit_with_code(1)
         return  # pragma: no cover
 

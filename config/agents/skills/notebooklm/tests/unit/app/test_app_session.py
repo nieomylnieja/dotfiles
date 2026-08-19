@@ -479,3 +479,20 @@ def test_logout_failure_is_frozen_and_typed() -> None:
     # Frozen dataclass: assignment is rejected.
     with pytest.raises(FrozenInstanceError):
         failure.kind = "context"  # type: ignore[misc]
+
+
+def test_status_rejects_unknown_role_label_from_context_file(tmp_path, monkeypatch):
+    """The context file is user-editable, so an unknown role label is dropped.
+
+    Without validation a hand-edited ``"role": "wizard"`` would be title-cased
+    straight onto the ``status`` table (#2125).
+    """
+    from notebooklm._app.session import _valid_role_label
+
+    assert _valid_role_label("owner") == "owner"
+    assert _valid_role_label("editor") == "editor"
+    assert _valid_role_label("viewer") == "viewer"
+    assert _valid_role_label("wizard") is None
+    assert _valid_role_label("Owner") is None
+    assert _valid_role_label(1) is None
+    assert _valid_role_label(None) is None

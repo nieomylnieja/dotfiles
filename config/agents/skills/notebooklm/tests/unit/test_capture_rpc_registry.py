@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 from scripts.capture_rpc_registry import (
+    _BundleAuthenticationError,
+    _BundleInfrastructureError,
     _normalize_label,
     _service_of,
     classify_service,
@@ -105,7 +107,156 @@ def test_main_bundle_file_mode(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "NewOne" in out  # an unmapped live RPC is listed
 
     # --check turns the ABSENT id (ZZxxYY/GONE) into a non-zero exit
-    assert main(["--bundle-file", str(bundle), "--types", str(types), "--check"]) == 1
+    outcome = tmp_path / "outcome.txt"
+    assert (
+        main(
+            [
+                "--bundle-file",
+                str(bundle),
+                "--types",
+                str(types),
+                "--check",
+                "--outcome-file",
+                str(outcome),
+            ]
+        )
+        == 1
+    )
+    assert outcome.read_text(encoding="utf-8") == "drift\n"
+
+
+def test_main_clears_stale_outcome_before_unclassified_startup_failure(tmp_path: Path) -> None:
+    outcome = tmp_path / "outcome.txt"
+    outcome.write_text("drift\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        main(
+            [
+                "--types",
+                str(tmp_path / "missing-types.py"),
+                "--outcome-file",
+                str(outcome),
+            ]
+        )
+
+    assert not outcome.exists()
+
+
+def test_main_reports_bundle_auth_failure_without_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unreadable authenticated homepage is auth exit 2, never RPC drift."""
+    types = tmp_path / "types.py"
+    types.write_text(_TYPES, encoding="utf-8")
+    outcome = tmp_path / "outcome.txt"
+
+    def fail_auth() -> str:
+        raise _BundleAuthenticationError(
+            "NotebookLM redirected this request to its region / anti-abuse access gate: "
+            "https://notebooklm.google/ (location=unsupported)."
+        )
+
+    monkeypatch.setattr("scripts.capture_rpc_registry.fetch_bundle", fail_auth)
+
+    assert (
+        main(
+            [
+                "--types",
+                str(types),
+                "--check",
+                "--check-enums",
+                "--outcome-file",
+                str(outcome),
+            ]
+        )
+        == 2
+    )
+    assert outcome.read_text(encoding="utf-8") == "authentication\n"
+    captured = capsys.readouterr()
+    assert "AUTHENTICATION FAILURE" in captured.err
+    assert "location=unsupported" in captured.err
+    assert "No RPC or studio-enum drift conclusion was drawn" in captured.err
+    assert "ABSENT" not in captured.out
+    assert "FAIL:" not in captured.err
+
+
+def test_main_json_reports_typed_bundle_auth_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    types = tmp_path / "types.py"
+    types.write_text(_TYPES, encoding="utf-8")
+
+    def fail_auth() -> str:
+        raise _BundleAuthenticationError("Authentication expired or invalid.")
+
+    monkeypatch.setattr("scripts.capture_rpc_registry.fetch_bundle", fail_auth)
+
+    assert main(["--types", str(types), "--json"]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "error": {
+            "kind": "authentication",
+            "message": "Authentication expired or invalid.",
+        }
+    }
+
+
+def test_main_reports_bundle_infrastructure_failure_without_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    types = tmp_path / "types.py"
+    types.write_text(_TYPES, encoding="utf-8")
+
+    def fail_infrastructure() -> str:
+        raise _BundleInfrastructureError("No readable JS bundle content was available.")
+
+    monkeypatch.setattr("scripts.capture_rpc_registry.fetch_bundle", fail_infrastructure)
+
+    assert main(["--types", str(types), "--check", "--check-enums"]) == 2
+    captured = capsys.readouterr()
+    assert "INFRASTRUCTURE FAILURE" in captured.err
+    assert "No RPC or studio-enum drift conclusion was drawn" in captured.err
+    assert "ABSENT" not in captured.out
+
+
+def test_main_json_reports_typed_bundle_infrastructure_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    types = tmp_path / "types.py"
+    types.write_text(_TYPES, encoding="utf-8")
+    outcome = tmp_path / "outcome.txt"
+
+    def fail_infrastructure() -> str:
+        raise _BundleInfrastructureError("Bundle CDN was unavailable.")
+
+    monkeypatch.setattr("scripts.capture_rpc_registry.fetch_bundle", fail_infrastructure)
+
+    assert (
+        main(
+            [
+                "--types",
+                str(types),
+                "--json",
+                "--outcome-file",
+                str(outcome),
+            ]
+        )
+        == 2
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "error": {
+            "kind": "infrastructure",
+            "message": "Bundle CDN was unavailable.",
+        }
+    }
+    assert outcome.read_text(encoding="utf-8") == "infrastructure\n"
 
 
 def test_service_of() -> None:

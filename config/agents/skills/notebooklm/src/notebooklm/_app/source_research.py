@@ -116,6 +116,12 @@ class SourceAddResearchResult:
     report: str = ""
     status: str | None = None
     import_result: ResearchImportOutcome | None = None
+    # Why a non-success run ended, plus its remediation (issue #1964) — so
+    # ``source add-research`` can explain an empty Drive search instead of
+    # printing a bare "Research failed". ``None`` when the poll carried no
+    # termination reason.
+    reason_message: str | None = None
+    hint: str | None = None
 
 
 def validate_add_research_flags(*, import_all: bool, cited_only: bool, no_wait: bool) -> None:
@@ -139,9 +145,14 @@ def validate_add_research_flags(*, import_all: bool, cited_only: bool, no_wait: 
     if cited_only and not import_all:
         raise ValidationError("--cited-only requires --import-all")
     if no_wait and import_all:
+        # Both follow-ups are named because they differ in kind, not just in
+        # spelling: ``research wait --import-all`` blocks until the run lands,
+        # ``research import`` refuses a run that has not (#2206). Pointing only
+        # at the blocking one left ``--no-wait`` with no non-blocking route.
         raise ValidationError(
-            "--import-all requires --wait (the default) or a separate "
-            "'research wait --import-all' after --no-wait."
+            "--import-all requires --wait (the default), or after --no-wait a "
+            "separate 'research wait --import-all' (blocks) or 'research import' "
+            "(imports an already-completed run, never blocks)."
         )
 
 
@@ -273,6 +284,8 @@ async def execute_source_add_research(
             poll_task_id=task_id,
             sources=sources,
             report=report,
+            reason_message=status.reason_message,
+            hint=status.hint,
         )
     return SourceAddResearchResult(
         outcome="unknown_status",
@@ -282,6 +295,8 @@ async def execute_source_add_research(
         sources=sources,
         report=report,
         status=status_val,
+        reason_message=status.reason_message,
+        hint=status.hint,
     )
 
 

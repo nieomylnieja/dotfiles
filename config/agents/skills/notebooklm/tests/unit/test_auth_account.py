@@ -15,7 +15,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from notebooklm import auth as auth_module
-from notebooklm._auth import account as _auth_account
+from notebooklm._auth import storage as _auth_storage
 from notebooklm.auth import (
     Account,
     enumerate_accounts,
@@ -189,8 +189,10 @@ class TestAccountMetadata:
             return {"authuser": 3, "email": "carol@example.com"}
 
         # Seam-aliased object-attribute patch (ADR-0007): patches the owning
-        # module so bare-name lookups inside ``_auth.account`` observe the fake.
-        monkeypatch.setattr(_auth_account, "read_account_metadata", fake_read_account_metadata)
+        # module so bare-name lookups inside it observe the fake. Since ADR-0033
+        # PR 5.2 the owner of the account RECORD helpers is ``_auth.storage``;
+        # ``_auth.account`` kept only the network-identity half.
+        monkeypatch.setattr(_auth_storage, "read_account_metadata", fake_read_account_metadata)
 
         assert auth_module.get_authuser_for_storage(storage) == 3
         assert auth_module.get_account_email_for_storage(storage) == "carol@example.com"

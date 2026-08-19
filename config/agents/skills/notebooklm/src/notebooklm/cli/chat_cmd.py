@@ -27,6 +27,7 @@ from .._app.chat import (
     validate_ask_flags,
 )
 from .._app.events import ProgressEvent
+from .._app.views import ask_result_view
 from ..exceptions import ValidationError
 from .auth_runtime import resolve_client_factory, with_client
 from .context import get_current_conversation, get_current_notebook, set_current_conversation
@@ -419,11 +420,12 @@ def register_chat_commands(cli):
                     note_save_error = outcome.error
 
                 if json_output:
-                    from dataclasses import asdict
-
-                    data = asdict(result)
-                    # Exclude raw_response from CLI output for brevity.
-                    del data["raw_response"]
+                    # Go through the shared projection rather than a local
+                    # ``asdict`` + ``del``: it is the one place that knows which
+                    # ``AskResult`` fields are internal, so a field added there
+                    # (``answer_document``, #2120) cannot leak into this
+                    # envelope just because this call site was not updated too.
+                    data = ask_result_view(result)
                     if save_as_note:
                         # Merge note-save outcome into the envelope so the
                         # caller can observe success/failure from stdout

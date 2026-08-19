@@ -97,7 +97,7 @@ async def execute_notebook_create(
     persisted active-notebook pointer), so it stays in the command layer; this
     core only creates the notebook and returns the typed result.
 
-    The returned notebook has its ``created_at`` / ``modified_at`` backfilled
+    The returned notebook has its ``created_at`` / ``last_viewed_at`` backfilled
     best-effort (see :func:`_backfill_create_timestamps`) so every adapter
     driving this core — CLI ``notebook create --json``, the REST create route,
     and the MCP ``notebook_create`` tool — surfaces populated timestamps on
@@ -112,7 +112,7 @@ async def _backfill_create_timestamps(
     client: NotebookLMClient,
     notebook: Notebook,
 ) -> None:
-    """Best-effort: fill ``notebook``'s null ``created_at`` / ``modified_at``.
+    """Best-effort: fill ``notebook``'s null ``created_at`` / ``last_viewed_at``.
 
     ``CREATE_NOTEBOOK`` (``CCqFvf``) returns a notebook whose ``meta[5]`` /
     ``meta[8]`` timestamp slots are not yet populated, even though
@@ -134,7 +134,7 @@ async def _backfill_create_timestamps(
     """
     if not notebook.id:
         return
-    if notebook.created_at is not None and notebook.modified_at is not None:
+    if notebook.created_at is not None and notebook.last_viewed_at is not None:
         return
     try:
         fresh = await client.notebooks.get(notebook.id)
@@ -147,8 +147,11 @@ async def _backfill_create_timestamps(
         return
     if notebook.created_at is None and fresh.created_at is not None:
         notebook.created_at = fresh.created_at
-    if notebook.modified_at is None and fresh.modified_at is not None:
-        notebook.modified_at = fresh.modified_at
+    if notebook.last_viewed_at is None and fresh.last_viewed_at is not None:
+        # ``Notebook.__setattr__`` mirrors the write into the deprecated
+        # ``modified_at`` alias, so this in-place fill keeps both names correct
+        # without a second assignment here (#2126).
+        notebook.last_viewed_at = fresh.last_viewed_at
 
 
 # ---------------------------------------------------------------------------

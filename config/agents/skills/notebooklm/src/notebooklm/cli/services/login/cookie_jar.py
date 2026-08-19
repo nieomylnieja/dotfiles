@@ -1,12 +1,12 @@
 """Shared cookie-jar enumeration helper.
 
-Contains :func:`_enumerate_one_jar` — probes one rookiepy cookie set
+Contains :func:`_enumerate_one_jar` — probes one rookie-cookies cookie set
 against ``?authuser=N`` to return tagged :class:`Account` records. Both
 the legacy single-jar path (``_read_browser_cookies``) and the Chromium
 multi-profile fan-out path call this helper.
 
-Also owns :data:`_ROOKIEPY_BROWSER_ALIASES` — the user-facing browser
-name → rookiepy function-name map (referenced by
+Also owns :data:`_ROOKIE_COOKIES_BROWSER_ALIASES` — the user-facing browser
+name → rookie-cookies function-name map (referenced by
 :mod:`.browser_accounts._read_browser_cookies` for the named-browser
 dispatch path).
 
@@ -25,20 +25,23 @@ file.
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-import httpx
+from ...._app.login_cookie import (
+    Account,
+    BrowserCookieProbeFailure,
+    BrowserCookieProbeRequest,
+    BrowserCookieProbeSuccess,
+    ProbeRunner,
+    _browser_cookie_validation_failure,
+    probe_browser_cookie_jar,
+)
 
 # ``browser_capture`` is the one ``_auth`` module the CLI-boundary guardrail
 # sanctions (ADR-0021); it re-exports ``app_host_scope_note`` so this advice and
 # the library-side hints share a single copy of the cookie-scope caveat.
 from ...._auth.browser_capture import app_host_scope_note
-from ....auth import (
-    cookie_names_from_storage,
-    missing_cookies_hint,
-    validate_with_recovery,
-)
+from ....auth import validate_with_recovery
 from ....config import get_base_host
 from .io_seam import resolve_login_io
 from .outcomes import (
@@ -49,23 +52,19 @@ from .outcomes import (
 )
 
 if TYPE_CHECKING:
-    from ....auth import Account
     from .io_seam import LoginIO
 
-logger = logging.getLogger(__name__)
-
-
-# Maps user-facing browser names to rookiepy function names.
-_ROOKIEPY_BROWSER_ALIASES: dict[str, str] = {
+# Maps user-facing browser names to rookie-cookies function names.
+_ROOKIE_COOKIES_BROWSER_ALIASES: dict[str, str] = {
     "arc": "arc",
     "brave": "brave",
     "chrome": "chrome",
     "chromium": "chromium",
     "edge": "edge",
     "firefox": "firefox",
-    "ie": "ie",
+    "ie": "internet_explorer",
     "librewolf": "librewolf",
-    "octo": "octo",
+    "octo": "octo_browser",
     "opera": "opera",
     "opera-gx": "opera_gx",
     "opera_gx": "opera_gx",
@@ -91,7 +90,7 @@ def _enumerate_one_jar(
     fan-out caller can route writes back to the right source.
 
     Args:
-        raw_cookies: rookiepy cookie dicts for one source.
+        raw_cookies: rookie-cookies cookie dicts for one source.
         browser_name: The browser the cookies came from (for error messages).
         browser_profile: Tag attached to each Account (``"Default"``,
             ``"Profile 1"``, ...) or ``None`` for the legacy single-jar path.
@@ -131,99 +130,93 @@ def _enumerate_one_jar(
             Re-raised unchanged so fan-out aborts (vs. silently downgrading
             every offline profile to a soft skip).
     """
-    from ....auth import (
-        Account,
-        build_cookie_jar,
-        convert_rookiepy_cookies_to_storage_state,
-        enumerate_accounts,
-        extract_cookies_with_domains,
-    )
-
-    io = resolve_login_io(io)
-    if validate_before_probe:
-        storage_state, validation_error = validate_with_recovery(raw_cookies)
-        if validation_error is not None:
-            return _cookie_validation_failure(
-                storage_state, validation_error, browser_name=browser_name, quiet=quiet
-            )
-    else:
-        # ``auth inspect`` historically attempted account enumeration before
-        # classifying the local cookie set.  Keep that transport-error
-        # precedence without weakening the normal browser-extraction loader:
-        # this projection is probe-only and the full validation still runs
-        # after a successful network probe.
-        storage_state = convert_rookiepy_cookies_to_storage_state(raw_cookies)
-        validation_error = None
-
-    cookie_map = extract_cookies_with_domains(
-        storage_state, validate_required=validate_before_probe
-    )
-    jar = build_cookie_jar(cookies=cookie_map)
+    request = result = resolved_io = paragraphs = scope_note = probe_runner = None
     try:
-        accounts = io.run_async(enumerate_accounts(jar))
-    except ValueError:
-        # Cookies are present but Google rejected them (passive sign-in
-        # redirected to the account chooser, or RotateCookies returned 401).
-        if quiet:
-            return StaleCookies(
-                code="STALE_COOKIES",
-                message=(
-                    f"Saved cookies for {browser_name} are too stale for Google to re-authenticate."
-                ),
-            )
-        # ``enumerate_accounts`` probes the *configured* host, so name that host
-        # rather than a fixed URL — refreshing cookies against a host this
-        # client never calls proves nothing. The scope note covers the other
-        # reading of this failure: the binding cookie exists, but on the sibling
-        # personal host, so the probe was rejected for scope, not staleness.
-        paragraphs = [
-            f"[red]Account discovery failed: {browser_name}'s saved cookies are "
-            f"too stale for Google to re-authenticate.[/red]",
-            f"Refresh them by opening the browser and visiting "
-            f"https://{get_base_host()} (the host this client probed), then "
-            f"re-run this command.",
-        ]
-        if scope_note := app_host_scope_note():
-            paragraphs.append(scope_note)
-        paragraphs.append(
-            "If the browser is signed out, sign back in there first.\n"
-            "If you'd rather skip the browser entirely, use "
-            "[cyan]notebooklm login[/cyan] (Playwright flow)."
+        resolved_io = resolve_login_io(io)
+        request = BrowserCookieProbeRequest(
+            raw_cookies=raw_cookies,
+            browser_name=browser_name,
+            browser_profile=browser_profile,
+            quiet=quiet,
+            validate_before_probe=validate_before_probe,
         )
-        return StaleCookies(code="STALE_COOKIES", message="\n\n".join(paragraphs))
-    except httpx.RequestError as e:
-        # Distinct from "signed out / stale" branches above: a network
-        # failure means every profile probe is likely to fail the same way.
-        # Fan-out callers use quiet=True and must still see the exception so
-        # they can abort instead of soft-skipping all profiles.
-        if quiet:
-            raise
+        probe_runner = cast(ProbeRunner, resolved_io.run_async)
+        result = probe_browser_cookie_jar(
+            request,
+            run_probe=probe_runner,
+            validate_with_recovery=validate_with_recovery,
+        )
+        if isinstance(result, BrowserCookieProbeSuccess):
+            return list(result.accounts)
+        assert isinstance(result, BrowserCookieProbeFailure)
+        if result.code == "COOKIE_VALIDATION":
+            return _project_cookie_validation_failure(
+                result,
+                browser_name=browser_name,
+                quiet=quiet,
+            )
+        if result.code == "STALE_COOKIES":
+            if quiet:
+                return StaleCookies(
+                    code="STALE_COOKIES",
+                    message=(
+                        f"Saved cookies for {browser_name} are too stale for Google "
+                        "to re-authenticate."
+                    ),
+                )
+            paragraphs = [
+                f"[red]Account discovery failed: {browser_name}'s saved cookies are "
+                f"too stale for Google to re-authenticate.[/red]",
+                "Refresh them by opening the browser and visiting "
+                f"https://{get_base_host()} (the host this client probed), then "
+                "re-run this command.",
+            ]
+            scope_note = app_host_scope_note()
+            if scope_note:
+                paragraphs.append(scope_note)
+            paragraphs.append(
+                "If the browser is signed out, sign back in there first.\n"
+                "If you'd rather skip the browser entirely, use "
+                "[cyan]notebooklm login[/cyan] (Playwright flow)."
+            )
+            return StaleCookies(code="STALE_COOKIES", message="\n\n".join(paragraphs))
         return NetworkFailure(
             code="NETWORK_ERROR",
             message=(
-                f"[red]Account discovery failed (network error):[/red] {e}\n"
+                f"[red]Account discovery failed (network error):[/red] {result.detail}\n"
                 "Check your internet connection and try again."
             ),
         )
+    finally:
+        del raw_cookies, browser_name, browser_profile, io, request, result
+        del quiet, validate_before_probe, resolved_io, paragraphs, scope_note, probe_runner
 
-    if not validate_before_probe:
-        storage_state, validation_error = validate_with_recovery(raw_cookies)
-        if validation_error is not None:
-            return _cookie_validation_failure(
-                storage_state, validation_error, browser_name=browser_name, quiet=quiet
+
+def _project_cookie_validation_failure(
+    failure: BrowserCookieProbeFailure,
+    *,
+    browser_name: str,
+    quiet: bool,
+) -> CookieValidationFailure:
+    """Render the current CLI outcome from a neutral validation failure."""
+    result = None
+    try:
+        if quiet:
+            result = CookieValidationFailure(
+                code="COOKIE_VALIDATION_FAILED",
+                message=f"No valid Google authentication cookies found in {browser_name}.",
             )
-
-    if browser_profile is None:
-        return list(accounts)
-    return [
-        Account(
-            authuser=a.authuser,
-            email=a.email,
-            is_default=a.is_default,
-            browser_profile=browser_profile,
+            return result
+        result = CookieValidationFailure(
+            code="COOKIE_VALIDATION_FAILED",
+            message=(
+                "[red]No valid Google authentication cookies found.[/red]\n"
+                f"{failure.detail}\n\n{failure.hint}"
+            ),
         )
-        for a in accounts
-    ]
+        return result
+    finally:
+        del failure, browser_name, quiet, result
 
 
 def _cookie_validation_failure(
@@ -233,19 +226,19 @@ def _cookie_validation_failure(
     browser_name: str,
     quiet: bool,
 ) -> CookieValidationFailure:
-    """Project a browser-cookie validation failure after the network probe."""
-    if quiet:
-        return CookieValidationFailure(
-            code="COOKIE_VALIDATION_FAILED",
-            message=f"No valid Google authentication cookies found in {browser_name}.",
+    """Retained exact-signature adapter for direct and patched legacy callers."""
+    failure = result = None
+    try:
+        failure = _browser_cookie_validation_failure(
+            storage_state,
+            validation_error,
+            browser_name=browser_name,
         )
-    cookie_names = cookie_names_from_storage(storage_state)
-    hint = missing_cookies_hint(cookie_names, browser_label=browser_name)
-    return CookieValidationFailure(
-        code="COOKIE_VALIDATION_FAILED",
-        message=(
-            "[red]No valid Google authentication cookies found.[/red]\n"
-            f"{validation_error}\n\n"
-            f"{hint}"
-        ),
-    )
+        result = _project_cookie_validation_failure(
+            failure,
+            browser_name=browser_name,
+            quiet=quiet,
+        )
+        return result
+    finally:
+        del storage_state, validation_error, browser_name, quiet, failure, result

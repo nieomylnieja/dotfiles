@@ -9,10 +9,11 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from .._url_utils import pdf_url_display_title
-from ..rpc.types import SourceStatus
+from ..rpc.types import DriveSourceStatus, SourceStatus
 from .common import (
     UnknownTypeWarning,
 )
+from .documents import StructuredDocument
 
 if TYPE_CHECKING:
     from .._row_adapters.sources import SourceRow
@@ -37,6 +38,7 @@ class SourceType(str, Enum):
     YOUTUBE = "youtube"
     MARKDOWN = "markdown"
     DOCX = "docx"
+    POWERPOINT = "powerpoint"
     CSV = "csv"
     EPUB = "epub"
     IMAGE = "image"
@@ -48,11 +50,13 @@ _warned_source_types: set[int] = set()
 
 
 _SOURCE_TYPE_CODE_MAP: dict[int, SourceType] = {
+    0: SourceType.UNKNOWN,
     1: SourceType.GOOGLE_DOCS,
     2: SourceType.GOOGLE_SLIDES,  # Was GOOGLE_OTHER, now more specific
     3: SourceType.PDF,
     4: SourceType.PASTED_TEXT,
     5: SourceType.WEB_PAGE,
+    6: SourceType.POWERPOINT,
     8: SourceType.MARKDOWN,
     9: SourceType.YOUTUBE,
     10: SourceType.MEDIA,
@@ -62,6 +66,83 @@ _SOURCE_TYPE_CODE_MAP: dict[int, SourceType] = {
     16: SourceType.CSV,
     17: SourceType.EPUB,
 }
+
+
+#: Local-file extensions NotebookLM's resumable upload accepts, spelled with the
+#: leading dot and lowercased (the form :attr:`pathlib.PurePath.suffix` returns).
+#:
+#: The **input-side twin** of :data:`_SOURCE_TYPE_CODE_MAP`: that map says how the
+#: backend labels a source on the way out, this set says how a user may spell one
+#: on the way in. They are deliberately co-located so a newly supported file type
+#: cannot gain a decode entry without a spelling — PowerPoint is the case that
+#: proved the split (#2137/#2191 added ``6: SourceType.POWERPOINT`` while every
+#: consumer of this set still had PowerPoint missing from its own copy, #2202).
+#:
+#: A *mapping* to :class:`SourceType` is deliberately NOT asserted here: only some
+#: of these extensions have a live-captured decode code (pdf→3, md→8, docx→11,
+#: pptx→6, csv→16, epub→17), and inventing codes for the rest (txt/rtf/odt/tsv)
+#: would put unverified wire facts in a constant.
+_UPLOAD_FILE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".csv",
+        ".doc",
+        ".docx",
+        ".epub",
+        ".md",
+        ".markdown",
+        ".odt",
+        ".pdf",
+        ".pptx",
+        ".rtf",
+        ".tsv",
+        ".txt",
+    }
+)
+
+#: File-shaped extensions that are NOT asserted to be upload-accepted.
+#:
+#: The escape hatch that keeps :data:`_UPLOAD_FILE_EXTENSIONS` honest. The two
+#: sets feed consumers with very different failure modes, so an extension has to
+#: earn the first one:
+#:
+#: * the path heuristic only decides whether a *non-existent* argument gets a
+#:   warning — a wrong entry costs nothing;
+#: * the Drive router (``_source.drive_import``) uses the upload set as a
+#:   **network** gate — a wrong entry turns a fast, clear client-side refusal
+#:   into a full file download followed by a murky server-side failure.
+#:
+#: ``.ppt`` sits here because the evidence covers ``.pptx`` only: a real ``.pptx``
+#: upload was live-probed to READY decoding as ``POWERPOINT`` (#2202), while
+#: legacy ``.ppt`` — a different container (OLE compound file, not OOXML) — has
+#: never been put on the wire. Renaming a ``.pptx`` to ``.ppt`` would prove
+#: nothing. Move it up once a real legacy ``.ppt`` is probed; until then a
+#: mistyped ``deck.ppt`` still earns its warning and the Drive router still
+#: refuses it up front, which is the behavior with evidence behind it.
+_FILE_SHAPED_ONLY_EXTENSIONS: frozenset[str] = frozenset({".ppt"})
+
+#: HTML-family extensions NotebookLM's upload endpoint **rejects**. Tracked next to
+#: the accepted set (rather than folded into it) because the two callers want them
+#: on opposite sides: the upload/Drive gates reject them with convert-first
+#: guidance, while the path heuristic must still recognise ``page.html`` as
+#: file-shaped so a mistyped one is flagged rather than silently pasted in as
+#: text content.
+_HTML_FILE_EXTENSIONS: frozenset[str] = frozenset({".html", ".htm", ".xhtml", ".xht"})
+
+#: Extensions that make an argument *look like a local file path*.
+#:
+#: Scope, precisely: ``source add``'s auto-detect checks ``Path(content).exists()``
+#: BEFORE consulting this set, so an existing file is uploaded on its own merits
+#: whatever its extension. This set decides what happens to a file-shaped argument
+#: that does **not** exist — whether the user gets the "looks like a path but does
+#: not exist" warning or has the string silently ingested as pasted text. A missing
+#: extension therefore costs a typo'd filename its warning, which is exactly the
+#: footgun the warning exists to catch (#2202).
+#:
+#: Derived — never hand-maintained — so a type gains its spelling here the moment
+#: it becomes uploadable.
+_PATH_SHAPED_FILE_EXTENSIONS: frozenset[str] = (
+    _UPLOAD_FILE_EXTENSIONS | _HTML_FILE_EXTENSIONS | _FILE_SHAPED_ONLY_EXTENSIONS
+)
 
 
 _SOURCE_TYPE_COMPAT_MAP: dict[SourceType, str] = {
@@ -74,6 +155,7 @@ _SOURCE_TYPE_COMPAT_MAP: dict[SourceType, str] = {
     SourceType.YOUTUBE: "youtube",
     SourceType.MARKDOWN: "text_file",
     SourceType.DOCX: "text_file",
+    SourceType.POWERPOINT: "text_file",
     SourceType.CSV: "text",
     SourceType.EPUB: "text_file",
     SourceType.IMAGE: "text",
@@ -84,9 +166,11 @@ _SOURCE_TYPE_COMPAT_MAP: dict[SourceType, str] = {
 
 # The type_code==14 overload (#1828/#1832): the backend returns 14 for BOTH a
 # native Google Sheet AND a Drive-hosted binary file (e.g. a PDF). Live capture
-# showed Drive sources carry no URL (metadata[0]/[5]/[7] are null), so the only
-# disambiguation signal is the MIME at metadata[19] / metadata[9][2]. A native
-# Sheet carries "application/vnd.google-apps.spreadsheet" (→ stay 14); a Drive
+# showed Drive sources carry no URL (metadata[5]/[7] are null and metadata[0]
+# holds the Drive metadata block — see ``SourceRow.drive_document_id`` — rather
+# than a URL), so disambiguation uses the original-content MIME at Source tag 8
+# first (#2112), then the Drive-only MIME at metadata[19] / metadata[9][2]. A
+# native Sheet carries "application/vnd.google-apps.spreadsheet" (→ stay 14); a Drive
 # PDF carries "application/pdf" (→ 3). Only MIMEs proven by live capture are
 # mapped; anything else under 14 is left as GOOGLE_SPREADSHEET (conservative —
 # never relabel a real Sheet, never introduce UNKNOWN). Extend as more
@@ -158,6 +242,21 @@ def _extract_source_created_at(metadata: Any) -> datetime | None:
     return SourceRow.created_at_from_metadata(metadata)
 
 
+#: Drive states that mean "the notebook's copy is not a faithful view of a
+#: readable live Drive file" — what :attr:`Source.is_drive_degraded` reports.
+#: An explicit allowlist, not ``!= ACTIVE``: the client-side ``UNKNOWN``
+#: sentinel says nothing about health, and a future backend member must be
+#: classified deliberately rather than inherit "degraded" by default.
+_DEGRADED_DRIVE_STATUSES: frozenset[DriveSourceStatus] = frozenset(
+    {
+        DriveSourceStatus.INACCESSIBLE,
+        DriveSourceStatus.SYNCING,
+        DriveSourceStatus.DELETED,
+        DriveSourceStatus.GEN_AI_ACCESS_DENIED,
+    }
+)
+
+
 def _pdf_url_title_fallback(
     title: str | None, url: str | None, type_code: int | None
 ) -> str | None:
@@ -205,6 +304,40 @@ class Source:
     # with a ``SourceStatus``; ``SourceStatus`` is the accurate declared type
     # and remains ``int``-compatible at runtime and for equality.
     status: SourceStatus = SourceStatus.READY
+    #: Google Drive file id for Drive-backed sources; ``None`` for every other
+    #: kind. Drive sources carry no :attr:`url` (the backend leaves the URL
+    #: slots empty), so this is the only field tying such a source back to the
+    #: ``file_id`` it was created from — ``sources.add_drive`` matches on it to
+    #: stay idempotent when a create has to be retried (#2113).
+    drive_document_id: str | None = None
+    #: Drive-side health of a Drive-backed source
+    #: (``SourceSettings.userDriveSourceStatus``), or ``None`` when the row
+    #: makes no Drive-health claim — every non-Drive source, and a Drive source
+    #: whose status is the proto3 default. Orthogonal to :attr:`status`, which
+    #: reports NotebookLM's own ingestion pipeline: a source whose Drive file
+    #: was deleted or unshared keeps reporting ``READY`` because ingestion did
+    #: complete (#2111). See :attr:`is_drive_degraded`.
+    drive_status: DriveSourceStatus | None = None
+    #: Direct URL for downloading the original uploaded file. Populated only
+    #: when the backend retains a downloadable blob for the source (#2112).
+    download_url: str | None = field(default=None, repr=False)
+    #: Human-clickable Drive viewer URL for the original uploaded file, when
+    #: the backend supplies one (#2112).
+    viewer_url: str | None = field(default=None, repr=False)
+    #: True MIME type from the source's content blob descriptor. Unlike the
+    #: internal Drive MIME used for type disambiguation, this also covers
+    #: ordinary uploaded files (#2112).
+    content_mime: str | None = None
+    #: Inferred source word count. The wire slot is confirmed live but unnamed
+    #: in the recovered schema, so the semantic label remains provisional.
+    word_count: int | None = None
+    #: Opaque revision identifier from the source metadata revision handle.
+    revision_id: str | None = None
+    #: Timestamp paired with :attr:`revision_id`, decoded as timezone-aware UTC.
+    revision_timestamp: datetime | None = None
+    #: Last time the backend reports the source content was modified/refreshed,
+    #: decoded as timezone-aware UTC.
+    last_modified_at: datetime | None = None
 
     @property
     def kind(self) -> SourceType:
@@ -213,8 +346,57 @@ class Source:
 
     @property
     def is_ready(self) -> bool:
-        """Check if source is ready for use (status=READY)."""
+        """Check if NotebookLM finished ingesting this source (status=READY).
+
+        .. note::
+           This reports **NotebookLM's ingestion pipeline only**
+           (``SourceSettings.status``). For a Drive-backed source it does not
+           track the Drive file: ingestion completes once, and stays complete,
+           even after the file is deleted, unshared, or is mid-resync — so
+           ``is_ready`` can be ``True`` while chat is grounded on a stale
+           snapshot. Drive-side health is reported separately by
+           :attr:`drive_status` / :attr:`is_drive_degraded` (#2111); this
+           property deliberately does not fold them in, because
+           ``wait_until_ready`` would then poll forever on a Drive file that
+           can never come back.
+        """
         return self.status == SourceStatus.READY
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        """Whether the backend reports a *non-healthy* Drive state for this source.
+
+        ``True`` only for the four explicitly degraded members —
+        ``INACCESSIBLE``, ``SYNCING``, ``DELETED``, ``GEN_AI_ACCESS_DENIED``.
+        Everything else is ``False``:
+
+        * ``drive_status is None`` — no Drive-health claim on the row (every
+          non-Drive source, and the proto3-default case).
+        * ``ACTIVE`` — nothing wrong reported.
+        * ``UNKNOWN`` — the slot carried a code this client does not model. A
+          state we cannot name is not evidence of degradation; callers who
+          prefer to fail closed should read :attr:`drive_status` directly and
+          decide for themselves.
+
+        ``False`` therefore means "the backend reported no degradation", NOT
+        "the Drive file is confirmed present and readable" — the three cases
+        above all report ``False`` without any such confirmation.
+
+        Note that ``SYNCING`` is transient and self-healing: it means the copy
+        is mid-update, not broken. Callers wiring this to an alert should
+        exclude it (``src.is_drive_degraded and src.drive_status is not
+        DriveSourceStatus.SYNCING`` recovers the sticky-fault set).
+
+        The degraded set is an explicit allowlist rather than
+        ``!= ACTIVE`` so a future backend member cannot silently start
+        reporting every Drive source as broken.
+
+        .. warning::
+           ``ACTIVE`` is the only value this project has observed on the wire;
+           the degraded members are read off the backend enum. See
+           :class:`~notebooklm.rpc.types.DriveSourceStatus`.
+        """
+        return self.drive_status in _DEGRADED_DRIVE_STATUSES
 
     @property
     def is_processing(self) -> bool:
@@ -243,15 +425,18 @@ class Source:
         when no metadata list is present at ``_raw[2]``, so
         :attr:`SourceRow.metadata` returns ``None`` and
         :attr:`~SourceRow.type_code` / :attr:`~SourceRow.url` /
-        :attr:`~SourceRow.created_at` all resolve to ``None`` while
-        :attr:`~SourceRow.status` resolves to ``SourceStatus.READY``. The
+        :attr:`~SourceRow.created_at` and all optional enrichment properties
+        resolve to ``None`` while
+        :attr:`~SourceRow.status` resolves to ``SourceStatus.UNKNOWN``. The
         single field mapping below therefore covers all three wire shapes
         identically.
         """
-        # Correct the type_code==14 native-Sheet/Drive-PDF overload by the row
-        # MIME before it reaches ``kind`` (#1832). No-op for every other type
-        # code and for real Sheets.
-        type_code = _disambiguate_type_code(row.type_code, row.mime)
+        # Correct the type_code==14 native-Sheet/Drive-PDF overload before it
+        # reaches ``kind`` (#1832). Prefer the original-content MIME, then fall
+        # back to the Drive-only MIME if the first value is not a known
+        # override. Both passes are no-ops for every other code and real Sheets.
+        type_code = _disambiguate_type_code(row.type_code, row.content_mime)
+        type_code = _disambiguate_type_code(type_code, row.mime)
         return cls(
             id=row.id,
             # #1850: a direct-PDF URL arrives with the raw URL in the title slot
@@ -263,6 +448,15 @@ class Source:
             _type_code=type_code,
             created_at=row.created_at,
             status=row.status,
+            drive_document_id=row.drive_document_id,
+            drive_status=row.drive_status,
+            download_url=row.download_url,
+            viewer_url=row.viewer_url,
+            content_mime=row.content_mime,
+            word_count=row.word_count,
+            revision_id=row.revision_id,
+            revision_timestamp=row.revision_timestamp,
+            last_modified_at=row.last_modified_at,
         )
 
     @classmethod
@@ -321,7 +515,41 @@ class Source:
 
 @dataclass
 class SourceFulltext:
-    """Full text content of a source as indexed by NotebookLM."""
+    """Full text content of a source as indexed by NotebookLM.
+
+    Attributes:
+        source_id: The source UUID.
+        title: The source title.
+        content: The legacy flat rendering — every text run the document tree
+            contains, joined with ``"\\n"`` in traversal order. Kept
+            byte-identical to its pre-#2128 output so existing callers are
+            unaffected, which also means **its offsets are not the backend's**:
+            the joins insert separators the wire's character ranges never
+            accounted for. Use :attr:`document` when offsets matter, and
+            :attr:`rendered_content` when readability does — joining *runs*
+            rather than *blocks* splits paragraphs mid-sentence (#2211).
+        url: The source URL, when it has one.
+        char_count: ``len(content)`` — Python characters over the legacy flat
+            rendering, **including the** ``"\\n"`` **separators that rendering
+            inserts**. It is a size, not a coordinate: it is neither the
+            document's extent nor comparable to any citation or annotation
+            offset (those are UTF-16 code units over :attr:`document`, which
+            has no separators). On the module's own test source the two read
+            548 and 532. Use :attr:`document` for anything positional.
+        document: The parsed document tree (#2128) — headings, list structure,
+            per-run styling, and the character ranges everything indexes. This
+            is the surface citation alignment is built on: resolve a
+            ``ChatReference``'s ``start_char`` / ``end_char`` with
+            ``document.slice(start_char, end_char)``. Empty (not ``None``) when
+            the response carried no decodable document, so consumers never have
+            to branch.
+
+            Not emitted by the CLI ``--json`` / MCP / REST fulltext payloads,
+            which stay pinned to their existing key sets.
+
+    See also :attr:`rendered_content` — the readable rendering derived from
+    :attr:`document`, and (like :attr:`document`) a Python-API surface only.
+    """
 
     source_id: str
     title: str
@@ -329,22 +557,95 @@ class SourceFulltext:
     _type_code: int | None = field(default=None, repr=False)
     url: str | None = None
     char_count: int = 0
+    document: StructuredDocument = field(default_factory=StructuredDocument, repr=False)
 
     @property
     def kind(self) -> SourceType:
         """Get source type as SourceType enum."""
         return _safe_source_type(self._type_code)
 
+    @property
+    def rendered_content(self) -> str:
+        """The source's text rendered for reading — one line per text-bearing block.
+
+        :attr:`content` joins every text **run** with ``"\\n"``, and a run is a
+        sub-paragraph fragment, so a paragraph the backend split into three runs
+        becomes three lines. That is a consequence of flattening a tree nobody
+        had parsed, not a rendering anybody chose. Since #2128 the tree *is*
+        parsed, so this property renders from it instead — runs joined
+        **within** a block, blocks separated, blocks with nothing to read
+        omitted. A table is the one exception to "one line per block": it reads
+        as one line per **row**, cells tab-separated, from the cell boundaries
+        the parse carries alongside its flattened runs (#2230).
+        :meth:`~notebooklm.types.StructuredDocument.render` carries the full
+        account, including the measurement on this repo's own capture.
+
+        It is derived, additive and free — the document is parsed on every
+        ``get_fulltext`` regardless of ``output_format``, so nothing extra is
+        fetched, and :attr:`content` is untouched for callers that depend on its
+        exact bytes. Derived on *each* access rather than cached, so that it
+        cannot go stale against a reassigned :attr:`document`; bind it to a
+        local if you read it more than once.
+
+        Like :attr:`content` and unlike
+        :attr:`~notebooklm.types.StructuredDocument.text`, this rendering is
+        **not** offset-addressable: the separators it inserts are its own.
+        Resolve a citation's ``start_char`` / ``end_char`` with
+        ``document.slice(...)``, or get a readable window around one from
+        ``resolve_chat_reference_passage``.
+
+        **With** ``output_format="markdown"`` **this is not "content, made
+        readable".** That format fills :attr:`content` from the response's HTML
+        rendition while :attr:`document` is parsed from its text blocks either
+        way, so the two are then different renderings of different payload
+        slots: markdown here, plain text there. Only in the default ``"text"``
+        mode are they the same material laid out two ways.
+
+        ``""`` when the response carried no decodable document (a source whose
+        text arrived as bare strings), where :attr:`content` may still have
+        text — this is a strictly structural rendering, never a fallback
+        flattening. ``document.blocks`` tells the two apart: empty means
+        nothing decoded, rather than a source with nothing in it.
+        """
+        return self.document.render()
+
     def find_citation_context(
         self,
         cited_text: str,
         context_chars: int = 200,
     ) -> list[tuple[str, int]]:
-        """Search for citation text and return matching contexts."""
+        """Search for citation text in :attr:`content` and return matching contexts.
+
+        The search key is a prefix of ``cited_text``, capped at 40 characters
+        **and at the first block boundary the citation crosses**. Both caps
+        matter, and the second one is not an optimisation:
+
+        :attr:`content` joins the document's text runs with ``"\n"`` —
+        characters the backend never counted (#2128) — while ``cited_text``
+        concatenates the cited blocks with no separator at all (#2120). A key
+        that spans a block boundary therefore contains a join that ``content``
+        renders differently, and **cannot match anywhere**. That is not
+        hypothetical: a source whose first block is a short heading (14
+        characters is typical) produces a 40-character key crossing the very
+        first boundary, so every multi-block citation into it would fail to
+        resolve.
+
+        Before #2120 ``cited_text`` was truncated to the fragment's first block,
+        so the key could not straddle a boundary and this never arose. Capping
+        here restores that property for the *key* while leaving ``cited_text``
+        the complete, offset-accurate value.
+
+        This remains a value-based search against a string the citation offsets
+        do not describe, and is now the **fallback** rather than the primary
+        path: ``resolve_chat_reference_passage`` resolves by offset against
+        :attr:`document` — exact, and needing no search — and only comes here
+        for a reference or a source without usable offsets (#2211). Prefer
+        ``document.slice()`` directly when you have a range.
+        """
         if not cited_text or not self.content:
             return []
 
-        search_text = cited_text[: min(40, len(cited_text))]
+        search_text = cited_text[: min(40, self._first_block_boundary(cited_text))]
 
         matches = []
         pos = 0
@@ -355,3 +656,15 @@ class SourceFulltext:
             pos = idx + len(search_text)
 
         return matches
+
+    def _first_block_boundary(self, cited_text: str) -> int:
+        """Length of ``cited_text`` up to the first document-block boundary.
+
+        Returns ``len(cited_text)`` when no boundary applies — an undecoded
+        document, or a citation this source's blocks do not open — so the
+        behaviour is unchanged for every case that was already working.
+        """
+        for block in self.document.blocks:
+            if block.text and cited_text.startswith(block.text):
+                return len(block.text)
+        return len(cited_text)

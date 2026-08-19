@@ -1,18 +1,4 @@
-"""Refresh-cmd coordination + token-fetch entry points for authentication.
-
-This private module owns the ``NOTEBOOKLM_REFRESH_CMD`` subprocess flow and the
-public ``fetch_tokens`` / ``fetch_tokens_with_domains`` entry points. The
-cross-loop coalescing of refresh attempts + the per-path success epoch now live
-in :mod:`notebooklm._auth.single_flight`; this module consumes that core and
-adds the cross-process refresh-cmd flock. ``notebooklm.auth`` re-exports
-compatibility names, but production no longer mirrors facade-level rebindings;
-tests that substitute moved refresh bodies should patch
-``notebooklm._auth.refresh`` directly.
-
-Logger name is pinned to ``"notebooklm.auth"`` (NOT ``__name__``) so existing
-``caplog`` assertions targeting ``notebooklm.auth`` keep matching the records
-emitted from the moved bodies.
-"""
+"""Refresh-command coordination and the canonical token-acquisition ladder."""
 
 from __future__ import annotations
 
@@ -21,10 +7,12 @@ import logging
 import os
 import shlex
 import subprocess
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -32,26 +20,20 @@ from .._env import get_base_url
 from ..paths import get_storage_path, resolve_profile
 from . import cookies as _auth_cookies
 from . import extraction as _auth_extraction
-from . import headers as _auth_headers
 from . import keepalive as _keepalive
 from . import paths as _auth_paths
 from . import recovery as _auth_recovery
 from . import single_flight as _single_flight
 from . import storage as _auth_storage
 from .account import authuser_query
+from .cookie_types import CookieJar
+from .paths import resolve_auth_json_env
+from .profile_store import ProfileStore
+from .storage import get_account_email_for_storage, get_authuser_for_storage
 
 logger = logging.getLogger("notebooklm.auth")
 
-# --- Names aliased from sibling modules --------------------------------------
-# The moved bodies historically resolved these names against ``notebooklm.auth``
-# when they lived there. They are now local aliases in this module; tests that
-# need to substitute one of these dependencies should patch the alias on
-# ``notebooklm._auth.refresh`` directly.
 build_httpx_cookies_from_storage = _auth_cookies.build_httpx_cookies_from_storage
-# No-recovery loader: validates and raises on missing cookies, but never fires
-# the inline ``RotateCookies`` PSIDTS recovery (network POST + disk write) that
-# ``build_httpx_cookies_from_storage`` does. Used by the passive probe so it
-# stays strictly read-only (issue #1569).
 _build_httpx_cookies_from_storage_strict = _auth_cookies._build_httpx_cookies_from_storage_strict
 _replace_cookie_jar = _auth_cookies._replace_cookie_jar
 _cookie_map_from_jar = _auth_cookies._cookie_map_from_jar
@@ -59,7 +41,6 @@ build_cookie_jar = _auth_cookies.build_cookie_jar
 flatten_cookie_map = _auth_cookies.flatten_cookie_map
 _update_cookie_input = _auth_cookies._update_cookie_input
 snapshot_cookie_jar = _auth_storage.snapshot_cookie_jar
-save_cookies_to_storage = _auth_storage.save_cookies_to_storage
 extract_csrf_from_html = _auth_extraction.extract_csrf_from_html
 extract_session_id_from_html = _auth_extraction.extract_session_id_from_html
 # Shared URL-only failure classifier — the single source of truth for the
@@ -69,7 +50,6 @@ extract_session_id_from_html = _auth_extraction.extract_session_id_from_html
 # hand-rolled pre-check this module used to carry, and message formatting now
 # lives entirely behind the classifier.
 _url_only_extraction_failure = _auth_extraction._url_only_extraction_failure
-_resolve_token_route_kwargs = _auth_headers._resolve_token_route_kwargs
 
 # Env-var names live in ``_auth.paths``; aliased so the refresh bodies can
 # reference them without an extra hop.
@@ -132,21 +112,82 @@ _REFRESH_FLIGHT_POLICY = "refresh-cmd"
 # A direct leader-failure and the success-epoch reload short-circuit before this.
 _MAX_REFRESH_FOLLOW_RETRIES = 3
 
-# Cross-process rotation-style flock primitive, aliased from keepalive so the
-# leader body can serialize the refresh-cmd subprocess across processes
-# ([refresh-2]). Tests substitute it by patching this bare name.
-_file_lock_try_exclusive = _keepalive._file_lock_try_exclusive
 # Bounded async wait for another process's refresh flock to release (flock-loser
 # reloads-fresh-not-stale fix); lives next to the flock primitive in ``keepalive``.
 _wait_for_refresh_holder = _keepalive._wait_for_refresh_holder
-_refresh_lock_path = _auth_paths._refresh_lock_path
 canonical_storage_key = _auth_paths.canonical_storage_key
+
+
+# --- Injected collaborators (plan §7 deps record) -----------------------------
+# ``_file_lock_try_exclusive = _keepalive._file_lock_try_exclusive`` and
+# ``_refresh_lock_path = _auth_paths._refresh_lock_path`` used to sit here as
+# module-scope aliases whose only *documented* purpose was "tests substitute
+# this by patching the bare name on this module". That patching protocol is
+# replaced by the record below: the three collaborators the refresh-cmd rung's
+# tests actually replace — the subprocess runner, the flock acquirer, and the
+# lock-path deriver — are threaded keyword-only from the entry points down to
+# the leader body, so a test constructs a record instead of mutating module
+# state that pytest may or may not restore.
+
+
+class _RefreshFlock(Protocol):
+    """Non-blocking exclusive flock: a context manager yielding "acquired?"."""
+
+    def __call__(self, lock_path: Path) -> AbstractContextManager[bool]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshCmdDeps:
+    """Collaborators of the refresh-cmd rung, injectable per call.
+
+    Every field is optional and ``None`` means "use production". The production
+    value is resolved **late**, through this module's namespace, at the moment
+    of use (:meth:`runner`, :meth:`flock`, :meth:`lock_path`) — deliberately
+    NOT captured into a field default at import time. Two reasons:
+
+    1. a frozen record built at import time would freeze the function objects,
+       silently defeating the module-attribute patch seam the whitebox
+       concurrency suites still use for the collaborators this record does not
+       carry; and
+    2. it keeps a partially-specified record useful — ``RefreshCmdDeps(
+       run_refresh_cmd=fake)`` overrides one collaborator and leaves the other
+       two on production, which is how nearly every test wants to use it.
+    """
+
+    run_refresh_cmd: Callable[[Path, str | None], Coroutine[Any, Any, None]] | None = None
+    acquire_refresh_flock: _RefreshFlock | None = None
+    derive_refresh_lock_path: Callable[[Path | None], Path | None] | None = None
+
+    def runner(self) -> Callable[[Path, str | None], Coroutine[Any, Any, None]]:
+        """The ``NOTEBOOKLM_REFRESH_CMD`` subprocess runner."""
+        if self.run_refresh_cmd is not None:
+            return self.run_refresh_cmd
+        return _run_refresh_cmd
+
+    def flock(self) -> _RefreshFlock:
+        """The cross-process refresh flock acquirer ([refresh-2])."""
+        if self.acquire_refresh_flock is not None:
+            return self.acquire_refresh_flock
+        return _keepalive._file_lock_try_exclusive
+
+    def lock_path(self) -> Callable[[Path | None], Path | None]:
+        """The per-storage-path refresh lock-file deriver."""
+        if self.derive_refresh_lock_path is not None:
+            return self.derive_refresh_lock_path
+        return _auth_paths._refresh_lock_path
+
+
+# One shared empty record, so the default path allocates nothing per call. It
+# carries no captured functions (every field is ``None``), so it cannot stale.
+_PRODUCTION_REFRESH_CMD_DEPS = RefreshCmdDeps()
 
 
 async def _refresh_cmd_leader_body(
     path_key: str,
     resolved_storage_path: Path,
     profile: str | None,
+    *,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
 ) -> None:
     """Leader-only body: run ``_run_refresh_cmd`` under a cross-process flock.
 
@@ -165,14 +206,14 @@ async def _refresh_cmd_leader_body(
     (wait-then-reload) or failed attempt leaves waiters retrying (single_flight
     guarantee 2).
     """
-    lock_path = _refresh_lock_path(resolved_storage_path)
+    lock_path = deps.lock_path()(resolved_storage_path)
     if lock_path is None:
-        await _run_refresh_cmd(resolved_storage_path, profile)
+        await deps.runner()(resolved_storage_path, profile)
         _single_flight.note_success(path_key)
         return
-    with _file_lock_try_exclusive(lock_path) as acquired:
+    with deps.flock()(lock_path) as acquired:
         if acquired:
-            await _run_refresh_cmd(resolved_storage_path, profile)
+            await deps.runner()(resolved_storage_path, profile)
             _single_flight.note_success(path_key)
             return
     # Lost the cross-process flock: another process holds it and is refreshing
@@ -191,6 +232,8 @@ async def _coalesced_run_refresh_cmd(
     refresh_key: str,
     resolved_storage_path: Path,
     profile: str | None,
+    *,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
 ) -> None:
     """Run the refresh-cmd once across all loops for ``refresh_key``.
 
@@ -206,7 +249,7 @@ async def _coalesced_run_refresh_cmd(
 
     1. **Late-waiter skip (compare-under-exclusion)** — the success epoch is
        captured BEFORE waiting, and the epoch compare + the flight claim happen
-       under a SINGLE ``_REGISTRY_LOCK`` hold via
+       under a SINGLE owner ``_lock`` hold via
        ``single_flight.claim_if_epoch_current``. A caller whose ``epoch_before``
        is already stale (a sibling succeeded and prompt-popped its flight in the
        meantime) gets a skip signal and reloads instead of spawning a redundant
@@ -232,7 +275,7 @@ async def _coalesced_run_refresh_cmd(
     epoch_before = _single_flight.read_success_epoch(path_key)
 
     def _factory() -> Coroutine[Any, Any, None]:
-        return _refresh_cmd_leader_body(path_key, resolved_storage_path, profile)
+        return _refresh_cmd_leader_body(path_key, resolved_storage_path, profile, deps=deps)
 
     # A PERSISTENTLY failing refresh-cmd with N concurrent waiters would run up to
     # N sequential leader subprocesses (each failed leader's follower becomes a
@@ -297,6 +340,7 @@ async def try_refresh_cmd_reauth(
     storage_path: Path | None,
     cookie_jar: httpx.Cookies,
     profile: str | None = None,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
 ) -> bool:
     """L2.5 mid-session rung: run ``NOTEBOOKLM_REFRESH_CMD`` and reload cookies.
 
@@ -336,7 +380,7 @@ async def try_refresh_cmd_reauth(
     refresh_token = _REFRESH_ATTEMPTED_CONTEXT.set(True)
     try:
         # Coalesced across loops + serialized across processes by the flock.
-        await _coalesced_run_refresh_cmd(refresh_key, canonical_path, profile)
+        await _coalesced_run_refresh_cmd(refresh_key, canonical_path, profile, deps=deps)
         fresh_jar = await asyncio.to_thread(build_httpx_cookies_from_storage, canonical_path)
     except asyncio.CancelledError:
         raise
@@ -605,6 +649,65 @@ async def _run_refresh_cmd(storage_path: Path | None = None, profile: str | None
     logger.info("NotebookLM cookies refreshed via %s", NOTEBOOKLM_REFRESH_CMD_ENV)
 
 
+# --- Token-route resolution (absorbed from _auth/headers.py) -----------------
+# Most authuser helpers live in :mod:`notebooklm._auth.account` (wire formatters)
+# and :mod:`notebooklm._auth.storage` (record readers). What follows is the *routing*
+# glue that combines them for the token-fetch entry points below, preserving
+# explicit caller intent vs. resolved-from-storage defaults. It used to live in
+# a 68-line ``_auth/headers.py`` whose only three call sites are in this module;
+# ADR-0033's sanctioned merge folded it in.
+
+
+def _resolve_token_route_kwargs(
+    storage_path: Path | None,
+    *,
+    authuser: int | None,
+    account_email: str | None,
+) -> dict[str, Any]:
+    """Resolve token-fetch routing while preserving explicit caller intent."""
+    explicit_authuser = authuser is not None
+    env_auth_present = storage_path is None and resolve_auth_json_env() is not None
+    env_authuser = 0
+    env_account_email: str | None = None
+    if env_auth_present and authuser is None:
+        from .cookies import _load_storage_state
+
+        try:
+            state = _load_storage_state(None)
+            metadata = _auth_storage.read_account_metadata_from_storage_state(state)
+        except (OSError, ValueError, TypeError):
+            metadata = {}
+        raw_authuser = metadata.get("authuser")
+        raw_email = metadata.get("email")
+        if type(raw_authuser) is int and raw_authuser >= 0:
+            env_authuser = raw_authuser
+        if isinstance(raw_email, str) and raw_email.strip():
+            env_account_email = raw_email.strip()
+
+    resolved_authuser = (
+        authuser
+        if authuser is not None
+        else env_authuser
+        if env_auth_present
+        else get_authuser_for_storage(storage_path)
+    )
+    if account_email is not None:
+        resolved_account_email = account_email
+    elif explicit_authuser:
+        resolved_account_email = None
+    else:
+        resolved_account_email = (
+            env_account_email if env_auth_present else get_account_email_for_storage(storage_path)
+        )
+
+    route_kwargs: dict[str, Any] = {"authuser": resolved_authuser}
+    if resolved_account_email is not None:
+        route_kwargs["account_email"] = resolved_account_email
+    if explicit_authuser:
+        route_kwargs["force_authuser_query"] = True
+    return route_kwargs
+
+
 async def _fetch_tokens_with_refresh(
     cookie_jar: httpx.Cookies,
     storage_path: Path | None = None,
@@ -615,125 +718,212 @@ async def _fetch_tokens_with_refresh(
     force_authuser_query: bool = False,
     allow_headless: bool = False,
     env_auth: bool = False,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
 ) -> tuple[str, str, bool, _auth_storage.CookieSnapshot | None]:
-    """Fetch tokens, optionally running NOTEBOOKLM_REFRESH_CMD on auth expiry.
-
-    ``env_auth`` is set only by callers whose credentials came from inline
-    ``NOTEBOOKLM_AUTH_JSON``. It cannot be inferred from ``storage_path is None``
-    plus the ambient env var — ``fetch_tokens`` passes explicit cookies with no
-    path, and suppressing its refresh for an unrelated env var breaks it (#2084).
-
-    Returns ``(csrf, session_id, refreshed, post_refresh_snapshot)``.
-
-    When ``refreshed`` is ``True``, ``post_refresh_snapshot`` is a snapshot
-    captured **immediately after** ``_replace_cookie_jar`` swaps in the
-    refresh-cmd output and **before** the retry token fetch can mutate the
-    jar with redirect Set-Cookies. Callers must use that snapshot as the
-    save baseline; re-snapshotting the jar after this function returns
-    would include the retry's rotations in the baseline (so they would
-    never reach disk on the subsequent save).
-
-    When ``refreshed`` is ``False`` the snapshot is ``None`` (no refresh
-    happened; caller's pre-fetch snapshot is still the right baseline).
-    """
+    """Compatibility four-tuple projection over the one complete token ladder."""
     explicit_authuser = (
         authuser if authuser is not None and (authuser != 0 or force_authuser_query) else None
     )
 
-    def resolve_route(path: Path | None) -> dict[str, Any]:
-        return _resolve_token_route_kwargs(
+    async def resolve_route(path: Path | None) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            _resolve_token_route_kwargs,
             path,
             authuser=explicit_authuser,
             account_email=account_email,
         )
 
+    async def load_replacement(
+        path: Path,
+    ) -> tuple[httpx.Cookies, _auth_storage.CookieSnapshot, CookieJar | None]:
+        live = await asyncio.to_thread(build_httpx_cookies_from_storage, path)
+        return live, snapshot_cookie_jar(live), None
+
+    result = await _fetch_tokens_with_refresh_core(
+        cookie_jar,
+        storage_path,
+        profile,
+        resolve_route=resolve_route,
+        load_replacement=load_replacement,
+        initial_baseline=None,
+        env_auth=env_auth,
+        allow_headless=allow_headless,
+        deps=deps,
+    )
+    return result[0], result[1], result[2], result[3]
+
+
+async def _fetch_tokens_with_exact_baseline(
+    cookie_jar: httpx.Cookies,
+    storage_path: Path | None,
+    profile: str | None,
+    *,
+    initial_baseline: CookieJar,
+    resolve_route: Callable[[Path | None], Coroutine[Any, Any, dict[str, Any]]],
+    allow_headless: bool,
+    env_auth: bool,
+) -> tuple[str, str, CookieJar]:
+    """Typed projection retaining the exact raw-sample replacement baseline."""
+
+    async def load_replacement(
+        path: Path,
+    ) -> tuple[httpx.Cookies, _auth_storage.CookieSnapshot, CookieJar | None]:
+        pair = await asyncio.to_thread(_auth_cookies._build_cookie_pair_from_storage, path)
+        return pair.live, snapshot_cookie_jar(pair.live), pair.baseline
+
+    result = await _fetch_tokens_with_refresh_core(
+        cookie_jar,
+        storage_path,
+        profile,
+        resolve_route=resolve_route,
+        load_replacement=load_replacement,
+        initial_baseline=initial_baseline,
+        env_auth=env_auth,
+        allow_headless=allow_headless,
+    )
+    baseline = result[4]
+    if baseline is None:  # pragma: no cover - typed initial baseline is always retained
+        raise AssertionError("typed token load lost its persistence baseline")
+    return result[0], result[1], baseline
+
+
+async def _fetch_tokens_with_refresh_core(
+    cookie_jar: httpx.Cookies,
+    storage_path: Path | None,
+    profile: str | None,
+    *,
+    resolve_route: Callable[[Path | None], Coroutine[Any, Any, dict[str, Any]]],
+    load_replacement: Callable[
+        [Path],
+        Coroutine[
+            Any,
+            Any,
+            tuple[httpx.Cookies, _auth_storage.CookieSnapshot, CookieJar | None],
+        ],
+    ],
+    initial_baseline: CookieJar | None,
+    env_auth: bool,
+    allow_headless: bool,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
+) -> tuple[str, str, bool, _auth_storage.CookieSnapshot | None, CookieJar | None]:
+    """Own the sole initial/L2.5/L3/L4 token acquisition ladder."""
     try:
-        route_kwargs = resolve_route(storage_path)
-        csrf, session_id = await _fetch_tokens_with_jar(cookie_jar, storage_path, **route_kwargs)
-        return csrf, session_id, False, None
+        csrf, session_id = await _fetch_tokens_with_jar(
+            cookie_jar,
+            storage_path,
+            **await resolve_route(storage_path),
+        )
+        return csrf, session_id, False, None, initial_baseline
     except ValueError as err:
-        if isinstance(err, _auth_extraction._LoginRedirectError) and storage_path is not None:
+        return await _cold_fallbacks(
+            err,
+            cookie_jar,
+            storage_path,
+            profile,
+            env_auth=env_auth,
+            allow_headless=allow_headless,
+            resolve_route=resolve_route,
+            load_replacement=load_replacement,
+            baseline=initial_baseline,
+            deps=deps,
+        )
 
-            async def validate_recovered_jar(recovered_jar: httpx.Cookies) -> None:
-                await _fetch_tokens_with_jar(
-                    recovered_jar,
-                    storage_path,
-                    **_resolve_token_route_kwargs(storage_path, authuser=None, account_email=None),
-                )
 
-            try:
-                recovery = await _auth_recovery.coalesced_cold_recovery(
-                    storage_path=storage_path,
-                    allow_headless=allow_headless,
-                    validate=validate_recovered_jar,
-                    initial_error=err,
-                )
-            except _auth_extraction._LoginRedirectError as retry_err:
-                err = retry_err
-            else:
-                _replace_cookie_jar(cookie_jar, recovery.cookie_jar)
-                try:
-                    csrf, session_id = await _fetch_tokens_with_jar(
-                        cookie_jar,
-                        storage_path,
-                        **resolve_route(storage_path),
-                    )
-                except _auth_extraction._LoginRedirectError as retry_err:
-                    err = retry_err
-                else:
-                    return csrf, session_id, True, recovery.snapshot
-        if not _should_try_refresh(err):
-            raise
-        if env_auth:
-            # No writable backing store: the fallback below would lock, rewrite
-            # and then read a profile file this caller bypassed. The refresh
-            # command cannot help anyway — NOTEBOOKLM_AUTH_JSON is scrubbed from
-            # its environment, so it cannot re-mint the credential in use (#2083).
+async def _cold_fallbacks(
+    err: ValueError,
+    cookie_jar: httpx.Cookies,
+    storage_path: Path | None,
+    profile: str | None,
+    *,
+    env_auth: bool,
+    allow_headless: bool,
+    resolve_route: Callable[[Path | None], Coroutine[Any, Any, dict[str, Any]]],
+    load_replacement: Callable[
+        [Path],
+        Coroutine[
+            Any,
+            Any,
+            tuple[httpx.Cookies, _auth_storage.CookieSnapshot, CookieJar | None],
+        ],
+    ],
+    baseline: CookieJar | None,
+    deps: RefreshCmdDeps = _PRODUCTION_REFRESH_CMD_DEPS,
+) -> tuple[str, str, bool, _auth_storage.CookieSnapshot | None, CookieJar | None]:
+    """Run the L2.5 refresh command, then the coalesced L3/L4 recovery."""
+
+    def should_try_refresh(initial_error: Exception, is_env_auth: bool) -> bool:
+        eligible = _should_try_refresh(initial_error)
+        if eligible and is_env_auth:
             logger.debug("Skipping %s: env auth has no file", NOTEBOOKLM_REFRESH_CMD_ENV)
-            raise
+            return False
+        return eligible
+
+    def resolve_refresh_path(initial_error: ValueError) -> Path:
         logger.warning(
             "NotebookLM auth failed (%s). Running %s to refresh cookies.",
-            err,
+            initial_error,
             NOTEBOOKLM_REFRESH_CMD_ENV,
         )
-        # Canonicalize the storage path so different representations of the
-        # same physical file (relative vs absolute, with or without symlinks,
-        # ``~`` shorthand) hash to the same flight / success-epoch key
-        # ([refresh-5]). ``get_storage_path`` already returns a resolved path,
-        # but a caller-supplied ``storage_path`` may be relative or a symlink.
-        refresh_storage_path = canonical_storage_key(
-            storage_path or get_storage_path(profile=profile)
-        )
-        # Both operands above are non-None in this branch (``env_auth`` already
-        # handled the no-file case); canonicalizing a real path yields a Path.
-        assert refresh_storage_path is not None
-        refresh_key = str(refresh_storage_path)
+        refresh_path = canonical_storage_key(storage_path or get_storage_path(profile=profile))
+        assert refresh_path is not None
+        return refresh_path
+
+    async def run_refresh_attempt(
+        path: Path,
+    ) -> tuple[str, str, _auth_storage.CookieSnapshot, CookieJar | None]:
         refresh_token = _REFRESH_ATTEMPTED_CONTEXT.set(True)
         try:
-            # Coalesce the refresh-cmd across ALL event loops and serialize it
-            # across processes via the per-path flock — all delegated to
-            # ``_coalesced_run_refresh_cmd`` (single_flight core). It returns
-            # when the storage is, or has just been, refreshed; raises the
-            # subprocess exception on genuine failure; and propagates
-            # ``CancelledError`` (after settling the shared subprocess) on
-            # caller-side cancellation.
-            await _coalesced_run_refresh_cmd(refresh_key, refresh_storage_path, profile)
-            # Offloaded off the loop: an inline read + POST would freeze the
-            # loop (refresh-1 / HIGH#2).
-            fresh_jar = await asyncio.to_thread(
-                build_httpx_cookies_from_storage, refresh_storage_path
-            )
-            _replace_cookie_jar(cookie_jar, fresh_jar)
-            # Capture the baseline NOW — after the wholesale replacement but
-            # before the retry fetch can mutate the jar.
-            post_refresh_snapshot = snapshot_cookie_jar(cookie_jar)
-            route_kwargs = resolve_route(refresh_storage_path)
-            csrf, session_id = await _fetch_tokens_with_jar(
-                cookie_jar, refresh_storage_path, **route_kwargs
-            )
-            return csrf, session_id, True, post_refresh_snapshot
+            try:
+                await _coalesced_run_refresh_cmd(str(path), path, profile, deps=deps)
+                fresh_jar, snapshot, new_baseline = await load_replacement(path)
+                _replace_cookie_jar(cookie_jar, fresh_jar)
+                route = await resolve_route(path)
+                csrf, session_id = await _fetch_tokens_with_jar(cookie_jar, path, **route)
+                return csrf, session_id, snapshot, new_baseline
+            except (RuntimeError, OSError, ValueError) as rung_error:
+                logger.warning(
+                    "%s rung failed (%s); falling through to the re-mint rungs.",
+                    NOTEBOOKLM_REFRESH_CMD_ENV,
+                    rung_error,
+                )
+                raise
         finally:
             _REFRESH_ATTEMPTED_CONTEXT.reset(refresh_token)
+
+    async def validate_recovered(jar: httpx.Cookies) -> None:
+        await _fetch_tokens_with_jar(jar, storage_path, **await resolve_route(storage_path))
+
+    async def fetch_recovered(jar: httpx.Cookies) -> tuple[str, str]:
+        return await _fetch_tokens_with_jar(jar, storage_path, **await resolve_route(storage_path))
+
+    coordinator = _auth_recovery.ColdRecoveryCoordinator(
+        state=_auth_recovery.ColdRecoveryState.process_default(),
+        single_flight=_single_flight.SingleFlight.process_default(),
+        should_try_refresh=should_try_refresh,
+        resolve_refresh_path=resolve_refresh_path,
+        run_refresh_attempt=run_refresh_attempt,
+        load_cookie_pair=lambda path: _auth_cookies._build_cookie_pair_from_storage(path),
+        run_headless_attempt=lambda path, headless: _auth_recovery._try_headless_reauth_result(
+            storage_path=path,
+            allow_headless=headless,
+        ),
+        run_master_token_attempt=lambda path: _auth_recovery._try_master_token_reauth_result(
+            storage_path=path
+        ),
+        validate_recovered=validate_recovered,
+        fetch_recovered=fetch_recovered,
+        replace_cookie_jar=lambda target, source: _replace_cookie_jar(target, source),
+        snapshot_cookie_jar=lambda jar: _auth_storage.snapshot_cookie_jar(jar),
+        clone_cookie_jar=lambda jar: _auth_cookies._clone_cookie_jar(jar),
+    )
+    return await coordinator.recover(
+        initial_error=err,
+        cookie_jar=cookie_jar,
+        storage_path=storage_path,
+        env_auth=env_auth,
+        allow_headless=allow_headless,
+        baseline=baseline,
+    )
 
 
 async def _fetch_tokens_with_jar(
@@ -844,7 +1034,7 @@ async def fetch_tokens(
 ) -> tuple[str, str]:
     """Fetch tokens from a cookie mapping. For backward compatibility.
 
-    Prefer AuthTokens.from_storage() which preserves cookie domains. If
+    Prefer NotebookLMClient.from_storage(), which preserves cookie domains. If
     ``NOTEBOOKLM_REFRESH_CMD`` is set and auth has expired, the command is run
     with ``shell=False`` by default (or via the platform shell when
     ``NOTEBOOKLM_REFRESH_CMD_USE_SHELL=1``), cookies are reloaded from
@@ -884,6 +1074,20 @@ async def fetch_tokens(
     return csrf, session_id
 
 
+def _merge_domain_fetch_observation(
+    store: ProfileStore,
+    observation: CookieJar,
+    baseline: CookieJar,
+) -> CookieJar:
+    result = store.merge_cookie_observation(observation, baseline=baseline)
+    if not result.advances_ordering:
+        return baseline
+    next_baseline = result.next_baseline
+    if next_baseline is None:  # pragma: no cover - result invariant
+        raise AssertionError("advancing refresh merge must provide a baseline")
+    return next_baseline
+
+
 async def fetch_tokens_with_domains(
     path: Path | None = None,
     profile: str | None = None,
@@ -892,57 +1096,39 @@ async def fetch_tokens_with_domains(
     account_email: str | None = None,
     allow_headless: bool = False,
 ) -> tuple[str, str]:
-    """Fetch tokens with domain-preserving cookies from storage.
+    """Fetch tokens with domain-preserving cookies and persist their observation."""
+    storage_path = _auth_cookies.resolve_auth_storage_path(path, profile)
+    pair = await asyncio.to_thread(_auth_cookies._build_cookie_pair_from_storage, storage_path)
+    live = pair.live
 
-    Used by CLI helpers. Loads storage, builds jar, fetches tokens, optionally
-    runs NOTEBOOKLM_REFRESH_CMD on auth expiry, and persists any refreshed
-    cookies back.
+    async def resolve_route(route_path: Path | None) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            _resolve_token_route_kwargs,
+            route_path,
+            authuser=authuser,
+            account_email=account_email,
+        )
 
-    Args:
-        path: Path to storage_state.json. If provided, takes precedence over env vars.
-        profile: Optional profile name exposed to the refresh command.
-        authuser: Optional explicit Google account index. Defaults to the
-            persisted profile value, or 0 when none exists.
-        account_email: Optional explicit Google account email. When provided,
-            it is used as the auth routing value instead of the integer index.
-        allow_headless: Permit layer-3 browser recovery after a confirmed login
-            redirect. The environment opt-in remains effective when this is false.
-
-    Returns:
-        Tuple of (csrf_token, session_id)
-
-    Raises:
-        FileNotFoundError: If storage file doesn't exist.
-        httpx.HTTPError: If request fails.
-        ValueError: If tokens cannot be extracted from response.
-        RuntimeError: If ``NOTEBOOKLM_REFRESH_CMD`` is set but fails.
-    """
-    path = _auth_cookies.resolve_auth_storage_path(path, profile)
-    jar = await asyncio.to_thread(build_httpx_cookies_from_storage, path)
-    # Capture the open-time snapshot before any rotation could fire. The
-    # snapshot is the input to the dirty-flag/delta merge that closes the
-    # stale-overwrite-fresh race (docs/auth-cookie-lifecycle.md §3.4.1).
-    snapshot = snapshot_cookie_jar(jar)
-    refresh_options: dict[str, Any] = {"env_auth": path is None}
-    if authuser is not None:
-        refresh_options.update(authuser=authuser, force_authuser_query=True)
-    if account_email is not None:
-        refresh_options["account_email"] = account_email
-    if allow_headless:
-        refresh_options["allow_headless"] = True
-    csrf, session_id, refreshed, post_refresh_snapshot = await _fetch_tokens_with_refresh(
-        jar, path, profile, **refresh_options
+    csrf, session_id, selected_baseline = await _fetch_tokens_with_exact_baseline(
+        live,
+        storage_path,
+        profile,
+        initial_baseline=pair.baseline,
+        resolve_route=resolve_route,
+        allow_headless=allow_headless,
+        env_auth=storage_path is None,
     )
-    if refreshed and post_refresh_snapshot is not None:
-        # NOTEBOOKLM_REFRESH_CMD replaced the jar wholesale. Use the snapshot
-        # captured immediately after the replacement (before the retry fetch
-        # added redirect Set-Cookies); re-snapshotting here would let those
-        # retry rotations be absorbed into the baseline and never reach disk.
-        snapshot = post_refresh_snapshot
-    # Offload the blocking storage save to a worker thread so the
-    # atomic-replace + fsync + flock can't stall the event loop on
-    # slow filesystems.
-    await asyncio.to_thread(save_cookies_to_storage, jar, path, original_snapshot=snapshot)
+    if storage_path is None:
+        logger.debug("Skipping cookie sync: Auth loaded from NOTEBOOKLM_AUTH_JSON env var")
+        return csrf, session_id
+    store = ProfileStore(storage_path)
+    observation = CookieJar.from_httpx(live)
+    selected_baseline = await asyncio.to_thread(
+        _merge_domain_fetch_observation,
+        store,
+        observation,
+        selected_baseline,
+    )
     return csrf, session_id
 
 
@@ -960,18 +1146,14 @@ async def fetch_tokens_passive(
     read-only. Unlike that function it:
 
     * never runs ``NOTEBOOKLM_REFRESH_CMD`` (no re-auth hook / subprocess);
-    * never fires the layer-1 keepalive poke that rotates ``__Secure-1PSIDTS``
-      server-side;
-    * never fires the inline ``RotateCookies`` PSIDTS recovery (it loads the jar
-      with the no-recovery strict loader, so a missing/expired PSIDTS surfaces as
-      a plain ``ValueError`` instead of a network POST + disk write); and
+    * never fires the layer-1 keepalive poke that rotates ``__Secure-1PSIDTS`` server-side;
+    * never fires inline ``RotateCookies`` recovery: the strict loader raises ``ValueError``
+      for missing/expired PSIDTS instead of issuing a network POST + disk write; and
     * never writes rotated cookies back to ``storage_state.json``.
 
-    This is the readiness probe an unattended monitor (systemd / cron health
-    check) wants: it answers "do the cookies currently on disk authenticate?"
-    without mutating state, spawning a refresh subprocess, or racing concurrent
-    real work (issue #1569). Pair it with a passive ``auth check --test`` or
-    ``auth refresh --verify``.
+    This unattended-readiness probe answers "do the cookies currently on disk authenticate?"
+    without mutation, a refresh subprocess, or races with real work (issue #1569). Pair it with
+    a passive ``auth check --test`` or ``auth refresh --verify``.
 
     Args:
         path: Path to storage_state.json. If provided, takes precedence over env vars.
@@ -990,11 +1172,13 @@ async def fetch_tokens_passive(
         ValueError: If tokens cannot be extracted (e.g. redirected to sign-in).
     """
     path = _auth_cookies.resolve_auth_storage_path(path, profile)
-    # Strict (no-recovery) loader: a missing/expired PSIDTS raises ``ValueError``
-    # rather than triggering the inline ``RotateCookies`` rotation + save. A
-    # readiness probe reports "not authenticated"; it does not heal. Offloaded.
+    # Strict (no-recovery) loader: missing/expired PSIDTS reports unauthenticated; no healing.
     jar = await asyncio.to_thread(_build_httpx_cookies_from_storage_strict, path)
-    route_kwargs = _resolve_token_route_kwargs(path, authuser=authuser, account_email=account_email)
-    # poke=False + no save_cookies_to_storage ⇒ zero side effects on disk or
-    # on the server-side cookie rotation state.
+    route_kwargs = await asyncio.to_thread(
+        _resolve_token_route_kwargs,
+        path,
+        authuser=authuser,
+        account_email=account_email,
+    )
+    # poke=False and no save keep disk and server-side rotation state untouched.
     return await _fetch_tokens_with_jar(jar, path, poke=False, **route_kwargs)

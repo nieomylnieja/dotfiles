@@ -24,12 +24,32 @@ class Kernel:
     def __init__(
         self,
         *,
+        auth: AuthTokens | None = None,
         async_client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
     ) -> None:
         self._async_client_factory = async_client_factory
         self._http_client: httpx.AsyncClient | None = None
+        # The kernel owns the one mutable cookie jar for the whole client
+        # lifetime, including the network-free pre-open and post-close states.
+        # A composed client seeds this once from AuthTokens' bootstrap shadow;
+        # after open, ``get_cookies`` resolves directly to the transport jar.
+        self._cookies = self._bootstrap_cookies(auth) if auth is not None else None
         self._timeout: float | None = None
         self._connect_timeout: float | None = None
+
+    @staticmethod
+    def _bootstrap_cookies(auth: AuthTokens) -> httpx.Cookies:
+        """Copy the compatibility bootstrap projection into kernel ownership."""
+        cookie_jar = auth.cookie_jar
+        seed = (
+            cookie_jar
+            if cookie_jar is not None
+            else build_cookie_jar(
+                cookies=auth.cookies,
+                storage_path=auth.storage_path,
+            )
+        )
+        return httpx.Cookies(seed)
 
     @property
     def http_client(self) -> httpx.AsyncClient | None:
@@ -50,11 +70,22 @@ class Kernel:
 
     @property
     def cookies(self) -> httpx.Cookies:
-        """Return the live HTTP client's cookie jar.
+        """Return the kernel-owned cookie jar.
 
-        Raises ``RuntimeError`` if called before :meth:`open`.
+        A composed client seeds the jar during construction, so network-free
+        identity reads work before :meth:`open` and after :meth:`aclose`.
+        Direct ``Kernel()`` callers that supplied neither ``auth=`` nor called
+        :meth:`open` still receive ``RuntimeError``.
         """
-        return self.get_http_client().cookies
+        return self.get_cookies()
+
+    def get_cookies(self) -> httpx.Cookies:
+        """Return the current transport jar or its retained closed-state owner."""
+        if self._http_client is not None:
+            return self._http_client.cookies
+        if self._cookies is None:
+            raise RuntimeError("Cookie jar not initialized. Open the client first.")
+        return self._cookies
 
     def get_http_client(self) -> httpx.AsyncClient:
         """Return the live HTTP client or raise the legacy not-open error."""
@@ -85,24 +116,25 @@ class Kernel:
         )
         self._timeout = timeout
         self._connect_timeout = connect_timeout
-        cookies = (
-            auth.cookie_jar
-            if auth.cookie_jar is not None
-            else build_cookie_jar(
-                cookies=auth.cookies,
-                storage_path=auth.storage_path,
-            )
-        )
+        # Direct Kernel callers seed here; composed clients already seeded at
+        # construction so account identity can be resolved before open. This
+        # helper is the ONE legitimate internal read of AuthTokens' cookie
+        # shadows. It becomes ``auth.initial_cookies`` in ADR-0032 Phase B.
+        if self._cookies is None:
+            self._cookies = self._bootstrap_cookies(auth)
 
         self._http_client = self._async_client_factory(
             headers={
                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
             },
-            cookies=cookies,
+            cookies=self._cookies,
             timeout=http_timeout,
             follow_redirects=True,
             limits=limits.to_httpx_limits(),
         )
+        # ``httpx.AsyncClient`` copies the seed. Retire the pre-open jar and
+        # retain the transport-owned object as the kernel's sole authority.
+        self._cookies = self._http_client.cookies
         # If the snapshot raises, __aenter__ has effectively failed, so Python
         # never calls __aexit__ and the freshly built client would leak its
         # connection pool. Close it and reset state before re-raising so a
@@ -157,6 +189,10 @@ class Kernel:
         try:
             await client.aclose()
         finally:
+            # Retain the exact transport jar (not a detached snapshot) for
+            # network-free identity reads while the transport is closed and as
+            # the seed for a later reopen of this same client.
+            self._cookies = client.cookies
             self._http_client = None
             self._timeout = None
             self._connect_timeout = None

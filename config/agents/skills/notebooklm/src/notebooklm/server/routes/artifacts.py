@@ -12,12 +12,19 @@ and returns ``202``. The poll (``GET .../artifacts/{task_id}``) projects the raw
 ``GenerationState`` through the registry to resolve the same ``NOT_FOUND``
 ambiguity as the source poll:
 
-* a registry-known task at ``PENDING`` / ``IN_PROGRESS`` / ``NOT_FOUND`` → ``200``
-  (still polling — ``NOT_FOUND`` is the one-shot post-generate lag);
+* a registry-known task in any **non-terminal** state → ``200`` (still polling).
+  The partition is :attr:`GenerationState.is_terminal`, not an enumeration here,
+  so this covers ``PENDING`` / ``IN_PROGRESS`` / ``NOT_FOUND`` (the one-shot
+  post-generate lag), the ``UNKNOWN`` and rare ``SUGGESTED`` /
+  ``PENDING_REVIEW`` states, and anything added to the enum later;
 * ``COMPLETED`` → ``200`` ready (dropped from the registry);
 * ``REMOVED`` → ``410`` (sustained terminal absence; dropped);
 * ``FAILED`` → ``409`` with the error (dropped);
 * an unknown task id → ``404``.
+
+Only terminal states are dropped from the registry: evicting a still-running
+task would make its next benign ``NOT_FOUND`` poll ``404`` rather than project
+(#2127, which also moved ``UNKNOWN`` onto the non-terminal side).
 
 Download streams the bytes from a **server-generated** ``mkstemp`` path (never a
 caller-supplied one — ``build_download_plan`` does not validate path shapes),
@@ -357,13 +364,24 @@ async def poll(
     state = status.status
     projected = {"notebook_id": notebook_id, **to_jsonable(view)}
 
-    if state in (GenerationState.PENDING, GenerationState.IN_PROGRESS):
-        return projected
     if state == GenerationState.NOT_FOUND:
         if pending.knows(notebook_id, task_id):
             return projected
         raise HTTPException(status_code=404, detail="Artifact task not found")
-    # Terminal states: drop from the registry, then project.
+    if not status.is_terminal:
+        # Still running (PENDING / IN_PROGRESS / UNKNOWN / SUGGESTED /
+        # PENDING_REVIEW, and anything added to GenerationState later — the
+        # partition lives on that enum, so non-terminal is the default here).
+        # Keep the task in the pending registry so a later NOT_FOUND poll still
+        # projects instead of 404ing (#2127).
+        #
+        # ORDERING: this block must stay *below* the NOT_FOUND check. NOT_FOUND
+        # is also non-terminal, so hoisting this above it would swallow that
+        # case and make the registry-miss 404 unreachable. The route needs a
+        # three-way split (terminal / absent / running) but the type supplies a
+        # binary one; the third case is recovered by statement order alone.
+        return projected
+    # Terminal states only: drop from the registry, then project.
     pending.drop(notebook_id, task_id)
     if state == GenerationState.REMOVED:
         raise HTTPException(status_code=410, detail="Artifact was removed")
@@ -371,8 +389,7 @@ async def poll(
         raise HTTPException(
             status_code=409, detail=safe_detail(view.error) if view.error else "Generation failed"
         )
-    # COMPLETED — and, defensively, any unmodeled state — surfaces the projected
-    # view rather than a 500.
+    # COMPLETED — the only remaining terminal state — surfaces the projected view.
     return projected
 
 

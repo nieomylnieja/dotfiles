@@ -321,6 +321,37 @@ class TestExtractYoutubeVideoId:
 # =============================================================================
 
 
+# A decoded GET_NOTEBOOK payload for a notebook with no sources, in the shape
+# the server actually sends: the title in slot 0, and slot 1 **elided to None**
+# rather than an empty list. Verified against the recorded zero-source frame in
+# ``tests/cassettes/notebook_zero_sources.yaml``. ``SourceLister._extract_sources_list``
+# has a dedicated branch for that ``None`` (its comment names this very cassette),
+# so a ``[]`` here would decode to the same ``[]`` while exercising the *other*
+# branch — the one a notebook that once had sources returns.
+_EMPTY_NOTEBOOK: list = [["Test Notebook", None]]
+
+
+def _register_response_only(mock_core, response) -> None:
+    """Drive the register RPC with ``response``, leaving the list RPCs healthy.
+
+    ``mock_core.rpc_executor.rpc_call`` answers *every* method from one mock, so
+    a bare ``return_value = <register payload>`` also hands that payload to the
+    two ``GET_NOTEBOOK`` reads the register path makes — the idempotency
+    baseline before the create, and the probe after it when the register
+    response carries no trustworthy SOURCE_ID. The notebook decoder rejects a
+    register payload, so both reads were failing in every test that used
+    ``return_value``.
+
+    That was invisible while both failures were swallowed. Since #2220 the probe
+    propagates, so an incidentally-broken list now aborts the call before the
+    assertion under test is reached. Answering the list RPCs properly is not a
+    workaround for that change: these tests are about how a malformed *register*
+    response is decoded, and a probe failing for unrelated reasons was never
+    what they meant to exercise.
+    """
+    mock_core.rpc_executor.rpc_call.side_effect = [_EMPTY_NOTEBOOK, response, _EMPTY_NOTEBOOK]
+
+
 class TestRegisterFileSource:
     """Tests for file source registration."""
 
@@ -358,7 +389,7 @@ class TestRegisterFileSource:
         """Test that null response raises SourceAddError."""
         from notebooklm.exceptions import SourceAddError
 
-        mock_core.rpc_executor.rpc_call.return_value = None
+        _register_response_only(mock_core, None)
 
         with pytest.raises(SourceAddError, match="Failed to get SOURCE_ID"):
             await sources_api._register_file_source("nb_123", "test.pdf")
@@ -368,7 +399,7 @@ class TestRegisterFileSource:
         """Test that empty response raises SourceAddError."""
         from notebooklm.exceptions import SourceAddError
 
-        mock_core.rpc_executor.rpc_call.return_value = []
+        _register_response_only(mock_core, [])
 
         with pytest.raises(SourceAddError, match="Failed to get SOURCE_ID"):
             await sources_api._register_file_source("nb_123", "test.pdf")
@@ -386,7 +417,7 @@ class TestRegisterFileSource:
         """Test that non-string source ID raises SourceAddError."""
         from notebooklm.exceptions import SourceAddError
 
-        mock_core.rpc_executor.rpc_call.return_value = [[[[[[12345]]]]]]
+        _register_response_only(mock_core, [[[[[[12345]]]]]])
 
         with pytest.raises(SourceAddError, match="Failed to get SOURCE_ID"):
             await sources_api._register_file_source("nb_123", "test.pdf")
@@ -456,7 +487,7 @@ class TestRegisterFileSource:
         from notebooklm.exceptions import SourceAddError
 
         # Pure-numeric response — no string leaves → no candidates → raises.
-        mock_core.rpc_executor.rpc_call.return_value = [[[1, 2, 3]]]
+        _register_response_only(mock_core, [[[1, 2, 3]]])
 
         with pytest.raises(
             SourceAddError,
@@ -476,7 +507,7 @@ class TestRegisterFileSource:
         """
         from notebooklm.exceptions import SourceAddError
 
-        mock_core.rpc_executor.rpc_call.return_value = [[[status_token]]]
+        _register_response_only(mock_core, [[[status_token]]])
 
         with pytest.raises(SourceAddError, match="Failed to get SOURCE_ID"):
             await sources_api._register_file_source("nb_123", "test.pdf")
@@ -572,7 +603,7 @@ class TestRegisterFileSource:
         deep: list = ["dc84ca28-2629-49ac-aec3-de45f0ec93e4"]
         for _ in range(200):
             deep = [deep]
-        mock_core.rpc_executor.rpc_call.return_value = deep
+        _register_response_only(mock_core, deep)
 
         with pytest.raises(SourceAddError, match="Failed to get SOURCE_ID"):
             await sources_api._register_file_source("nb_123", "test.pdf")

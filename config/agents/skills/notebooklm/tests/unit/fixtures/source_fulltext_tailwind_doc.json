@@ -1,0 +1,407 @@
+[
+ [
+  [
+   "cf952c48-ea4f-4a30-944d-2eebdea4cbf2"
+  ],
+  "Photosynthesis",
+  [
+   null,
+   77,
+   [
+    1786586879,
+    42324000
+   ],
+   [
+    "efd27341-9f57-44bc-bb9f-a1e8aaf6ee73",
+    [
+     1786586878,
+     624490000
+    ]
+   ],
+   8,
+   null,
+   1,
+   null,
+   140,
+   null,
+   null,
+   null,
+   null,
+   null,
+   [
+    1786586880,
+    229509000
+   ]
+  ],
+  [
+   null,
+   2
+  ],
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  [
+   [
+    "SCRUBBED_URL",
+    null,
+    "text/markdown",
+    [
+     [
+      "SCRUBBED_TOKEN",
+      "SCRUBBED_TOKEN"
+     ]
+    ]
+   ],
+   "SCRUBBED_URL",
+   "SCRUBBED_URL"
+  ]
+ ],
+ null,
+ null,
+ [
+  [
+   [
+    [
+     0,
+     14,
+     [
+      [
+       [
+        0,
+        14,
+        [
+         "Photosynthesis"
+        ]
+       ]
+      ],
+      [
+       null,
+       4
+      ]
+     ]
+    ],
+    [
+     14,
+     108,
+     [
+      [
+       [
+        14,
+        91,
+        [
+         "Photosynthesis is the process by which green plants convert light energy into"
+        ]
+       ],
+       [
+        91,
+        92,
+        [
+         " "
+        ]
+       ],
+       [
+        92,
+        108,
+        [
+         "chemical energy."
+        ]
+       ]
+      ]
+     ]
+    ],
+    [
+     108,
+     133,
+     [
+      [
+       [
+        108,
+        133,
+        [
+         "Light-dependent reactions"
+        ]
+       ]
+      ],
+      [
+       null,
+       5
+      ]
+     ]
+    ],
+    [
+     133,
+     183,
+     [
+      [
+       [
+        133,
+        183,
+        [
+         "These occur in the thylakoid membrane. Key points:"
+        ]
+       ]
+      ]
+     ]
+    ],
+    [
+     183,
+     216,
+     [
+      [
+       [
+        183,
+        216,
+        [
+         "Water is split, releasing oxygen."
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "\u2022",
+        "102": 1,
+        "103": 1,
+        "104": 0
+       }
+      ]
+     ]
+    ],
+    [
+     216,
+     243,
+     [
+      [
+       [
+        216,
+        243,
+        [
+         "ATP and NADPH are produced."
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "\u2022",
+        "102": 1,
+        "103": 2,
+        "104": 1
+       }
+      ]
+     ]
+    ],
+    [
+     243,
+     292,
+     [
+      [
+       [
+        243,
+        292,
+        [
+         "Chlorophyll a absorbs light at 430 nm and 662 nm."
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "\u2022",
+        "102": 1,
+        "103": 3,
+        "104": 2
+       }
+      ]
+     ]
+    ],
+    [
+     292,
+     308,
+     [
+      [
+       [
+        292,
+        308,
+        [
+         "The Calvin cycle"
+        ]
+       ]
+      ],
+      [
+       null,
+       5
+      ]
+     ]
+    ],
+    [
+     308,
+     462,
+     [
+      [
+       [
+        308,
+        388,
+        [
+         "The Calvin cycle fixes carbon dioxide using RuBisCO, the most abundant enzyme on"
+        ]
+       ],
+       [
+        388,
+        389,
+        [
+         " "
+        ]
+       ],
+       [
+        389,
+        462,
+        [
+         "Earth. It runs in the stroma and consumes the ATP and NADPH made earlier."
+        ]
+       ]
+      ]
+     ]
+    ],
+    [
+     462,
+     478,
+     [
+      [
+       [
+        462,
+        478,
+        [
+         "Limiting factors"
+        ]
+       ]
+      ],
+      [
+       null,
+       6
+      ]
+     ]
+    ],
+    [
+     478,
+     493,
+     [
+      [
+       [
+        478,
+        493,
+        [
+         "Light intensity"
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "1.",
+        "102": 2,
+        "103": 1,
+        "104": 1
+       }
+      ]
+     ]
+    ],
+    [
+     493,
+     521,
+     [
+      [
+       [
+        493,
+        521,
+        [
+         "Carbon dioxide concentration"
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "2.",
+        "102": 2,
+        "103": 2,
+        "104": 2
+       }
+      ]
+     ]
+    ],
+    [
+     521,
+     532,
+     [
+      [
+       [
+        521,
+        532,
+        [
+         "Temperature"
+        ]
+       ]
+      ],
+      [
+       null,
+       1
+      ],
+      null,
+      [
+       null,
+       null,
+       0,
+       {
+        "101": "3.",
+        "102": 2,
+        "103": 3,
+        "104": 3
+       }
+      ]
+     ]
+    ]
+   ]
+  ]
+ ]
+]

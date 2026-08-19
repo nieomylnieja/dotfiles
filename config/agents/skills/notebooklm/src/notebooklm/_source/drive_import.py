@@ -54,6 +54,7 @@ import httpx
 from .._artifact._download_client import _is_trusted_download_host
 from .._artifact._redirect_guard import redirect_revalidation_hooks
 from .._artifact.downloads import _await_writer_exit
+from .._types.sources import _HTML_FILE_EXTENSIONS, _UPLOAD_FILE_EXTENSIONS
 from ..exceptions import (
     ArtifactDownloadError,
     AuthError,
@@ -102,12 +103,13 @@ _DRIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{20,}$")
 _DRIVE_URL_PATH_ID_RE = re.compile(r"/(?:file/)?d/([A-Za-z0-9_-]{20,})")
 
 # Extensions NotebookLM's resumable upload accepts → download + upload route.
-_UPLOAD_SUPPORTED_EXTS = frozenset(
-    {"epub", "docx", "doc", "txt", "md", "markdown", "rtf", "odt", "csv", "tsv", "pdf"}
-)
+# Derived from the single declaration in ``_types.sources`` (dot-stripped: this
+# router compares against ``_extension()``'s bare suffix), so the Drive route and
+# the CLI path heuristic cannot drift apart the way they had by #2202.
+_UPLOAD_SUPPORTED_EXTS = frozenset(ext.lstrip(".") for ext in _UPLOAD_FILE_EXTENSIONS)
 # HTML-family extensions the upload endpoint rejects (kept explicit so the fetch
 # gives the convert-first guidance instead of the generic unsupported error).
-_HTML_EXTS = frozenset({"html", "htm", "xhtml", "xht"})
+_HTML_EXTS = frozenset(ext.lstrip(".") for ext in _HTML_FILE_EXTENSIONS)
 
 # A plausible browser UA — the Drive download endpoint is a browser surface.
 _BROWSER_UA = (

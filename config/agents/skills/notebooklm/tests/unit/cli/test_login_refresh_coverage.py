@@ -25,7 +25,7 @@ import httpx
 import pytest
 
 import notebooklm.cli.playwright_login_io as playwright_login_io_module
-from notebooklm._auth.storage_writer import LoginWriteOutcome, LoginWriteStatus
+from notebooklm._auth.profile_store import ReplaceResult, ReplaceStatus
 from notebooklm.cli.services.login import refresh
 from notebooklm.cli.services.login.outcomes import BrowserCookieOutcome
 
@@ -52,6 +52,13 @@ def _outcome(message: str = "[red]boom[/red]") -> BrowserCookieOutcome:
 
 def _deps(**overrides: Any) -> refresh.RefreshDeps:
     return replace(refresh.default_refresh_deps(), **overrides)
+
+
+def test_default_refresh_deps_uses_native_login_operation() -> None:
+    assert (
+        refresh.default_refresh_deps().replace_profile_from_login
+        is refresh.replace_profile_from_login
+    )
 
 
 def _login_base_deps(**overrides: Any) -> refresh.RefreshDeps:
@@ -256,7 +263,7 @@ def test_login_with_cookies_validation_error_exits(tmp_path, capsys) -> None:
 
 def test_login_with_cookies_save_oserror_exits(tmp_path) -> None:
     """An OSError while writing storage exits 1."""
-    deps = _login_base_deps(replace_from_login=MagicMock(side_effect=OSError("disk full")))
+    deps = _login_base_deps(replace_profile_from_login=MagicMock(side_effect=OSError("disk full")))
     with pytest.raises(SystemExit) as exc_info:
         refresh._login_with_browser_cookies(tmp_path / "out" / "storage.json", "chrome", deps=deps)
     assert exc_info.value.code == 1
@@ -269,8 +276,8 @@ def test_login_with_cookies_lock_unavailable_exits(tmp_path) -> None:
     lock failure is a whole-write failure — no separate best-effort metadata step
     survives it."""
     deps = _login_base_deps(
-        replace_from_login=MagicMock(
-            return_value=LoginWriteOutcome(LoginWriteStatus.LOCK_UNAVAILABLE)
+        replace_profile_from_login=MagicMock(
+            return_value=ReplaceResult(ReplaceStatus.LOCK_UNAVAILABLE)
         )
     )
     with pytest.raises(SystemExit) as exc_info:

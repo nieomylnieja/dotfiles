@@ -45,6 +45,8 @@ from .rendering import (
 from .resolve import require_notebook
 from .services.generate import (
     _INFOGRAPHIC_STYLE_MAP,
+    _QUIZ_DIFFICULTY_MAP,
+    _QUIZ_QUANTITY_MAP,
     GenerationExecutionResult,
     GenerationPlanValidationError,
     build_generation_plan,
@@ -596,13 +598,13 @@ def generate_revise_slide(
 @notebook_option
 @click.option(
     "--quantity",
-    type=click.Choice(["fewer", "standard", "more"]),
+    type=click.Choice(list(_QUIZ_QUANTITY_MAP)),
     default="standard",
     help="Number of questions (default: standard)",
 )
 @click.option(
     "--difficulty",
-    type=click.Choice(["easy", "medium", "hard"]),
+    type=click.Choice(list(_QUIZ_DIFFICULTY_MAP)),
     default="medium",
     help="Question difficulty (default: medium)",
 )
@@ -647,13 +649,13 @@ def generate_quiz(
 @notebook_option
 @click.option(
     "--quantity",
-    type=click.Choice(["fewer", "standard", "more"]),
+    type=click.Choice(list(_QUIZ_QUANTITY_MAP)),
     default="standard",
     help="Number of flashcards (default: standard)",
 )
 @click.option(
     "--difficulty",
-    type=click.Choice(["easy", "medium", "hard"]),
+    type=click.Choice(list(_QUIZ_DIFFICULTY_MAP)),
     default="medium",
     help="Flashcard difficulty (default: medium)",
 )

@@ -3,21 +3,108 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeAlias
+from typing import Any, Protocol, TypeAlias, cast
 
 import httpx
 
+from .._deprecation import warn_registered_deprecation
 from . import account as _auth_account
 from . import cookies as _auth_cookies
 from . import psidts_recovery as _auth_psidts_recovery
 from . import refresh as _auth_refresh
 from . import storage as _auth_storage
+from .cookie_types import CookieJar
+from .paths import resolve_auth_json_env
+from .profile_account import ProfileAccount
+from .profile_document import ProfileDocument
+from .profile_migration import (
+    InBandAccount,
+    LegacyAccount,
+    LegacyAccountMigrator,
+    LegacyPromotionScheduler,
+    NoAccount,
+)
+from .profile_store import CookieMergeDisposition, ProfileStore
+
+logger = logging.getLogger("notebooklm.auth")
 
 DomainCookieMap: TypeAlias = _auth_cookies.DomainCookieMap
 FlatCookieMap: TypeAlias = _auth_cookies.FlatCookieMap
 CookieSnapshot: TypeAlias = _auth_storage.CookieSnapshot
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class InlineAuthSource:
+    document: ProfileDocument
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.document, ProfileDocument):
+            raise TypeError("document must be a ProfileDocument")
+        object.__setattr__(self, "document", ProfileDocument.decode(self.document.to_json()))
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class FileAuthSource:
+    store: ProfileStore
+    profile: str | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.store, ProfileStore):
+            raise TypeError("store must be a ProfileStore")
+        if self.profile is not None and not isinstance(self.profile, str):
+            raise TypeError("profile must be a string or None")
+
+
+ResolvedAuthSource: TypeAlias = InlineAuthSource | FileAuthSource
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class SessionSeed:
+    live: httpx.Cookies = field(repr=False)
+    baseline: CookieJar = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.live, httpx.Cookies) or not isinstance(self.baseline, CookieJar):
+            raise TypeError("session seed fields are invalid")
+        object.__setattr__(self, "baseline", CookieJar(tuple(self.baseline)))
+
+
+@dataclass(frozen=True, slots=True)
+class LoadPolicy:
+    allow_headless: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.allow_headless) is not bool:
+            raise TypeError("allow_headless must be a boolean")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class TokenAcquisition:
+    csrf_token: str = field(repr=False)
+    session_id: str = field(repr=False)
+    live: httpx.Cookies = field(repr=False)
+    baseline_before_fetch_mutations: CookieJar = field(repr=False)
+    final_account: ProfileAccount | None
+
+    def __post_init__(self) -> None:
+        valid = (
+            isinstance(self.csrf_token, str)
+            and isinstance(self.session_id, str)
+            and isinstance(self.live, httpx.Cookies)
+            and isinstance(self.baseline_before_fetch_mutations, CookieJar)
+            and (self.final_account is None or isinstance(self.final_account, ProfileAccount))
+        )
+        if not valid:
+            raise TypeError("token acquisition fields are invalid")
+        object.__setattr__(
+            self,
+            "baseline_before_fetch_mutations",
+            CookieJar(tuple(self.baseline_before_fetch_mutations)),
+        )
 
 
 @dataclass
@@ -29,17 +116,27 @@ class AuthTokens:
             per RFC 6265 §5.3 (issue #369). Legacy 2-tuple ``(name, domain)``
             and flat ``name -> value`` shapes are still accepted on
             construction and widened to the path-aware shape by
-            :func:`normalize_cookie_map` during ``__post_init__``.
+            :func:`normalize_cookie_map` during ``__post_init__``. This is a
+            public compatibility/bootstrap shadow: the kernel copies it once
+            during client composition and no first-party post-open decision
+            reads it. Docs-only deprecated since v0.8.1 for removal in v1;
+            runtime warnings would make synthesized dataclass operations noisy.
         csrf_token: CSRF token (SNlM0e) extracted from page
         session_id: Session ID (FdrFJe) extracted from page
         storage_path: Path to the storage_state.json file, if file-based auth was used
-        cookie_jar: Domain-preserving httpx.Cookies jar. Preferred over flat cookies dict
-            for HTTP operations as it retains original cookie domains (e.g.,
-            .googleusercontent.com vs .google.com).
+        cookie_jar: Domain-preserving public compatibility/bootstrap shadow.
+            The kernel copies it once during client composition, then owns the
+            sole mutable jar used for HTTP, routing, recovery, and persistence.
+            Managed-client code must use the kernel jar, not this field.
+            Docs-only deprecated since v0.8.1 for removal in v1.
         authuser: Google ``authuser`` index this profile authenticates as.
-            ``0`` (the default account) is used when no account metadata is
-            present in ``storage_state.json`` (or legacy sibling
-            ``context.json``), matching pre-multi-account behavior.
+            ``0`` (the default account) is used when no in-band account
+            metadata is present in ``storage_state.json``, matching
+            pre-multi-account behavior. A pre-v0.5.0 profile's account
+            metadata in the legacy sibling ``context.json`` is derived into
+            in-band shape on load (and promoted in-band durably by a detached
+            retryable single-flight) — see ``notebooklm._auth.storage`` — rather than read
+            from here.
         account_email: Stable Google account identity for routing. When set,
             NotebookLM requests use it as the ``authuser`` value instead of the
             integer index, because Google account indices can change when other
@@ -63,6 +160,7 @@ class AuthTokens:
     authuser: int = 0
     cookie_snapshot: CookieSnapshot | None = field(default=None, repr=False)
     account_email: str | None = None
+    _profile_session_generation: int = field(default=0, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Normalize legacy flat cookie mappings into domain-keyed mappings.
@@ -73,16 +171,72 @@ class AuthTokens:
            ``build_httpx_cookies_from_storage``, which performs a SYNCHRONOUS
            inline ``__Secure-1PSIDTS`` recovery POST + disk write. ``__post_init__``
            is sync and cannot offload, so doing this on a running event loop
-           reintroduces the HIGH#2 freeze. Prefer :meth:`from_storage` (which
-           offloads the loader via ``asyncio.to_thread``); pass a pre-built
-           ``cookie_jar`` when you must construct ``AuthTokens`` on the loop.
+           reintroduces the HIGH#2 freeze. Prefer
+           ``NotebookLMClient.from_storage(...)``; pass a pre-built ``cookie_jar``
+           when you must construct ``AuthTokens`` on the loop.
         """
         self.cookies = _auth_cookies.normalize_cookie_map(self.cookies)
         if self.cookie_jar is None:
+            if self.storage_path is not None:
+                warn_registered_deprecation("auth_tokens_sync_storage_construction")
             self.cookie_jar = _auth_cookies.build_cookie_jar(
                 cookies=self.cookies,
                 storage_path=self.storage_path,
             )
+
+    def replace_cookie_jar(self, cookie_jar: httpx.Cookies) -> None:
+        """Rebind both public compatibility shadows together.
+
+        ``cookies`` and ``cookie_jar`` hold the same information in two shapes,
+        initialized together at bootstrap. The kernel owns the live jar after
+        composition; this method is the ADR-0032 Phase-A sync-back for public
+        callers that still inspect the old fields. Rebinding only one shadow
+        would expose two different sessions through the public object even
+        though no first-party runtime decision consults either field.
+
+        Every rebind goes through here so the two cannot diverge. Enforced by
+        ``tests/_guardrails/test_authtokens_jar_sync.py``.
+        """
+        self.cookie_jar = cookie_jar
+        self.cookies = _auth_cookies._cookie_map_from_jar(cookie_jar)
+
+    def _replace_profile_session(
+        self,
+        *,
+        target_cookie_jar: httpx.Cookies,
+        source_cookie_jar: httpx.Cookies,
+        expected_cookie_jar: CookieJar,
+        expected_authuser: int,
+        expected_account_email: str | None,
+        expected_generation: int,
+        authuser: int,
+        account_email: str | None,
+    ) -> bool | None:
+        """Install one stored cookie/account generation without an await boundary.
+
+        The kernel-owned target jar, the two public compatibility shadows, and
+        the routing identity advance together. The caller holds the auth
+        snapshot lock, so RPC snapshots cannot observe cookies from one stored
+        generation with ``authuser``/``account_email`` from another.
+
+        Returns:
+            Whether the account route changed, or ``None`` when the live jar
+            advanced after the disk sample and the stored generation was not
+            installed.
+        """
+        if (
+            CookieJar.from_httpx(target_cookie_jar) != expected_cookie_jar
+            or (self.authuser, self.account_email) != (expected_authuser, expected_account_email)
+            or self._profile_session_generation != expected_generation
+        ):
+            return None
+        route_before = (self.authuser, self.account_email)
+        _auth_cookies._replace_cookie_jar(target_cookie_jar, source_cookie_jar)
+        self.replace_cookie_jar(target_cookie_jar)
+        self.authuser = authuser
+        self.account_email = account_email
+        self._profile_session_generation += 1
+        return route_before != (authuser, account_email)
 
     def __repr__(self) -> str:
         """Return a redacted representation safe for logs and pytest diffs.
@@ -112,6 +266,10 @@ class AuthTokens:
 
     def cookie_header_for(self, url: str) -> str:
         """Return the ``Cookie:`` header this session would send to ``url``.
+
+        .. deprecated:: 0.8.1
+           Scheduled for removal in v1. Use managed-client request APIs, which
+           select from the kernel-owned live jar.
 
         This is the domain-correct way to build a raw header. Cookie selection
         follows RFC 6265 §5.4 via :attr:`cookie_jar`, so a cookie scoped to one
@@ -192,6 +350,10 @@ class AuthTokens:
     def cookie_header(self) -> str:
         """Generate a domain-blind Cookie header value.
 
+        .. deprecated:: 0.8.1
+           Scheduled for removal in v1. Use managed-client request APIs. This
+           property remains warning-free throughout v0.x.
+
         .. warning::
            **Not correct for building a request.** This is :attr:`flat_cookies`
            joined into header syntax, so it inherits that projection's one slot
@@ -204,7 +366,11 @@ class AuthTokens:
         Returns:
             Semicolon-separated cookie string (e.g., "SID=abc; HSID=def").
         """
-        return "; ".join(f"{k}={v}" for k, v in self.flat_cookies.items())
+        # Keep this separate compatibility property warning-free. Calling the
+        # public ``flat_cookies`` property here would attribute its warning to
+        # library internals and make a distinct deprecated surface warn
+        # indirectly.
+        return "; ".join(f"{k}={v}" for k, v in self._flat_cookie_projection().items())
 
     @property
     def account_route(self) -> str:
@@ -212,8 +378,35 @@ class AuthTokens:
         return _auth_account.format_authuser_value(self.authuser, self.account_email)
 
     @property
+    def jar(self) -> CookieJar:
+        """Return a typed, read-only view of the compatibility cookie shadow.
+
+        .. deprecated:: 0.8.1
+           This warning-free v0.x migration shape becomes the immutable
+           ``initial_cookies: CookieJar`` bootstrap field in v1.
+
+        This preserves the public Phase-A projection and the future
+        ``initial_cookies`` migration shape. It is projected from
+        ``cookie_jar`` each access, but that field is itself a compatibility
+        shadow; managed-client code asks the kernel-owned jar instead. This is
+        a **read-only question view** (``names`` / ``validate_required`` /
+        ``has_secondary_binding`` / ``missing_hint``), never a live authority.
+
+        ``same_site``-lossy by construction (:meth:`CookieJar.from_httpx`), so it
+        must never be persisted — the SameSite the wire cookies carry is not
+        recoverable from ``http.cookiejar``. This is why ``jar`` answers
+        questions rather than replacing ``cookie_jar``.
+        """
+        return CookieJar.from_httpx(self.cookie_jar) if self.cookie_jar is not None else CookieJar()
+
+    @property
     def flat_cookies(self) -> FlatCookieMap:
         """Return a legacy name→value cookie mapping.
+
+        .. deprecated:: 0.8.1
+           Scheduled for removal in v1. Direct access emits one
+           :class:`DeprecationWarning`; use :attr:`jar` for bootstrap-cookie
+           questions and managed-client request APIs for HTTP.
 
         .. warning::
            **Lossy, and not correct for building a request.** One slot per
@@ -226,9 +419,14 @@ class AuthTokens:
            changes if ``storage_state`` is reordered (issue #2054).
 
            Kept for backward compatibility — see the migration note in the
-           v0.4.0 CHANGELOG entry that recommended it. For HTTP use
-           :meth:`cookie_header_for`, :attr:`cookie_jar`, or :attr:`cookies`.
+           v0.4.0 CHANGELOG entry that recommended it. Managed-client request
+           and persistence paths never consume this projection.
         """
+        warn_registered_deprecation("auth_tokens_flat_cookies")
+        return self._flat_cookie_projection()
+
+    def _flat_cookie_projection(self) -> FlatCookieMap:
+        """Build the legacy flat view without emitting a public warning."""
         return _auth_cookies.flatten_cookie_map(self.cookies)
 
     @classmethod
@@ -241,8 +439,9 @@ class AuthTokens:
     ) -> AuthTokens:
         """Create AuthTokens from Playwright storage state file.
 
-        This is the recommended way to create AuthTokens for programmatic use.
-        It loads cookies from storage and fetches CSRF/session tokens automatically.
+        Compatibility loader for callers that still need a standalone token object.
+        Prefer ``NotebookLMClient.from_storage(...)`` and access ``client.auth``
+        within the managed client lifecycle.
 
         Args:
             path: Path to storage_state.json. If provided, takes precedence over profile.
@@ -261,115 +460,342 @@ class AuthTokens:
             httpx.HTTPError: If token fetch request fails
 
         Example:
-            auth = await AuthTokens.from_storage()
-            async with NotebookLMClient(auth) as client:
+            async with NotebookLMClient.from_storage() as client:
                 notebooks = await client.list_notebooks()
 
             # Load from a specific profile
-            auth = await AuthTokens.from_storage(profile="work")
+            async with NotebookLMClient.from_storage(profile="work") as client:
+                notebooks = await client.list_notebooks()
         """
-        path = _auth_cookies.resolve_auth_storage_path(path, profile)
-
-        if path is None:
-            authuser = 0
-            account_email = None
-            account_metadata = _auth_account.read_account_metadata_from_storage_state(
-                _auth_cookies._load_storage_state(path)
-            )
-            raw_authuser = account_metadata.get("authuser")
-            raw_email = account_metadata.get("email")
-            if isinstance(raw_authuser, int) and raw_authuser >= 0:
-                authuser = raw_authuser
-            if isinstance(raw_email, str) and raw_email.strip():
-                account_email = raw_email.strip()
-        else:
-            authuser = _auth_account.get_authuser_for_storage(path)
-            account_email = _auth_account.get_account_email_for_storage(path)
-        # Build the cookie jar via the lossless loader so path/secure/httpOnly
-        # survive into the live jar. The earlier
-        # extract_cookies_with_domains -> build_cookie_jar pipeline only carried
-        # (name, domain) -> value and dropped the same attributes the load
-        # paths in #365 fixed.
-        #
-        # ``build_httpx_cookies_from_storage`` is the public wrapper: a blocking
-        # file read plus, on an unroutable ``__Secure-1PSIDTS``, a synchronous
-        # ``RotateCookies`` POST + fsync'd disk write. Offload it to a worker
-        # thread (mirroring recovery.py's ``asyncio.to_thread`` pattern) so the
-        # inline recovery cannot freeze the event loop from this async path.
-        jar = await asyncio.to_thread(_auth_cookies.build_httpx_cookies_from_storage, path)
-        # Snapshot before token fetch can rotate cookies; the snapshot/delta
-        # merge in save_cookies_to_storage will then write only what this
-        # process actually rotated, preserving sibling-process state.
-        snapshot = _auth_storage.snapshot_cookie_jar(jar)
-        if path is None:
-            fetch_result = await _auth_refresh._fetch_tokens_with_refresh(
-                jar,
-                path,
-                profile,
-                authuser=authuser,
-                account_email=account_email,
-                allow_headless=allow_headless,
-                env_auth=True,
-            )
-        elif allow_headless:
-            fetch_result = await _auth_refresh._fetch_tokens_with_refresh(
-                jar, path, profile, allow_headless=True
-            )
-        else:
-            fetch_result = await _auth_refresh._fetch_tokens_with_refresh(jar, path, profile)
-        csrf_token, session_id, refreshed, post_refresh_snapshot = fetch_result
-
-        # If NOTEBOOKLM_REFRESH_CMD ran, ``_fetch_tokens_with_refresh`` captured
-        # a snapshot immediately after the jar was wholesale-replaced from
-        # disk — before the retry fetch could mutate it with redirect
-        # Set-Cookies. Use that snapshot so the retry's rotations land on
-        # disk as deltas instead of being silently absorbed into the baseline.
-        if refreshed and post_refresh_snapshot is not None:
-            snapshot = post_refresh_snapshot
-
-        # Persist any refreshed cookies from the token fetch. If the save
-        # fails, carry the old baseline into the returned AuthTokens so a
-        # later client can retry the delta instead of treating the mutated
-        # jar as clean state.
-        # ``save_cookies_to_storage`` performs atomic-replace + fsync + flock
-        # under a synchronous file lock; offload to a worker thread so a
-        # slow filesystem (network FS, encrypted home, fcntl contention)
-        # can't freeze the event loop.
-        post_save_snapshot = _auth_storage.snapshot_cookie_jar(jar)
-        save_result = await asyncio.to_thread(
-            _auth_storage.save_cookies_to_storage,
-            jar,
-            path,
-            original_snapshot=snapshot,
-            return_result=True,
+        warn_registered_deprecation("auth_tokens_from_storage")
+        loaded = await _load_stored_auth(
+            path=path,
+            profile=profile,
+            policy=LoadPolicy(allow_headless=allow_headless),
+            auth_type=cls,
         )
-        if isinstance(save_result, _auth_storage.CookieSaveResult):
-            if save_result.ok:
-                cookie_snapshot = None
-            elif save_result.cas_rejected_keys:
-                cookie_snapshot = _auth_storage.advance_cookie_snapshot_after_save(
-                    snapshot, post_save_snapshot, save_result.cas_rejected_keys
+        return loaded.auth
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class InlineLoadedAuth:
+    auth: AuthTokens
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.auth, AuthTokens):
+            raise TypeError("auth must be an AuthTokens")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class FileLoadedAuth:
+    auth: AuthTokens
+    store: ProfileStore
+    persistence_baseline: CookieJar = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.auth, AuthTokens)
+            or not isinstance(self.store, ProfileStore)
+            or not isinstance(self.persistence_baseline, CookieJar)
+        ):
+            raise TypeError("file loaded auth fields are invalid")
+        object.__setattr__(
+            self,
+            "persistence_baseline",
+            CookieJar(tuple(self.persistence_baseline)),
+        )
+
+
+LoadedAuth: TypeAlias = InlineLoadedAuth | FileLoadedAuth
+
+
+class SessionSeedLoader:
+    """Load a source into paired live and persistence-baseline forms."""
+
+    async def load(self, source: ResolvedAuthSource, policy: LoadPolicy) -> SessionSeed:
+        if not isinstance(source, InlineAuthSource | FileAuthSource):
+            raise TypeError("source must be a resolved auth source")
+        if not isinstance(policy, LoadPolicy):
+            raise TypeError("policy must be a LoadPolicy")
+
+        def load_sync() -> _auth_cookies._LoadedCookiePair:
+            if isinstance(source, FileAuthSource):
+                return _auth_cookies._build_cookie_pair_from_storage(source.store.path)
+
+            def load_captured(
+                _path: Path | None,
+                *,
+                require_routable: bool,
+            ) -> _auth_cookies._LoadedCookiePair:
+                return _auth_cookies._build_cookie_pair_from_storage_state(
+                    source.document.to_json(),
+                    require_routable=require_routable,
                 )
-            else:
-                cookie_snapshot = snapshot
-        else:
-            cookie_snapshot = None if save_result else snapshot
-        cookies = _auth_cookies._cookie_map_from_jar(jar)
 
-        if refreshed and path is not None:
-            authuser = _auth_account.get_authuser_for_storage(path)
-            account_email = _auth_account.get_account_email_for_storage(path)
+            def decline_inline(_path: Path | None) -> bool:
+                logger.debug(
+                    "PSIDTS recovery skipped: env-var auth (NOTEBOOKLM_AUTH_JSON) "
+                    "has no writeable backing store"
+                )
+                return False
 
-        return cls(
-            cookies=cookies,
-            csrf_token=csrf_token,
-            session_id=session_id,
-            storage_path=path,
-            cookie_jar=jar,
-            authuser=authuser,
-            cookie_snapshot=cookie_snapshot,
-            account_email=account_email,
+            return _auth_psidts_recovery.load_with_recovery(
+                None,
+                _auth_psidts_recovery.HealPolicy.HEAL_THEN_NAME_ONLY,
+                load=load_captured,
+                heal=decline_inline,
+            )
+
+        pair = await asyncio.to_thread(load_sync)
+        return SessionSeed(pair.live, pair.baseline)
+
+
+def _account_from_compatibility(raw: Mapping[str, object]) -> ProfileAccount:
+    raw_authuser = raw.get("authuser")
+    authuser = raw_authuser if isinstance(raw_authuser, int) and raw_authuser >= 0 else 0
+    raw_email = raw.get("email")
+    email = raw_email.strip() if isinstance(raw_email, str) and raw_email.strip() else None
+    return ProfileAccount(authuser=authuser, email=email)
+
+
+class AccountRouteResolver:
+    """Resolve one paired account route at each token-attempt boundary."""
+
+    def __init__(
+        self,
+        source: ResolvedAuthSource,
+        *,
+        migrator: LegacyAccountMigrator,
+        promotions: LegacyPromotionScheduler,
+    ) -> None:
+        if not isinstance(source, InlineAuthSource | FileAuthSource):
+            raise TypeError("source must be a resolved auth source")
+        if not isinstance(migrator, LegacyAccountMigrator) or not isinstance(
+            promotions, LegacyPromotionScheduler
+        ):
+            raise TypeError("account route collaborators are invalid")
+        self._source = source
+        self._migrator = migrator
+        self._promotions = promotions
+
+    async def resolve(self) -> ProfileAccount | None:
+        source = self._source
+        if isinstance(source, InlineAuthSource):
+            payload = source.document.to_json()
+            namespace = payload.get("notebooklm")
+            raw = namespace.get("account") if isinstance(namespace, Mapping) else None
+            return _account_from_compatibility(raw) if isinstance(raw, Mapping) and raw else None
+
+        def resolve_file_account():
+            resolved, compatibility = self._migrator._resolve_with_projection(source.store)
+            return (
+                resolved,
+                compatibility,
+                self._migrator.needs_reconciliation(source.store.path, resolved),
+            )
+
+        resolved, compatibility, reconcile = await asyncio.to_thread(resolve_file_account)
+        if reconcile:
+            self._promotions.schedule(source.store, self._migrator)
+        if isinstance(resolved, InBandAccount | LegacyAccount):
+            return _account_from_compatibility(compatibility)
+        if not isinstance(resolved, NoAccount):  # pragma: no cover - closed migration result
+            raise AssertionError("unknown account migration result")
+        return None
+
+
+class TokenAcquirer(Protocol):
+    async def acquire(
+        self,
+        seed: SessionSeed,
+        *,
+        source: ResolvedAuthSource,
+        route: AccountRouteResolver,
+        policy: LoadPolicy,
+    ) -> TokenAcquisition: ...
+
+
+class _ProductionTokenAcquirer:
+    async def acquire(
+        self,
+        seed: SessionSeed,
+        *,
+        source: ResolvedAuthSource,
+        route: AccountRouteResolver,
+        policy: LoadPolicy,
+    ) -> TokenAcquisition:
+        final_account: ProfileAccount | None = None
+
+        async def resolve_route(_path: Path | None) -> dict[str, Any]:
+            nonlocal final_account
+            final_account = await route.resolve()
+            kwargs: dict[str, Any] = {
+                "authuser": 0 if final_account is None else final_account.authuser
+            }
+            if final_account is not None and final_account.email is not None:
+                kwargs["account_email"] = final_account.email
+            return kwargs
+
+        storage_path = source.store.path if isinstance(source, FileAuthSource) else None
+        profile = source.profile if isinstance(source, FileAuthSource) else None
+        csrf, session_id, baseline = await _auth_refresh._fetch_tokens_with_exact_baseline(
+            seed.live,
+            storage_path,
+            profile,
+            initial_baseline=seed.baseline,
+            resolve_route=resolve_route,
+            allow_headless=policy.allow_headless,
+            env_auth=isinstance(source, InlineAuthSource),
         )
+        return TokenAcquisition(
+            csrf,
+            session_id,
+            seed.live,
+            baseline,
+            final_account,
+        )
+
+
+def _typed_baseline_snapshot(baseline: CookieJar) -> CookieSnapshot:
+    """Project the exact typed baseline one way into the v0.x snapshot shape."""
+    return {
+        _auth_storage.CookieSnapshotKey(cookie.name, cookie.domain, cookie.path): (
+            _auth_storage.CookieSnapshotValue(
+                cookie.value,
+                cast(int | None, cookie.expires),
+                cookie.secure,
+                cookie.http_only,
+            )
+        )
+        for cookie in baseline
+    }
+
+
+class StoredAuthLoader:
+    """Canonical application service for stored authentication."""
+
+    def __init__(
+        self,
+        *,
+        seeds: SessionSeedLoader,
+        token_acquirer: TokenAcquirer,
+        migrator: LegacyAccountMigrator,
+        promotions: LegacyPromotionScheduler,
+    ) -> None:
+        if not isinstance(seeds, SessionSeedLoader):
+            raise TypeError("seeds must be a SessionSeedLoader")
+        if not isinstance(migrator, LegacyAccountMigrator) or not isinstance(
+            promotions, LegacyPromotionScheduler
+        ):
+            raise TypeError("stored auth collaborators are invalid")
+        self._seeds = seeds
+        self._token_acquirer = token_acquirer
+        self._migrator = migrator
+        self._promotions = promotions
+
+    async def load(
+        self,
+        *,
+        path: Path | None,
+        profile: str | None,
+        policy: LoadPolicy,
+        auth_type: type[AuthTokens],
+    ) -> LoadedAuth:
+        if (
+            not isinstance(policy, LoadPolicy)
+            or not isinstance(auth_type, type)
+            or not issubclass(auth_type, AuthTokens)
+        ):
+            raise TypeError("stored auth load arguments are invalid")
+        source = await self._resolve_source(path, profile)
+        seed = await self._seeds.load(source, policy)
+        route = AccountRouteResolver(
+            source,
+            migrator=self._migrator,
+            promotions=self._promotions,
+        )
+        acquired = await self._token_acquirer.acquire(
+            seed,
+            source=source,
+            route=route,
+            policy=policy,
+        )
+        selected_baseline = acquired.baseline_before_fetch_mutations
+        if isinstance(source, FileAuthSource):
+            store: ProfileStore = source.store
+            observation = CookieJar.from_httpx(acquired.live)
+            merge = await asyncio.to_thread(
+                self._merge_observation,
+                store,
+                observation,
+                selected_baseline,
+            )
+            if merge.disposition is not CookieMergeDisposition.HARD_FAILURE:
+                if merge.next_baseline is None:  # pragma: no cover - result invariant
+                    raise AssertionError("advancing merge must return a baseline")
+                selected_baseline = merge.next_baseline
+
+        account = acquired.final_account
+        auth = auth_type(
+            cookies=_auth_cookies._cookie_map_from_jar(acquired.live),
+            csrf_token=acquired.csrf_token,
+            session_id=acquired.session_id,
+            storage_path=source.store.path if isinstance(source, FileAuthSource) else None,
+            cookie_jar=acquired.live,
+            authuser=0 if account is None else account.authuser,
+            cookie_snapshot=_typed_baseline_snapshot(selected_baseline),
+            account_email=None if account is None else account.email,
+        )
+        if isinstance(source, InlineAuthSource):
+            logger.debug("Skipping cookie sync: Auth loaded from NOTEBOOKLM_AUTH_JSON env var")
+            return InlineLoadedAuth(auth)
+        return FileLoadedAuth(auth, source.store, selected_baseline)
+
+    @staticmethod
+    def _merge_observation(
+        store: ProfileStore,
+        observation: CookieJar,
+        baseline: CookieJar,
+    ):
+        return store.merge_cookie_observation(observation, baseline=baseline)
+
+    @staticmethod
+    async def _resolve_source(path: Path | None, profile: str | None) -> ResolvedAuthSource:
+        if path is not None:
+            return FileAuthSource(ProfileStore(path), profile)
+        env_auth_json = resolve_auth_json_env()
+        if env_auth_json is not None:
+            state = await asyncio.to_thread(
+                _auth_cookies._load_storage_state_from_env_value,
+                env_auth_json,
+            )
+            return InlineAuthSource(ProfileDocument.decode(state))
+        from ..paths import get_storage_path
+
+        return FileAuthSource(ProfileStore(get_storage_path(profile=profile)), profile)
+
+
+async def _load_stored_auth(
+    *,
+    path: Path | None,
+    profile: str | None,
+    policy: LoadPolicy,
+    auth_type: type[AuthTokens],
+) -> LoadedAuth:
+    """Build the concrete collaborators and run the canonical stored-auth load."""
+    migrator = LegacyAccountMigrator()
+    loader = StoredAuthLoader(
+        seeds=SessionSeedLoader(),
+        token_acquirer=_ProductionTokenAcquirer(),
+        migrator=migrator,
+        promotions=LegacyPromotionScheduler.process_default(),
+    )
+    return await loader.load(
+        path=path,
+        profile=profile,
+        policy=policy,
+        auth_type=auth_type,
+    )
 
 
 AuthTokens.__module__ = "notebooklm.auth"
@@ -412,37 +838,29 @@ def load_auth_from_storage(path: Path | None = None) -> dict[str, str]:
         # export NOTEBOOKLM_AUTH_JSON='{"cookies":[...]}'
         cookies = load_auth_from_storage()
     """
-    try:
-        return _load_auth_cookies_pure(path, require_routable=True)
-    except _auth_cookies.RequiredCookieValidationError:
-        # Inline ``__Secure-1PSIDTS`` recovery (issue #865). Playwright login
-        # can land a ``storage_state.json`` that carries SID + secondary
-        # binding but lacks PSIDTS, because Google only mints PSIDTS
-        # deterministically in response to the dedicated ``RotateCookies``
-        # POST — not on the passive ``goto()`` navigations the login flow
-        # uses. The preflight then rejects before the keepalive's RotateCookies
-        # path can heal the state. When the recovery preconditions hold, fire
-        # one POST + persist before re-raising — see
-        # :mod:`notebooklm._auth.psidts_recovery` for the precondition list.
-        # ``_recover_psidts_inline`` resolves the effective storage path
-        # itself (default file when ``path is None`` and env-var unset), so
-        # we pass ``path`` through verbatim — including ``None`` for the
-        # default-profile case.
-        #
-        # The recovery invocation lives HERE, in the public wrapper body — the
-        # network-free :func:`_load_auth_cookies_pure` never triggers it (issue
-        # #2061 / event-loop-blocking fix). Sync callers (CLI) keep this inline
-        # recovery; an async caller must offload the wrapper via
-        # ``asyncio.to_thread``.
-        if not _auth_psidts_recovery._recover_psidts_inline(path):
-            # Recovery declined, so the routing half of the preflight has no
-            # heal to trigger and must not harden into a failure this call
-            # cannot repair. Re-run name-only: it re-raises when a required
-            # cookie is genuinely absent, and otherwise returns exactly what
-            # this function returned before #2061. See
-            # ``_build_httpx_cookies_from_storage_state`` for the rule.
-            return _load_auth_cookies_pure(path, require_routable=False)
-        return _load_auth_cookies_pure(path, require_routable=False)
+    # Inline ``__Secure-1PSIDTS`` recovery (issue #865). Playwright login can
+    # land a ``storage_state.json`` that carries SID + secondary binding but
+    # lacks PSIDTS, because Google only mints PSIDTS deterministically in
+    # response to the dedicated ``RotateCookies`` POST — not on the passive
+    # ``goto()`` navigations the login flow uses. The preflight then rejects
+    # before the keepalive's RotateCookies path can heal the state.
+    #
+    # The sequence (strict load -> heal -> name-only retry) has ONE owner,
+    # :func:`notebooklm._auth.psidts_recovery.load_with_recovery`; this wrapper
+    # supplies the flat-map loader and keeps its own name, signature and patch
+    # seam (ADR-0017). It used to be a second copy of that control flow, and by
+    # #2154 the copy had decayed: both arms of its ``if not recovered:`` returned
+    # the identical name-only call, distinguishable only by their comments.
+    #
+    # The recovery invocation stays in a WRAPPER body — the network-free
+    # :func:`_load_auth_cookies_pure` never triggers it (issue #2061 /
+    # event-loop-blocking fix). Sync callers (CLI) keep this inline recovery; an
+    # async caller must offload the wrapper via ``asyncio.to_thread``.
+    return _auth_psidts_recovery.load_with_recovery(
+        path,
+        _auth_psidts_recovery.HealPolicy.HEAL_THEN_NAME_ONLY,
+        load=_load_auth_cookies_pure,
+    )
 
 
 def _load_auth_cookies_pure(

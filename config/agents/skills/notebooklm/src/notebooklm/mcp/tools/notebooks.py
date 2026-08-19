@@ -23,6 +23,7 @@ from fastmcp import Context
 
 from ..._app import notebooks as core
 from ..._app.serialize import to_jsonable
+from ..._app.views import notebook_view as _notebook_view
 from .._confirm import DESTRUCTIVE, READ_ONLY, needs_confirmation
 from .._context import get_client
 from .._errors import mcp_errors
@@ -48,7 +49,7 @@ def register(mcp: Any) -> None:
         client = get_client(ctx)
         with mcp_errors():
             notebooks = await client.notebooks.list()
-            page, meta = paginate(to_jsonable(notebooks), limit, offset)
+            page, meta = paginate([_notebook_view(nb) for nb in notebooks], limit, offset)
             return {"notebooks": page, **meta}
 
     @mcp.tool
@@ -61,13 +62,15 @@ def register(mcp: Any) -> None:
             # the sibling create tool (``note_create``) and ``notebook_delete``,
             # which key the notebook by ``notebook_id`` rather than nesting the
             # record under a ``notebook`` key (#1540). The remaining Notebook
-            # fields (title, created_at, sources_count, is_owner, modified_at)
-            # stay at the top level so no metadata is dropped. The
-            # created_at/modified_at backfill (#1699) now lives in the
+            # fields (title, created_at, sources_count, is_owner, role,
+            # last_viewed_at and its deprecated ``modified_at`` alias) —
+            # plus the ``role_label`` projection — stay at the top level so
+            # no metadata is dropped. The created_at/last_viewed_at backfill
+            # (#1699) now lives in the
             # transport-neutral core (``execute_notebook_create``), so CLI / REST
             # / MCP all get populated timestamps from one place (#1705) — no
             # adapter-level re-read here.
-            record = to_jsonable(result.notebook)
+            record = _notebook_view(result.notebook)
             notebook_id = record.pop("id")
             return {"status": "created", "notebook_id": notebook_id, **record}
 
@@ -123,6 +126,7 @@ def register(mcp: Any) -> None:
                 # untouched elsewhere (e.g. ``notebook_list`` list rows).
                 # ``NotebookMetadata.notebook`` is a non-optional ``Notebook``
                 # dataclass, so ``to_jsonable`` always emits it as a dict here.
+                metadata_block["notebook"] = _notebook_view(meta_result.metadata.notebook)
                 metadata_block["notebook"]["sources_count"] = len(meta_result.metadata.sources)
                 output["metadata"] = metadata_block
                 return output

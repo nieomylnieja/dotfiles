@@ -1,6 +1,6 @@
-"""Friendly rookiepy error messages.
+"""Friendly rookie-cookies error messages.
 
-Pure helper: classifies a rookiepy ``OSError``/``RuntimeError`` into one
+Pure helper: classifies a rookie-cookies ``OSError``/``RuntimeError`` into one
 of four user-facing message shapes (locked DB, permission denied,
 decryption failure, generic) and returns the Rich-markup message text.
 
@@ -13,8 +13,8 @@ the services-boundary test — no presentation reach-in, no exit policy.
 from __future__ import annotations
 
 
-def _handle_rookiepy_error(e: Exception, browser_name: str) -> str:
-    """Return a Rich-markup user-facing error message for a rookiepy exception.
+def _handle_rookie_cookies_error(e: Exception, browser_name: str) -> str:
+    """Return a Rich-markup user-facing error message for a rookie-cookies exception.
 
     The returned string carries Rich markup so callers can hand it
     straight to ``console.print`` (text mode) or strip the markup for the

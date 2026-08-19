@@ -5,6 +5,7 @@ import reprlib
 from typing import Any
 
 from ._idempotency import idempotent_create
+from ._idempotency import mark_unconfirmed as _unconfirmed
 from ._notebook_metadata import (
     NotebookMetadataService,
     NotebookSourceLister,
@@ -12,16 +13,19 @@ from ._notebook_metadata import (
 )
 from ._notebook_payloads import (
     _PROMPT_SUGGESTIONS_DEFAULT_MODE,
+    build_create_notebook_params,
+    build_get_notebook_params,
     build_prompt_suggestions_params,
+    build_update_notebook_params,
 )
 from ._row_adapters.notebooks import PromptSuggestionRow, unwrap_prompt_suggestions
 from ._row_adapters.sources import SourceRow
 from ._runtime.contracts import RpcCaller
 from ._settings import build_get_user_settings_params, extract_account_limits
 from ._sharing_manager import ShareManager
-from ._source.upload_payloads import build_template_block
 from .exceptions import (
     AuthError,
+    ClientError,
     DecodingError,
     NetworkError,
     NotebookLimitError,
@@ -31,7 +35,7 @@ from .exceptions import (
     ServerError,
     ValidationError,
 )
-from .rpc import RPCMethod, safe_index
+from .rpc import GrpcStatusCode, RPCMethod, normalize_grpc_status, safe_index
 from .types import (
     AccountLimits,
     Notebook,
@@ -47,27 +51,14 @@ logger = logging.getLogger(__name__)
 CREATE_NOTEBOOK_QUOTA_RPC_CODE = 3
 
 
-def build_create_notebook_params(title: str) -> list[Any]:
-    """Return the canonical CREATE_NOTEBOOK RPC payload.
+def _describe_notebooks(notebooks: list[Notebook]) -> str:
+    """Render matched notebooks as ``id (title)`` for an ambiguity message.
 
-    The trailing :func:`build_template_block` replaced the old flat ``[2], [1]``
-    tail that migrated backends now reject with ``status=3`` (#1546).
+    Mirrors ``_source/add.py::_describe_sources``. The ambiguity raises tell the
+    caller to go and check their notebook list; naming the exact rows saves them
+    diffing that list by eye against a title that, by definition, is not unique.
     """
-    return [title, None, None, build_template_block()]
-
-
-def build_get_notebook_params(notebook_id: str) -> list[Any]:
-    """Return the canonical GET_NOTEBOOK (``rLM1Ne``) RPC payload.
-
-    The Gemini-3.5 rollout migrated the read path's trailing template block from
-    the flat ``[2]`` to the same nested :func:`build_template_block` wrapper the
-    write path adopted in #1548 (issue #1549). Live-verified forward-compatible:
-    the nested shape returns a byte-identical decoded notebook (notebook id /
-    title and every ``SourceRow``) as the flat ``[2]`` on an un-migrated account,
-    so it is safe across cohorts. The trailing ``None, 0`` is unchanged — only
-    the template block at position 2 is migrated (the narrow scope #1549 tracks).
-    """
-    return [notebook_id, None, build_template_block(), None, 0]
+    return ", ".join(f"{notebook.id} ({notebook.title!r})" for notebook in notebooks)
 
 
 def _extract_summary(outer: Any) -> str:
@@ -241,6 +232,17 @@ class NotebooksAPI:
             source_lister=self._sources,
         )
         self._share_manager = share_manager or ShareManager(self._rpc)
+        # CREATE_NOTEBOOK volunteers its newly-created ChatSession, while
+        # GET_NOTEBOOK omits it. Keep that one-shot hint until ChatAPI consumes
+        # it so the first ask need not immediately re-fetch the same id through
+        # hPTbtc (#2133). The cache is scoped to this client instance and each
+        # entry is popped on first use; closing the client releases any hints
+        # from notebooks that were created without a subsequent ask.
+        self._created_chat_session_ids: dict[str, str] = {}
+
+    def _take_created_chat_session_id(self, notebook_id: str) -> str | None:
+        """Consume CREATE_NOTEBOOK's volunteered current chat-session id."""
+        return self._created_chat_session_ids.pop(notebook_id, None)
 
     async def _rpc_call(
         self,
@@ -319,13 +321,32 @@ class NotebooksAPI:
                 )
                 return source_ids
 
-            sources = (
-                safe_index(
-                    notebook_info, 1, method_id=method_id, source="NotebooksAPI.get_source_ids"
+            if len(notebook_info) <= 1:
+                # The sources slot is *absent*, which is not the same thing as
+                # present-and-null below: a healthy envelope carries the slot
+                # (the #2131 report shows ``len=11`` on an empty notebook), so a
+                # response too short to hold one is a truncated shape worth
+                # surfacing.
+                logger.warning(
+                    "get_source_ids: notebook_info has no sources slot for %s "
+                    "(schema drift?). len=%d",
+                    notebook_id,
+                    len(notebook_info),
                 )
-                if len(notebook_info) > 1
-                else None
+                return source_ids
+
+            sources = safe_index(
+                notebook_info, 1, method_id=method_id, source="NotebooksAPI.get_source_ids"
             )
+            if sources is None:
+                # Slot present, explicitly null: a genuinely empty notebook
+                # elides its sources as ``None`` rather than ``[]``. A valid
+                # empty state, not a malformed response, so it must not reach
+                # the drift warning below (#2131). This is the same split the
+                # sibling walk over this slot already makes — reject the short
+                # envelope first, then accept a present ``None``
+                # (``_source/listing.py``, issue #1159).
+                return source_ids
             if not isinstance(sources, list):
                 logger.warning(
                     "get_source_ids: notebook_info[1] not list for %s (schema drift?). len=%d",
@@ -511,34 +532,61 @@ class NotebooksAPI:
             than one matches, the wrapper raises an :class:`RPCError`
             because the situation is ambiguous (concurrent creates by
             other clients) and the caller must intervene.
+
+            "Appeared since the call started" is measured against a
+            pre-create snapshot of the notebook ids. If that snapshot
+            could not be taken, the probe cannot attribute *any* match
+            and raises :class:`RPCError` on the first one rather than
+            adopting a notebook it may not have created (#2232). The
+            raised error carries the ``unconfirmed`` marker; see
+            docs/python-api.md#idempotency.
         """
         logger.debug("Creating notebook: %s", title)
         params = build_create_notebook_params(title)
 
         # Capture the baseline notebook IDs *before* the create so the
         # probe can distinguish a notebook that landed during this
-        # call from a pre-existing notebook with the same title. The
-        # baseline is best-effort — if listing fails (e.g. transient
-        # 5xx), we fall back to an empty baseline so a brand-new
-        # account behaves correctly.
+        # call from a pre-existing notebook with the same title.
+        # Titles are NOT unique in NotebookLM, so an unfiltered match
+        # could hand back a notebook that predates the call — and every
+        # subsequent ``sources.add_*`` / ``chat.ask`` in that session
+        # would then target the wrong notebook.
         #
-        # Edge case: when the baseline fetch fails AND a pre-existing
-        # notebook with the same title already exists, the probe cannot
-        # tell that notebook apart from one that just landed. The
-        # ambiguous-probe guard only fires when >1 matches appear, so
-        # a single pre-existing same-titled notebook would be returned
-        # as if it were freshly created. This is a doubly-exceptional
-        # scenario (baseline list failure + title collision) and is
-        # accepted as a known limitation; callers needing strict
-        # uniqueness should embed a UUID in the title.
+        # ``None`` is the "baseline unavailable" sentinel, matching the
+        # three sibling PROBE_THEN_CREATE paths (``add_url``,
+        # ``add_drive``, ``register_file_source``). The probe below then
+        # refuses to guess and raises on any match instead. This
+        # deliberately trades a possible duplicate create — loud, visible
+        # in the notebook list, diagnosable — for the silent wrong-identity
+        # outcome the previous empty-set fallback produced (#2232).
+        baseline_ids: set[str] | None
+        # Retained so the ambiguity raise below can name what went wrong: the
+        # caller sees "baseline unavailable" long after this line ran, and
+        # without the cause there is nothing in the process that can explain it.
+        baseline_error: Exception | None = None
         try:
             baseline_ids = {nb.id for nb in await self.list()}
-        except Exception:
-            logger.debug(
-                "create: baseline list() failed; falling back to empty baseline",
+        except Exception as exc:
+            # WARNING, not DEBUG (#2220 parity with the source paths, #2204):
+            # the ``notebooklm`` logger defaults to WARNING, so a DEBUG record
+            # here is discarded before any handler sees it and the call silently
+            # runs with its idempotency probe disabled.
+            #
+            # Swallowing is still right at *baseline* time — nothing has been
+            # written yet, so degrading is safe and failing here would break
+            # creates that would otherwise have succeeded. The probe below runs
+            # after a create that may already have committed and therefore has
+            # no such freedom; that asymmetry is the whole shape of #2220.
+            baseline_error = exc
+            logger.warning(
+                "create: baseline list() failed (%s); the idempotency probe can no "
+                "longer tell a notebook this call created from one that was already "
+                "there, so a transport failure will surface as an ambiguity error "
+                "instead of recovering",
+                type(exc).__name__,
                 exc_info=True,
             )
-            baseline_ids = set()
+            baseline_ids = None
 
         async def _create() -> Notebook:
             try:
@@ -551,6 +599,8 @@ class NotebooksAPI:
                 await self._raise_quota_error_if_detected(exc)
                 raise
             notebook = Notebook.from_api_response(result)
+            if notebook.id and notebook.chat_sessions:
+                self._created_chat_session_ids[notebook.id] = notebook.chat_sessions[0].id
             logger.debug("Created notebook: %s", notebook.id)
             return notebook
 
@@ -565,14 +615,15 @@ class NotebooksAPI:
             # connectivity recovers) before retrying the create.
             #
             # Other exception types (decoding errors, unexpected RPC
-            # failures, programming bugs) are still treated as "probe
-            # could not confirm a match" — those signal that the probe
-            # path itself is broken in a way that wouldn't be fixed by a
-            # retry, so falling through to None preserves the existing
-            # contract of "best-effort probe".
+            # failures, programming bugs) propagate too, as of #2220. They
+            # signal that the probe path itself is broken — which is exactly
+            # when its protection matters most, because "broken probe" is
+            # indistinguishable from "the create did not land". The old
+            # best-effort contract returned ``None`` there and let the create
+            # be re-issued on no evidence.
             try:
                 current = await self.list()
-            except (AuthError, RateLimitError, ServerError, NetworkError):
+            except (AuthError, RateLimitError, ServerError, NetworkError) as exc:
                 # Transport- and auth-level probe failures must propagate.
                 # Silently returning None here lets ``idempotent_create``
                 # re-issue the create on top of a broken probe, which is
@@ -581,14 +632,77 @@ class NotebooksAPI:
                     "create: probe list() failed with transport/auth error; "
                     "propagating so the caller can avoid a duplicate-resource retry"
                 )
+                # Mark it UNCONFIRMED before it goes (#2220 review): the create
+                # may already have committed and this probe could not say, which
+                # is the same predicament as the decode branch below. Without the
+                # marker a ServerError/RateLimitError here classifies as the
+                # *retriable* SERVER/RATE_LIMITED with the hint "retry after a
+                # short delay" — and the caller retries the ADD, not the probe.
+                # The underlying type is left intact, so "re-authenticate" /
+                # "connectivity" remain readable in the message.
+                _unconfirmed(exc)
                 raise
-            except Exception:
-                logger.debug(
-                    "create: probe list() failed with non-transport error; treating as no match",
+            except Exception as exc:
+                # Propagate, do not retry (#2220). ``notebooks.create`` is the
+                # fourth instance of the probe-then-create pattern the issue
+                # names three of; leaving it swallowing would split the very
+                # uniformity that argument rests on. ``RPCError`` matches what
+                # the ambiguity branch below already raises, so no call site's
+                # ``except`` clause changes meaning.
+                logger.warning(
+                    "create: probe list() failed with a non-transport error (%s); the "
+                    "create cannot be confirmed, so it will not be retried",
+                    type(exc).__name__,
                     exc_info=True,
                 )
-                return None
-            matches = [nb for nb in current if nb.id not in baseline_ids and nb.title == title]
+                raise _unconfirmed(
+                    RPCError(
+                        # Action first — the MCP/REST surfaces truncate messages at
+                        # 300 characters, which cut the closing instruction off.
+                        "UNRESOLVED — do not blindly retry; check your notebook list "
+                        f"first. Cannot confirm notebook with title {title!r}: the "
+                        "create failed at the transport level and may or may not have "
+                        "committed, and the idempotency probe that would settle it "
+                        f"failed too ({type(exc).__name__}). No FURTHER attempt was made, "
+                        "because retrying on an unanswered probe is how duplicates "
+                        "happen — but an earlier attempt in this call may also have "
+                        "committed.",
+                        method_id=RPCMethod.CREATE_NOTEBOOK.value,
+                    )
+                ) from exc
+            matches = [nb for nb in current if nb.title == title]
+            if baseline_ids is not None:
+                matches = [nb for nb in matches if nb.id not in baseline_ids]
+            elif matches:
+                # Without a baseline a match may predate this create — see the
+                # ``baseline_ids`` comment for the failure mode this guards.
+                # Both halves of the ambiguity are worth stating: the match may
+                # predate the create, or it may BE the create, in which case it
+                # landed and the caller will otherwise never learn its id.
+                #
+                # Deliberately NOT ``raise ... from baseline_error``. Setting
+                # ``__cause__`` (by ``from`` or by hand) makes the traceback
+                # print the cause *instead of* ``__context__`` — and here
+                # ``__context__`` is the create's transport failure, the half
+                # ``idempotent_create`` promises stays visible ("the traceback
+                # shows both halves", ``_idempotency.py``). The baseline failure
+                # is named by type in the message instead, which is all the two
+                # sibling paths without a ``cause=`` field surface either.
+                raise _unconfirmed(
+                    RPCError(
+                        # Action first — the MCP/REST surfaces truncate messages
+                        # at 300 characters, and a realistic title plus one
+                        # ``id (title)`` row runs past that, cutting the closing
+                        # instruction off. Same reasoning as the probe-failure
+                        # raise above.
+                        f"Cannot disambiguate notebook with title {title!r} — check your "
+                        "notebook list before retrying: the pre-create baseline snapshot "
+                        f"failed ({type(baseline_error).__name__}), so "
+                        f"{_describe_notebooks(matches)} may either predate this create "
+                        "or be the notebook it just created.",
+                        method_id=RPCMethod.CREATE_NOTEBOOK.value,
+                    )
+                )
             if len(matches) == 1:
                 # ``matches`` is a list of typed ``Notebook`` objects (NOT a raw
                 # RPC payload) — tuple unpacking reads the single match
@@ -600,11 +714,13 @@ class NotebooksAPI:
                 # Ambiguous: more than one new notebook with this title
                 # appeared during the call. We cannot safely pick one;
                 # surface the situation so the caller can resolve it.
-                raise RPCError(
-                    f"Cannot disambiguate notebook with title {title!r}: "
-                    f"probe found {len(matches)} new notebooks with this title "
-                    "after a transport failure. Resolve manually before retrying.",
-                    method_id=RPCMethod.CREATE_NOTEBOOK.value,
+                raise _unconfirmed(
+                    RPCError(
+                        f"Cannot disambiguate notebook with title {title!r}: "
+                        f"probe found {len(matches)} new notebooks with this title "
+                        "after a transport failure. Resolve manually before retrying.",
+                        method_id=RPCMethod.CREATE_NOTEBOOK.value,
+                    )
                 )
             return None
 
@@ -650,6 +766,10 @@ class NotebooksAPI:
             )
             return
 
+        # ``is_owner`` is now ``role is SharePermission.OWNER``. It previously
+        # decoded a "has any sharing" slot, so this count silently dropped every
+        # notebook the user owned *and had shared* — biasing the quota check
+        # towards never raising ``NotebookLimitError`` (#2125).
         owned_count = sum(1 for notebook in notebooks if notebook.is_owner)
         # Allow one notebook of slack because list results can lag a failed
         # create or omit service-internal notebooks that still count.
@@ -681,17 +801,43 @@ class NotebooksAPI:
             Notebook object with details.
 
         Raises:
-            NotebookNotFoundError: If the notebook does not exist. The backend
-                returns an empty / degenerate payload (missing ``id`` and
-                ``title``) for unknown IDs rather than a proper RPC error, so
-                this method post-validates the parsed response.
+            NotebookNotFoundError: If the notebook does not exist. Both backend
+                signals are handled, so the ADR-0019 contract holds either way:
+                a proper RPC error (gRPC status ``5``, surfaced by the decoder
+                as ``ClientError`` and translated below), or the historical
+                empty / degenerate payload with no RPC error at all, which the
+                post-validation further down still catches.
         """
         params = build_get_notebook_params(notebook_id)
-        result = await self._rpc.rpc_call(
-            RPCMethod.GET_NOTEBOOK,
-            params,
-            source_path=f"/notebook/{notebook_id}",
-        )
+        try:
+            result = await self._rpc.rpc_call(
+                RPCMethod.GET_NOTEBOOK,
+                params,
+                source_path=f"/notebook/{notebook_id}",
+            )
+        except ClientError as exc:
+            # Translate the status-5 rejection into this method's documented
+            # miss signal: ``ClientError`` and ``NotebookNotFoundError`` are
+            # siblings under ``RPCError``, not ancestor/descendant, so
+            # ``get_or_none``'s ``except`` never sees it (#2132, ADR-0019).
+            # Narrow on purpose -- ``PERMISSION_DENIED`` comes through this
+            # same branch and must keep propagating.
+            #
+            # ``detail`` carries the decoder's guidance onto the typed error
+            # rather than leaving it on ``__cause__``: status 5 also means
+            # "belongs to a different signed-in account" (#114 / #294),
+            # ``server/_errors.py`` promises the 404 body keeps that verbatim,
+            # and every adapter renders ``str(exc)``.
+            if normalize_grpc_status(exc.rpc_code) is GrpcStatusCode.NOT_FOUND:
+                raise NotebookNotFoundError(
+                    notebook_id,
+                    method_id=RPCMethod.GET_NOTEBOOK.value,
+                    raw_response=exc.raw_response,
+                    rpc_code=exc.rpc_code,
+                    found_ids=exc.found_ids,
+                    detail=str(exc),
+                ) from exc
+            raise
         # get_notebook returns [nb_info, ...] where nb_info contains the notebook
         # data. The ``[0]`` read is fully guarded (truthy + list + non-empty), so
         # ``safe_index`` cannot raise here; it keeps the envelope-unwrap position
@@ -711,7 +857,7 @@ class NotebooksAPI:
                 notebook_id,
                 method_id=RPCMethod.GET_NOTEBOOK.value,
             )
-        notebook = Notebook.from_api_response(nb_info)
+        notebook = Notebook.from_api_response(nb_info, include_chat_settings=True)
         # Defense-in-depth: even when the outer list isn't empty, the server can
         # return a payload whose id and title both parse to ``""``. A valid
         # notebook always has at least one of the two populated.
@@ -731,6 +877,14 @@ class NotebooksAPI:
         ``None``; transport, auth, and decode faults — including the broader
         :class:`~notebooklm.exceptions.RPCError` subtree
         :class:`NotebookNotFoundError` also inherits — propagate unchanged.
+
+        Status-5 policy: **both** its meanings collapse to ``None`` here. The
+        backend sends that one status whether the notebook is absent or lives
+        under a *different* signed-in account (#114 / #294), so the
+        account-routing guidance is unobservable on this API by construction.
+        Use :meth:`get` when that matters — it raises with the guidance in the
+        message, the ``rpc_code``, and the original rejection as ``__cause__``.
+        ``PERMISSION_DENIED`` is folded in neither place.
 
         Args:
             notebook_id: The notebook ID.
@@ -778,14 +932,39 @@ class NotebooksAPI:
         Returns:
             The renamed Notebook object (fetched after rename).
         """
-        logger.debug("Renaming notebook %s to: %s", notebook_id, new_title)
+        return await self.update(notebook_id, title=new_title)
+
+    async def set_emoji(self, notebook_id: str, emoji: str) -> Notebook:
+        """Set a notebook's display emoji and return the refreshed notebook."""
+        return await self.update(notebook_id, emoji=emoji)
+
+    async def update(
+        self,
+        notebook_id: str,
+        *,
+        title: str | None = None,
+        emoji: str | None = None,
+    ) -> Notebook:
+        """Update a notebook's title and/or emoji in one mutation.
+
+        ``None`` means preserve the existing property; an empty string is sent
+        verbatim and can therefore clear the emoji. At least one property must
+        be supplied.
+        """
+        if title is None and emoji is None:
+            raise ValidationError("At least one of title or emoji must be provided")
+
+        logger.debug("Updating notebook %s (title=%r, emoji=%r)", notebook_id, title, emoji)
         # RENAME_NOTEBOOK is the live ``MutateProject``, a generic notebook
         # mutator: the same RPC sets the title here, chat config in
         # ``ChatAPI.configure``, and the share view-level in
         # ``SharingAPI.set_view_level`` — each with a different params shape.
-        # Payload format discovered via browser traffic capture:
-        # [notebook_id, [[null, null, null, [null, new_title]]]]
-        params = [notebook_id, [[None, None, None, [None, new_title]]]]
+        # Payload format recovered from the web client's generated protobuf
+        # serializer and live-verified: ChangeProperty tag 2 is title and tag 3
+        # is emoji.
+        # [notebook_id, [[null, null, null, [null, title, emoji]]]]
+        # (the trailing emoji slot is omitted for a title-only mutation)
+        params = build_update_notebook_params(notebook_id, title=title, emoji=emoji)
         await self._rpc.rpc_call(
             RPCMethod.RENAME_NOTEBOOK,
             params,

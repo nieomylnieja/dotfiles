@@ -18,10 +18,10 @@ Top of the leaf-ward DAG: imports from :mod:`.browser_accounts`,
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn, Protocol
 
 import httpx
 
@@ -31,14 +31,12 @@ import httpx
 # it through the public ``auth`` facade — ``cli/`` may not import private
 # ``_auth.*`` modules (tests/_guardrails/test_cli_boundary.py).
 from ....auth import (
-    CLEAR_ACCOUNT,
-    AccountRecord,
+    ReplaceResult,
     cookie_names_from_storage,
-    drop_legacy_account_key,
     fetch_tokens_with_domains,
     missing_cookies_hint,
     read_account_metadata,
-    replace_from_login,
+    replace_profile_from_login,
     validate_with_recovery,
 )
 from ....client import NotebookLMClient
@@ -61,6 +59,22 @@ from .profile_targets import (
 # Click command layer injects ``functools.partial(click.confirm,
 # default=False)`` so interactive runs prompt before overwriting.
 ConfirmCallback = Callable[[str], bool]
+
+
+class ReplaceProfileFromLogin(Protocol):
+    def __call__(
+        self,
+        path: Path,
+        state: Mapping[str, Any],
+        *,
+        include_domains: set[str] | None,
+        include_optional: bool = False,
+        account_mode: Literal["keep", "clear", "set"] = "keep",
+        account_authuser: int | None = None,
+        account_email: str | None = None,
+        backup: bool = False,
+    ) -> ReplaceResult: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -434,15 +448,15 @@ def _login_with_browser_cookies(
     # full jar). Even on a default-account login (authuser=0, no email) the
     # account binding is CLEARED in the same write so refreshed cookies cannot
     # keep routing to an older account.
-    account = (
-        AccountRecord(authuser=authuser, email=email) if (authuser or email) else CLEAR_ACCOUNT
-    )
+    account_mode: Literal["clear", "set"] = "set" if (authuser or email) else "clear"
     try:
-        outcome = deps.replace_from_login(
+        outcome = deps.replace_profile_from_login(
             storage_path,
             storage_state,
             include_domains=include_domains,
-            account=account,
+            account_mode=account_mode,
+            account_authuser=authuser if account_mode == "set" else None,
+            account_email=email if account_mode == "set" else None,
         )
     except OSError as e:
         # G6: redact the bound exception in the log line (use the type name) so
@@ -475,10 +489,8 @@ def _login_with_browser_cookies(
         )
         io.fail(1)
 
-    # The writer embedded (or cleared) the in-band account binding atomically;
-    # drop the legacy sibling ``context.json[account]`` key so a default-account
-    # login can't keep routing to a stale legacy account (best-effort, own lock).
-    drop_legacy_account_key(storage_path)
+    # replace_profile_from_login already scrubbed the legacy sibling context.json[account]
+    # key after its native profile write (_auth/profile_migration.py).
 
     saved_msg = f"\n[green]Authentication saved to:[/green] {storage_path}"
     if email:
@@ -580,7 +592,7 @@ class RefreshDeps:
     profiles_by_account_email: Callable[..., Any]
     read_account_metadata: Callable[..., Any]
     read_browser_cookies: Callable[..., Any]
-    replace_from_login: Callable[..., Any]
+    replace_profile_from_login: ReplaceProfileFromLogin
     resolve_all_accounts_target: Callable[..., Any]
     select_account: Callable[..., Any]
     select_refresh_account: Callable[..., Any]
@@ -602,7 +614,7 @@ def default_refresh_deps() -> RefreshDeps:
         profiles_by_account_email=_profiles_by_account_email,
         read_account_metadata=read_account_metadata,
         read_browser_cookies=_read_browser_cookies,
-        replace_from_login=replace_from_login,
+        replace_profile_from_login=replace_profile_from_login,
         resolve_all_accounts_target=_resolve_all_accounts_target,
         select_account=_select_account,
         select_refresh_account=_select_refresh_account,

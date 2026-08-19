@@ -29,7 +29,7 @@ from notebooklm.cli._firefox_containers import (
     _l10n_label_name,
     _load_identities,
     _resolve_profile_path,
-    _row_to_rookiepy_dict,
+    _row_to_rookie_cookies_dict,
     extract_firefox_container_cookies,
     find_firefox_profile_path,
     has_container_cookies_in_use,
@@ -803,26 +803,40 @@ class TestMillisecondExpiryDetection:
 
 
 # ---------------------------------------------------------------------------
-# _row_to_rookiepy_dict — non-numeric millisecond expiry
+# _row_to_rookie_cookies_dict — non-numeric millisecond expiry
 # ---------------------------------------------------------------------------
 
 
-class TestRowToRookiepyDict:
+class TestRowToRookieCookiesDict:
     def test_non_numeric_expiry_in_ms_left_unchanged(self):
         # expiry is a str while expiry_in_ms is True -> the // 1000 raises
         # TypeError and the value is left as-is (best effort).
         row = (".google.com", "SID", "v", "/", "not-a-number", 1, 0, 0)
-        result = _row_to_rookiepy_dict(row, expiry_in_ms=True)
+        result = _row_to_rookie_cookies_dict(row, expiry_in_ms=True)
         assert result["expires"] == "not-a-number"
 
     def test_numeric_expiry_in_ms_divided(self):
         row = (".google.com", "SID", "v", "/", 9_999_999_999_000, 1, 0, 0)
-        result = _row_to_rookiepy_dict(row, expiry_in_ms=True)
+        result = _row_to_rookie_cookies_dict(row, expiry_in_ms=True)
         assert result["expires"] == 9_999_999_999
+
+    def test_zero_expiry_is_session_cookie_not_epoch(self):
+        # moz_cookies.expiry == 0 is Firefox's sentinel for "session cookie,
+        # no persistent expiry" (matching rookie_cookies' own 0 -> None
+        # mapping). Passing 0 through as a dated value makes it read as
+        # 1970-01-01 -- i.e. permanently expired -- downstream.
+        row = (".google.com", "SID", "v", "/", 0, 1, 0, 0)
+        result = _row_to_rookie_cookies_dict(row, expiry_in_ms=False)
+        assert result["expires"] is None
+
+    def test_zero_expiry_is_session_cookie_regardless_of_ms_schema(self):
+        row = (".google.com", "SID", "v", "/", 0, 1, 0, 0)
+        result = _row_to_rookie_cookies_dict(row, expiry_in_ms=True)
+        assert result["expires"] is None
 
     def test_none_values_get_defaults(self):
         row = (None, None, None, None, None, 0, 0, None)
-        result = _row_to_rookiepy_dict(row, expiry_in_ms=False)
+        result = _row_to_rookie_cookies_dict(row, expiry_in_ms=False)
         assert result["domain"] == ""
         assert result["value"] == ""
         assert result["path"] == "/"

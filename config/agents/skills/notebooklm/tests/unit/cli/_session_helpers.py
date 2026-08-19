@@ -79,12 +79,12 @@ def _account_exists(storage_path: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Multi-account rookiepy mock (login --account / --all-accounts flow)
+# Multi-account rookie-cookies mock (login --account / --all-accounts flow)
 # ---------------------------------------------------------------------------
 
 
-def _multiaccount_rookiepy_mock() -> MagicMock:
-    """Build a rookiepy mock that returns SID-bearing cookies for any domain query.
+def _multiaccount_rookie_cookies_mock() -> MagicMock:
+    """Build a rookie-cookies mock that returns SID-bearing cookies for any domain query.
 
     Account enumeration is controlled by a separately-patched
     ``enumerate_accounts`` coroutine in each test that calls this.
@@ -186,7 +186,7 @@ def _install_chromium_fanout_patches(
 ):
     """Install all fan-out patches for the test body.
 
-    Patches discovery, per-profile cookie reads, ``rookiepy`` (so the
+    Patches discovery, per-profile cookie reads, ``rookie_cookies`` (so the
     optional-dep import inside ``read_chromium_profile_cookies``
     succeeds), and ``enumerate_accounts`` so each profile yields its own
     account list.
@@ -218,7 +218,7 @@ def _install_chromium_fanout_patches(
         raise AssertionError(f"unexpected enumerate_accounts call (SID={sid!r})")
 
     with contextlib.ExitStack() as stack:
-        stack.enter_context(patch.dict("sys.modules", {"rookiepy": MagicMock()}))
+        stack.enter_context(patch.dict("sys.modules", {"rookie_cookies": MagicMock()}))
         stack.enter_context(
             patch.object(
                 chromium_profiles,

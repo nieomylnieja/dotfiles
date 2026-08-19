@@ -53,6 +53,12 @@ class TestAddSource:
         httpx_mock: HTTPXMock,
         build_rpc_response,
     ):
+        # add_url snapshots the notebook's source ids before the create so its
+        # idempotency probe can tell a fresh add from a pre-existing source with
+        # the same URL (#2204), so the first request is a GET_NOTEBOOK.
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         response = build_rpc_response(
             RPCMethod.ADD_SOURCE,
             [
@@ -74,6 +80,9 @@ class TestAddSource:
         assert isinstance(source, Source)
         assert source.id == "source_id"
         assert source.url == "https://example.com"
+        urls = [str(request.url) for request in httpx_mock.get_requests()]
+        assert any(RPCMethod.GET_NOTEBOOK in url for url in urls)
+        assert any(RPCMethod.ADD_SOURCE in url for url in urls)
 
     @pytest.mark.asyncio
     async def test_add_source_text(
@@ -513,6 +522,12 @@ class TestSourcesAPI:
         build_rpc_response,
     ):
         """Test adding a Google Drive source."""
+        # add_drive snapshots the notebook's source ids before the create so its
+        # idempotency probe can tell a fresh add from a pre-existing copy of the
+        # same Drive file (#2113), so the first request is a GET_NOTEBOOK.
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         response = build_rpc_response(
             RPCMethod.ADD_SOURCE,
             [[[["drive_001"], "My Doc", [None, 0], [None, 2]]]],
@@ -528,8 +543,9 @@ class TestSourcesAPI:
             )
 
         assert source is not None
-        request = httpx_mock.get_request()
-        assert RPCMethod.ADD_SOURCE in str(request.url)
+        urls = [str(request.url) for request in httpx_mock.get_requests()]
+        assert any(RPCMethod.GET_NOTEBOOK in url for url in urls)
+        assert any(RPCMethod.ADD_SOURCE in url for url in urls)
 
     @pytest.mark.asyncio
     async def test_refresh_source(
@@ -1536,7 +1552,7 @@ class TestListSourcesParsingEdgeCases:
         httpx_mock: HTTPXMock,
         build_rpc_response,
     ):
-        """Test list() uses default READY when status_code is unknown (lines 125->137, 127->137)."""
+        """Test list() fails closed when the wire status code is unknown."""
         # status_code 999 is not in the SourceStatus enum values
         response = build_rpc_response(
             RPCMethod.GET_NOTEBOOK,
@@ -1563,7 +1579,8 @@ class TestListSourcesParsingEdgeCases:
         assert len(sources) == 1
         from notebooklm.rpc.types import SourceStatus
 
-        assert sources[0].status == SourceStatus.READY
+        assert sources[0].status == SourceStatus.UNKNOWN
+        assert sources[0].is_ready is False
 
     @pytest.mark.asyncio
     async def test_list_sources_type_code_not_int(
@@ -1705,6 +1722,10 @@ class TestAddUrlErrorPaths:
         build_rpc_response,
     ):
         """Test add_url() with wait=True calls wait_until_ready (lines 335-336)."""
+        # First request is add_url's pre-create baseline snapshot (#2204).
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         source_data = [[[["src_wait_url"], "Example", [None, 11], [None, 2]]]]
         ready_source = Source(id="src_wait_url", title="Example")
         response = build_rpc_response(RPCMethod.ADD_SOURCE, source_data)
@@ -1721,6 +1742,12 @@ class TestAddUrlErrorPaths:
 
         mock_wait.assert_called_once()
         assert result.id == "src_wait_url"
+        urls = [str(request.url) for request in httpx_mock.get_requests()]
+        assert any(RPCMethod.GET_NOTEBOOK in url for url in urls), (
+            "add_url must issue its pre-create baseline GET_NOTEBOOK (#2204); without "
+            "it the queued baseline response is consumed by ADD_SOURCE instead"
+        )
+        assert any(RPCMethod.ADD_SOURCE in url for url in urls)
 
     @pytest.mark.asyncio
     async def test_add_url_youtube_like_no_id_warning(
@@ -1730,6 +1757,10 @@ class TestAddUrlErrorPaths:
         build_rpc_response,
     ):
         """Test add_url() warns when URL looks like YouTube but has no video ID (line 320)."""
+        # First request is add_url's pre-create baseline snapshot (#2204).
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         response = build_rpc_response(
             RPCMethod.ADD_SOURCE,
             [[[["src_channel"], "YouTube Channel", [None, 11], [None, 2]]]],
@@ -1744,6 +1775,12 @@ class TestAddUrlErrorPaths:
 
         assert source is not None
         mock_is_yt.assert_called_once()
+        urls = [str(request.url) for request in httpx_mock.get_requests()]
+        assert any(RPCMethod.GET_NOTEBOOK in url for url in urls), (
+            "add_url must issue its pre-create baseline GET_NOTEBOOK (#2204); without "
+            "it the queued baseline response is consumed by ADD_SOURCE instead"
+        )
+        assert any(RPCMethod.ADD_SOURCE in url for url in urls)
 
 
 class TestAddTextErrorPaths:
@@ -1868,6 +1905,10 @@ class TestAddDriveWait:
         build_rpc_response,
     ):
         """Test add_drive() with wait=True calls wait_until_ready (line 526)."""
+        # First request is add_drive's pre-create baseline snapshot (#2113).
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         response = build_rpc_response(
             RPCMethod.ADD_SOURCE,
             [[[["drive_src_wait"], "My Drive Doc", [None, 0], [None, 2]]]],
@@ -2360,7 +2401,7 @@ class TestListSourcesSkippedEntries:
         httpx_mock: HTTPXMock,
         build_rpc_response,
     ):
-        """Test list() defaults to READY when src has no index 3 (line 125->137 false branch)."""
+        """Test list() fails closed when the source row has no status block."""
         from notebooklm.rpc.types import SourceStatus
 
         # Source with only 2 elements - no status data at index 3
@@ -2382,7 +2423,8 @@ class TestListSourcesSkippedEntries:
             sources = await client.sources.list("nb_123")
 
         assert len(sources) == 1
-        assert sources[0].status == SourceStatus.READY
+        assert sources[0].status == SourceStatus.UNKNOWN
+        assert sources[0].is_ready is False
 
 
 class TestWaitUntilReady:
@@ -2671,6 +2713,10 @@ class TestAddYoutubeSourceDirect:
         build_rpc_response,
     ):
         """Test add_url() with YouTube URL calls _add_youtube_source internally (lines 870-876)."""
+        # First request is add_url's pre-create baseline snapshot (#2204).
+        httpx_mock.add_response(
+            content=build_rpc_response(RPCMethod.GET_NOTEBOOK, [["Notebook", []]]).encode()
+        )
         response = build_rpc_response(
             RPCMethod.ADD_SOURCE,
             [
@@ -2702,6 +2748,12 @@ class TestAddYoutubeSourceDirect:
 
         assert source.id == "yt_src_001"
         assert source.kind == "youtube"
+        urls = [str(request.url) for request in httpx_mock.get_requests()]
+        assert any(RPCMethod.GET_NOTEBOOK in url for url in urls), (
+            "add_url must issue its pre-create baseline GET_NOTEBOOK (#2204); without "
+            "it the queued baseline response is consumed by ADD_SOURCE instead"
+        )
+        assert any(RPCMethod.ADD_SOURCE in url for url in urls)
 
 
 class TestRegisterFileSourceError:
@@ -2808,8 +2860,15 @@ class TestStartResumableUploadError:
         )
 
         async with NotebookLMClient(auth_tokens) as client:
-            with pytest.raises(SourceAddError, match="Failed to get upload URL"):
+            with pytest.raises(SourceAddError) as exc_info:
                 await client.sources.add_file("nb_123", test_file)
+
+        # The real failure propagates unwrapped; the retained-source recovery
+        # context rides along as attributes rather than a wrapper type.
+        error = exc_info.value
+        assert error.source_id == "file_src_001"
+        assert error.stage == "start_session"
+        assert "Failed to get upload URL" in str(error)
 
 
 class TestWaitUntilReadyPolling:

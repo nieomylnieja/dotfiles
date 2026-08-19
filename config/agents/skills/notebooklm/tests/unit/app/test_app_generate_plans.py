@@ -161,20 +161,23 @@ class TestPerKindEnumMapping:
     def test_quiz_enum_mapping(self):
         plan = build_generation_plan(
             "quiz",
-            {"notebook_id": "nb_1", "quantity": "more", "difficulty": "hard"},
+            # more(3) + easy(1): asymmetric. "hard" also encodes to 3 (#2117),
+            # so pairing it with "more" would hide a quantity/difficulty swap.
+            {"notebook_id": "nb_1", "quantity": "more", "difficulty": "easy"},
         )
         assert plan.params["quantity"] == QuizQuantity.MORE
-        assert plan.params["difficulty"] == QuizDifficulty.HARD
+        assert plan.params["difficulty"] == QuizDifficulty.EASY
         # Quiz does not accept a language.
         assert plan.language is None
 
     def test_flashcards_enum_mapping(self):
         plan = build_generation_plan(
             "flashcards",
-            {"notebook_id": "nb_1", "quantity": "fewer", "difficulty": "easy"},
+            # fewer(1) + hard(3): asymmetric. "fewer" + "easy" both encode to 1.
+            {"notebook_id": "nb_1", "quantity": "fewer", "difficulty": "hard"},
         )
         assert plan.params["quantity"] == QuizQuantity.FEWER
-        assert plan.params["difficulty"] == QuizDifficulty.EASY
+        assert plan.params["difficulty"] == QuizDifficulty.HARD
         assert plan.language is None
 
     def test_infographic_enum_mapping(self):

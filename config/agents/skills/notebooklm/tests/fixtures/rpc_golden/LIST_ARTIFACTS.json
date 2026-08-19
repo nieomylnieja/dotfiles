@@ -65,7 +65,16 @@
       "created_at": null,
       "url": null,
       "_variant": null,
-      "generation_prompt": null
+      "generation_prompt": null,
+      "media_urls": [],
+      "duration_seconds": null,
+      "slides": [],
+      "infographics": [],
+      "report_kind": null,
+      "source_ids": [],
+      "last_modified_at": null,
+      "etag": null,
+      "user_state": null
     },
     {
       "id": "SCRUBBED_ARTIFACT_002",
@@ -75,7 +84,16 @@
       "created_at": null,
       "url": null,
       "_variant": null,
-      "generation_prompt": null
+      "generation_prompt": null,
+      "media_urls": [],
+      "duration_seconds": null,
+      "slides": [],
+      "infographics": [],
+      "report_kind": null,
+      "source_ids": [],
+      "last_modified_at": null,
+      "etag": null,
+      "user_state": null
     }
   ]
 }

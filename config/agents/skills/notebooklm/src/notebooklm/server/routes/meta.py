@@ -31,7 +31,7 @@ from ..._app.auth_check import AuthCheckPlan, run_auth_check
 from ..._redact import redact
 from ..._version_info import version_string
 from ...client import NotebookLMClient
-from ...exceptions import NotebookLMError
+from ...exceptions import AuthError, NotebookLMError
 from ...paths import get_storage_path, resolve_profile
 from .._context import get_client, get_client_error
 from .._errors import error_item
@@ -137,8 +137,31 @@ async def server_info(
         test_fetch=False,
         json_output=True,
     )
-    result = await run_auth_check(plan, read_env_auth_json=_no_env_auth_json)
+    account_client: NotebookLMClient | None = None
+    if include_account:
+        try:
+            account_client = await get_client(request)
+        except AuthError:
+            # A concurrent request can bind successfully immediately after
+            # this request loses an auth generation; re-check state below.
+            pass
+        except Exception:
+            # Degrade only failures that the loader recorded for diagnostics.
+            # Unrecorded exceptions still identify a route/programming error
+            # and must retain the normal server error path.
+            if get_client_error(request) is None:
+                raise
     startup_error = get_client_error(request)
+    if include_account and account_client is None and startup_error is None:
+        # The first lookup can fail just before a concurrent request finishes
+        # binding the singleton client and clears ``client_error``. Re-read the
+        # now-bound client instead of treating that narrow race as an invariant
+        # violation below.
+        account_client = await get_client(request)
+    # Probe after any lazy bind: that bind can succeed because storage was
+    # repaired after this request started, and the response must describe the
+    # newly bound session rather than an earlier stale disk snapshot.
+    result = await run_auth_check(plan, read_env_auth_json=_no_env_auth_json)
     startup_error_item = error_item(startup_error) if startup_error is not None else None
     authenticated = result.all_passed and startup_error is None
     auth: dict[str, Any] = {
@@ -164,5 +187,7 @@ async def server_info(
                 "reason": startup_error_item["message"],
             }
         else:
-            info["account"] = await _account_block(get_client(request), authenticated=authenticated)
+            if account_client is None:  # pragma: no cover - guarded above
+                raise RuntimeError("account diagnostics require a bound client")
+            info["account"] = await _account_block(account_client, authenticated=authenticated)
     return info

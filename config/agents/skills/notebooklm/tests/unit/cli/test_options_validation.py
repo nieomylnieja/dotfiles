@@ -287,3 +287,34 @@ class TestAliasCommand:
         alias = alias_command(grp, orig, name="alias", help="Alias.")
         assert isinstance(alias, click.Command)
         assert alias is grp.commands["alias"]
+
+
+# ---------------------------------------------------------------------------
+# research wait --timeout: default must outlast a real deep run (#2142)
+# ---------------------------------------------------------------------------
+
+
+class TestResearchWaitTimeoutDefault:
+    def test_default_matches_source_add_research(self) -> None:
+        """Both commands declare the same 1800s Click default.
+
+        This is a default-equality contract read off the Click metadata; the
+        forwarding of that value into the poll loop and the import-retry budget
+        is covered by the service-level tests in ``tests/unit/cli/test_research.py``.
+
+        The former 300s default sat below every observed deep run (374s live,
+        358s in ``research_deep_poll_long.yaml``), so an unattended
+        ``research wait`` timed out on work the backend went on to finish.
+        Pinning both defaults to the same value keeps the two entry points from
+        drifting apart again.
+        """
+        from notebooklm.cli.research_cmd import research
+        from notebooklm.cli.source_cmd import source
+
+        def timeout_default(group, command_name: str) -> object:
+            command = group.commands[command_name]
+            (option,) = [p for p in command.params if p.name == "timeout"]
+            return option.default
+
+        assert timeout_default(research, "wait") == 1800
+        assert timeout_default(source, "add-research") == 1800

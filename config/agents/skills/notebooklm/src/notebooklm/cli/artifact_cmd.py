@@ -97,6 +97,8 @@ def artifact():
             "data-table",
             "mind-map",
             "report",
+            "fantasy-map",
+            "file",
         ]
     ),
     default="all",

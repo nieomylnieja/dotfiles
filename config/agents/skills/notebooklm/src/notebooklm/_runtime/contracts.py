@@ -83,6 +83,8 @@ class RpcCaller(Protocol):
         *,
         disable_internal_retries: bool = False,
         operation_variant: str | None = None,
+        read_timeout: float | None = None,
+        raise_on_null_status: bool = False,
     ) -> Any: ...
 
 

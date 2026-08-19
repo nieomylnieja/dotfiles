@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import notebooklm.auth as auth_module
 import notebooklm.cli.playwright_login_io as playwright_login_io_module
 import notebooklm.cli.services.playwright_login as _pl
 import notebooklm.cli.session_cmd as session_cmd_module
+from notebooklm._auth import account as _auth_account
 from notebooklm._env import get_base_host
 from notebooklm.notebooklm_cli import cli
 from tests._fixtures import patch_session_login_dual
@@ -511,6 +511,23 @@ class TestLoginCommand:
         }
         assert "Login detected" in result.output
 
+    def test_login_forwards_custom_browser_timeout(self, runner, mock_login_browser_with_storage):
+        """The public timeout controls Playwright's human sign-in wait."""
+        mock_page = mock_login_browser_with_storage
+        mock_page.url = "https://accounts.google.com/signin"
+
+        def succeed(predicate, **kwargs):
+            assert predicate("https://notebooklm.google.com/")
+            mock_page.url = "https://notebooklm.google.com/"
+
+        mock_page.wait_for_url.side_effect = succeed
+
+        result = runner.invoke(cli, ["login", "--browser-timeout", "420"])
+
+        assert result.exit_code == 0
+        assert mock_page.wait_for_url.call_args.kwargs["timeout"] == 420_000
+        assert "Waiting for login (up to 420 seconds)" in result.output
+
     @pytest.mark.requires_playwright
     def test_login_auto_detect_timeout_exits_with_helpful_message(
         self, runner, mock_login_browser_with_storage
@@ -794,7 +811,7 @@ class TestLoginCommand:
                 return_value=browser_dir,
             ),
             patch_session_login_dual("_sync_server_language_to_config"),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
         ):
             mock_context = MagicMock()
             mock_page = MagicMock()
@@ -909,7 +926,7 @@ class TestLoginCommand:
                 return_value=browser_dir,
             ),
             patch_session_login_dual("_sync_server_language_to_config"),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
         ):
             mock_context = MagicMock()
             mock_page = MagicMock()
@@ -956,7 +973,7 @@ class TestLoginCommand:
                 return_value=browser_dir,
             ),
             patch_session_login_dual("_sync_server_language_to_config"),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
         ):
             mock_context = MagicMock()
             mock_page_stale = MagicMock()
@@ -1025,7 +1042,7 @@ class TestLoginCommand:
                 return_value=browser_dir,
             ),
             patch_session_login_dual("_sync_server_language_to_config"),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
         ):
             mock_context = MagicMock()
             mock_page = MagicMock()
@@ -1058,7 +1075,7 @@ class TestLoginCommand:
 
         with (
             patch_session_login_dual("get_storage_path", return_value=storage_file),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
             patch.object(
                 session_cmd_module, "fetch_tokens_with_domains", new_callable=AsyncMock
             ) as mock_fetch,
@@ -1095,7 +1112,7 @@ class TestLoginCommand:
 
         with (
             patch_session_login_dual("get_storage_path", return_value=storage_file),
-            patch.object(auth_module, "enumerate_accounts", new=_enum),
+            patch.object(_auth_account, "enumerate_accounts", new=_enum),
             patch.object(
                 session_cmd_module, "fetch_tokens_with_domains", new_callable=AsyncMock
             ) as mock_fetch,

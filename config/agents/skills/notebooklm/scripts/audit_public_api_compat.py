@@ -60,6 +60,39 @@ CLIENT_NAMESPACE_ATTRIBUTES = (
     "sources",
 )
 
+# Public constants whose VALUE is part of the contract, not just their existence.
+#
+# The rest of this audit reasons about *shape* — a name's kind, its signature, its
+# class members, its enum member values. For a plain module constant it recorded
+# only ``kind`` ("str", "frozenset"), so rebinding one to a different value read as
+# no change at all. That blind spot is not theoretical: the Gemini Notebook rebrand
+# (#2072) repointed ``DEFAULT_BASE_URL`` / ``PERSONAL_BASE_HOST`` at a different
+# host and the audit stayed green, and ``REQUIRED_COOKIE_DOMAINS`` — a documented
+# public constant that callers feed to cookie extractors — has since gained
+# members the same way.
+#
+# Names listed here additionally capture an order-insensitive value fingerprint, so
+# a value change surfaces as a reviewable ``changed-constant-value`` break that has
+# to be acknowledged in the allowlist like any other. Keep the list SHORT and
+# deliberate: it is for constants downstream code compares against or feeds to an
+# API, not for every module-level literal. A name must be in the module's ``__all__``
+# (or ``extra_public_names``) to be collected at all.
+VALUE_TRACKED_CONSTANTS: dict[str, frozenset[str]] = {
+    "notebooklm.auth": frozenset(
+        {
+            "OPTIONAL_COOKIE_DOMAINS",
+            "OPTIONAL_COOKIE_DOMAINS_BY_LABEL",
+            "REQUIRED_COOKIE_DOMAINS",
+        }
+    ),
+    "notebooklm.config": frozenset(
+        {
+            "DEFAULT_BASE_URL",
+            "PERSONAL_BASE_HOST",
+        }
+    ),
+}
+
 
 @dataclass(frozen=True)
 class ApiBreak:
@@ -176,6 +209,14 @@ EXTRA_PACKAGES = tuple(json.loads(sys.argv[6]))
 # lack __all__ on some public modules; raising there would abort the baseline
 # collection before any diff runs (issue #1493 review).
 ENFORCE_ALL = (sys.argv[7] == "1") if len(sys.argv) > 7 else True
+# {module: [constant names]} whose VALUE is captured, not just their kind. Passed
+# in from the driver (VALUE_TRACKED_CONSTANTS) so BOTH the baseline export and the
+# current checkout are collected against the same tracked set.
+VALUE_TRACKED = (
+    {module: set(names) for module, names in json.loads(sys.argv[8]).items()}
+    if len(sys.argv) > 8
+    else {}
+)
 
 
 def discover_modules() -> list[str]:
@@ -257,6 +298,45 @@ def kind_of(obj) -> str:
     if inspect.ismodule(obj):
         return "module"
     return type(obj).__name__
+
+
+# Return an order-insensitive fingerprint of a constant's value.
+#
+# repr() alone is unusable here: set/frozenset/dict iteration order varies with
+# PYTHONHASHSEED, so the same constant would fingerprint differently between the
+# baseline export and the current checkout and every run would report a spurious
+# break. Containers are therefore rendered sorted and recursively; everything else
+# falls back to repr. Exotic values degrade to a placeholder rather than raising --
+# the audit must never fail to *collect* a surface it is asked to compare.
+#
+# (Comments, not a docstring: this function lives inside the raw-string collector
+# script that runs in a subprocess, so a triple-quoted string here would end it.)
+def stable_value_repr(value) -> str:
+    if isinstance(value, (frozenset, set)):
+        # Tag the container type: a bare "{...}" would render a set, a frozenset
+        # and an empty dict identically, so swapping a public constant's container
+        # (frozenset -> set makes it mutable by callers) would fingerprint as no
+        # change at all.
+        rendered = ", ".join(sorted(stable_value_repr(item) for item in value))
+        label = "frozenset" if isinstance(value, frozenset) else "set"
+        return f"{label}({{{rendered}}})"
+    if isinstance(value, dict):
+        return (
+            "dict({"
+            + ", ".join(
+                f"{key!r}: {stable_value_repr(item)}"
+                for key, item in sorted(value.items(), key=lambda kv: repr(kv[0]))
+            )
+            + "})"
+        )
+    if isinstance(value, (list, tuple)):
+        # Order IS meaningful for sequences — render in place.
+        rendered = ", ".join(stable_value_repr(item) for item in value)
+        return f"[{rendered}]" if isinstance(value, list) else f"({rendered})"
+    try:
+        return repr(value)
+    except Exception:  # pragma: no cover - defensive; repr should not raise
+        return f"<unreprable {type(value).__name__}>"
 
 
 def unwrap_member(obj):
@@ -371,6 +451,7 @@ def collect_module(module_name: str) -> dict:
         if name not in names:
             names.append(name)
     payload = {"exports": {}, "has_all": has_all}
+    value_tracked = VALUE_TRACKED.get(module_name, set())
     for name in names:
         try:
             value = getattr(module, name)
@@ -390,6 +471,10 @@ def collect_module(module_name: str) -> dict:
         }
         if inspect.isclass(value):
             entry.update(collect_class(value))
+        elif name in value_tracked:
+            # Only for plain constants: a class/function is already compared by
+            # shape, and fingerprinting one would report a break on every edit.
+            entry["constant_value"] = stable_value_repr(value)
         payload["exports"][name] = entry
     return payload
 
@@ -469,6 +554,10 @@ def collect_manifest(
             json.dumps(sorted(EXCLUDED_TOP_LEVEL_MODULES)),
             json.dumps(EXTRA_PUBLIC_PACKAGES),
             "1" if enforce_all else "0",
+            json.dumps(
+                {module: sorted(names) for module, names in VALUE_TRACKED_CONSTANTS.items()},
+                sort_keys=True,
+            ),
         ],
         cwd=source_root,
         env=env,
@@ -626,6 +715,23 @@ def _compare_export(
             )
         )
         return breaks
+
+    # Value-tracked constants (VALUE_TRACKED_CONSTANTS). Both sides are collected
+    # by THIS script — the baseline is an export of the old source imported by the
+    # current code — so a missing key means the name is not value-tracked, not that
+    # the baseline predates the feature. Comparing only when both sides carry a
+    # fingerprint keeps adding/removing a name from the tracked set from firing a
+    # break on its own.
+    old_value = old.get("constant_value")
+    new_value = new.get("constant_value")
+    if old_value is not None and new_value is not None and old_value != new_value:
+        breaks.append(
+            ApiBreak(
+                "changed-constant-value",
+                path,
+                f"value changed from {old_value} to {new_value}",
+            )
+        )
 
     if old["kind"] in {"function", "class", "enum"}:
         reason = _signature_breakage(old.get("signature"), new.get("signature"))

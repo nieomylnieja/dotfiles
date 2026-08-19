@@ -27,6 +27,7 @@ import pytest
 
 pytest.importorskip("fastmcp")
 
+import click  # noqa: E402
 from click.testing import CliRunner  # noqa: E402
 from fastmcp import Client  # noqa: E402 - after importorskip guard
 
@@ -334,16 +335,21 @@ _OPTION_CASES = [
         "quiz",
         "quiz",
         "generate_quiz",
-        {"quantity": "more", "difficulty": "hard"},
-        ["--quantity", "more", "--difficulty", "hard"],
+        # Asymmetric on the wire: more(3) + easy(1). Avoid pairing "more" with
+        # "hard" -- both encode to 3 (#2117), which would hide a quantity /
+        # difficulty swap in the adapter.
+        {"quantity": "more", "difficulty": "easy"},
+        ["--quantity", "more", "--difficulty", "easy"],
     ),
     (
         "flashcards",
         "flashcards",
         "flashcards",
         "generate_flashcards",
-        {"quantity": "fewer", "difficulty": "easy"},
-        ["--quantity", "fewer", "--difficulty", "easy"],
+        # Asymmetric on the wire: fewer(1) + hard(3). "fewer" + "easy" both
+        # encode to 1 and could not detect a swap.
+        {"quantity": "fewer", "difficulty": "hard"},
+        ["--quantity", "fewer", "--difficulty", "hard"],
     ),
     (
         "report",
@@ -557,3 +563,166 @@ def test_download_audio_parity(tmp_path: Any) -> None:
         ["download", "audio", out, "-n", NB], "artifacts", "download_audio", setup=setup
     )
     assert mcp == cli
+
+
+# ---------------------------------------------------------------------------
+# Option-choice parity (#2197)
+# ---------------------------------------------------------------------------
+# The MCP and REST option tuples are already pinned to the ``_app`` maps by
+# ``tests/unit/mcp/test_studio.py`` and ``tests/server/test_artifacts.py``. The
+# CLI had no such binding: its ``--quantity`` / ``--difficulty`` lists were
+# hardcoded, so a new ``QuizQuantity`` member would have become reachable via
+# MCP and REST while staying silently absent from the CLI, with nothing red.
+# That is the mirror of #2117 (a backend value missing from our enum) — a value
+# in our enum that never reaches one of our surfaces.
+
+_QUIZ_OPTION_AXES = (
+    ("quiz", "--quantity", "quantity"),
+    ("quiz", "--difficulty", "difficulty"),
+    ("flashcards", "--quantity", "quantity"),
+    ("flashcards", "--difficulty", "difficulty"),
+)
+
+
+def _cli_choices(subcommand: str, flag: str) -> tuple[str, ...]:
+    """Return the choices Click actually offers for ``generate <subcommand> <flag>``."""
+    generate = cli.commands["generate"]
+    command = generate.commands[subcommand]  # type: ignore[attr-defined]
+    for param in command.params:
+        if flag in param.opts:
+            assert isinstance(param.type, click.Choice), (
+                f"generate {subcommand} {flag} is no longer a Choice ({param.type!r})"
+            )
+            return tuple(param.type.choices)
+    raise AssertionError(f"generate {subcommand} has no {flag} option")
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "flag", "axis"),
+    _QUIZ_OPTION_AXES,
+    ids=[f"{sub}{flag}" for sub, flag, _ in _QUIZ_OPTION_AXES],
+)
+def test_quiz_option_choices_match_core_and_mcp(subcommand: str, flag: str, axis: str) -> None:
+    """The CLI's quiz/flashcards option lists equal the core maps *and* the MCP set.
+
+    Both halves matter. The map assertion is what ties the user-visible CLI
+    surface to ``QuizQuantity`` / ``QuizDifficulty``; the MCP assertion is what
+    makes this test non-tautological now that the CLI derives its lists — the
+    MCP tuples are still hand-written, so this pins the two surfaces together
+    rather than comparing the map with itself.
+    """
+    from notebooklm._app import generate_plans as gp
+    from notebooklm.mcp.tools.studio import _KIND_OPTIONS
+
+    core_map = gp._QUIZ_QUANTITY_MAP if axis == "quantity" else gp._QUIZ_DIFFICULTY_MAP
+    choices = _cli_choices(subcommand, flag)
+    assert choices == tuple(core_map), (
+        f"generate {subcommand} {flag} offers {choices} but the core map declares "
+        f"{tuple(core_map)} — derive the click.Choice from the map instead of hardcoding it."
+    )
+    assert choices == _KIND_OPTIONS[subcommand][axis]
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "flag", "axis"),
+    _QUIZ_OPTION_AXES,
+    ids=[f"{sub}{flag}" for sub, flag, _ in _QUIZ_OPTION_AXES],
+)
+def test_quiz_option_flag_default_matches_the_wire_default(
+    subcommand: str, flag: str, axis: str
+) -> None:
+    """The flag's ``default=`` selects the code the builders actually send.
+
+    #2197 removed the duplicated choice *list*; the flag default is the same
+    duplication one line down — ``default="standard"`` restates
+    ``DEFAULT_QUIZ_QUANTITY`` as a string with nothing tying them together, so
+    if the client default ever moved, the CLI would keep sending the old one
+    while the Python API sent the new one.
+
+    Unlike the choice list, this one cannot be fixed by derivation: the layering
+    guardrails (``test_app_boundary`` / ``test_cli_boundary``) forbid both
+    ``_app`` and ``cli`` from importing ``_artifact.payloads``, where the wire
+    default lives. So the binding is enforced here instead — the same
+    hardcode-plus-parity-test shape the MCP and REST option tuples already use.
+    A test is allowed to import across layers precisely so it can check one.
+    """
+    from notebooklm._app import generate_plans as gp
+    from notebooklm._artifact.payloads import DEFAULT_QUIZ_DIFFICULTY, DEFAULT_QUIZ_QUANTITY
+
+    generate = cli.commands["generate"]
+    command = generate.commands[subcommand]  # type: ignore[attr-defined]
+    param = next(p for p in command.params if flag in p.opts)
+
+    if axis == "quantity":
+        core_map, wire_default = gp._QUIZ_QUANTITY_MAP, DEFAULT_QUIZ_QUANTITY
+    else:
+        core_map, wire_default = gp._QUIZ_DIFFICULTY_MAP, DEFAULT_QUIZ_DIFFICULTY
+
+    assert param.default in core_map, f"{flag} default {param.default!r} is not a valid choice"
+    assert core_map[param.default] is wire_default
+
+
+def test_quiz_option_choices_are_derived_not_hardcoded() -> None:
+    """The ``click.Choice`` args are derived expressions, never literal lists.
+
+    The parity test above compares *values*, so re-hardcoding today's three
+    members would still pass it — the protection against a future enum member
+    going missing is the derivation itself, not the comparison. This asserts the
+    mechanism: the ``--quantity`` / ``--difficulty`` decorators on both commands
+    must pass a name (``_QUIZ_QUANTITY_MAP`` / ``_QUIZ_DIFFICULTY_MAP``) into
+    ``click.Choice``, not a list/tuple/set of string constants.
+    """
+    import ast
+    from pathlib import Path
+
+    import notebooklm.cli.generate_cmd as generate_cmd
+
+    tree = ast.parse(Path(generate_cmd.__file__).read_text(encoding="utf-8"))
+    checked: set[tuple[str, str]] = set()
+    wanted = {(f"generate_{sub}", flag) for sub, flag, _ in _QUIZ_OPTION_AXES}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name not in {
+            "generate_quiz",
+            "generate_flashcards",
+        }:
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call) or not decorator.args:
+                continue
+            first = decorator.args[0]
+            if not isinstance(first, ast.Constant) or first.value not in {
+                "--quantity",
+                "--difficulty",
+            }:
+                continue
+            choice_arg = next(
+                (
+                    kw.value.args[0]
+                    for kw in decorator.keywords
+                    if kw.arg == "type" and isinstance(kw.value, ast.Call) and kw.value.args
+                ),
+                None,
+            )
+            assert choice_arg is not None, (
+                f"{node.name} {first.value}: expected type=click.Choice(...)"
+            )
+            # Require the map ITSELF to appear in the expression. Rejecting only
+            # bare literals is not enough: `click.Choice(list(("fewer",
+            # "standard", "more")))` is a wrapped literal that passes an
+            # is-not-a-List check while still going stale when a member is
+            # added, and the value-parity test above stays green until the map
+            # actually changes.
+            expected_map = (
+                "_QUIZ_QUANTITY_MAP" if first.value == "--quantity" else "_QUIZ_DIFFICULTY_MAP"
+            )
+            names = {n.id for n in ast.walk(choice_arg) if isinstance(n, ast.Name)}
+            assert expected_map in names, (
+                f"{node.name} {first.value} does not derive its choices from "
+                f"{expected_map} (#2197). Found names: {sorted(names) or 'none — a literal'}. "
+                "A hardcoded (or wrapped-literal) list goes stale silently: a new enum "
+                "member would reach MCP and REST while staying absent from the CLI."
+            )
+            checked.add((node.name, first.value))
+
+    assert checked == wanted, f"did not inspect every option: missing {wanted - checked}"

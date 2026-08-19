@@ -38,11 +38,19 @@ from ..._app.generate import (
     execute_generation as _execute_generation,
 )
 
-# ``_INFOGRAPHIC_STYLE_MAP`` is re-exported (via redundant alias, the explicit
-# re-export idiom) because ``cli/generate_cmd.py`` imports the private name
-# directly from this module.
+# These maps are re-exported (via redundant alias, the explicit re-export
+# idiom) because ``cli/generate_cmd.py`` imports the private names directly
+# from this module to derive its ``click.Choice`` lists — see #2197: the quiz /
+# flashcards lists used to be hardcoded, so a new ``QuizQuantity`` member would
+# have reached MCP and REST while staying silently absent from the CLI.
 from ..._app.generate_plans import (
     _INFOGRAPHIC_STYLE_MAP as _INFOGRAPHIC_STYLE_MAP,
+)
+from ..._app.generate_plans import (
+    _QUIZ_DIFFICULTY_MAP as _QUIZ_DIFFICULTY_MAP,
+)
+from ..._app.generate_plans import (
+    _QUIZ_QUANTITY_MAP as _QUIZ_QUANTITY_MAP,
 )
 
 if TYPE_CHECKING:

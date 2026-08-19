@@ -126,6 +126,7 @@ class Middleware(Protocol):
         next_call: NextCall,
     ) -> RpcResponse: ...
 
+
 NextCall = Callable[[RpcRequest], Awaitable[RpcResponse]]
 ```
 

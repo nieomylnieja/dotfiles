@@ -321,7 +321,7 @@ class TestResolveChromiumProfile:
 
 
 class TestReadChromiumProfileCookies:
-    def test_dispatches_to_rookiepy_any_browser(self, tmp_path, monkeypatch):
+    def test_dispatches_to_rookie_cookies_any_browser(self, tmp_path, monkeypatch):
         """Confirms we use any_browser (which decrypts non-Default profiles
         on macOS) rather than the chromium_based path that errors with
         ``missing osx_key_service`` per #511.
@@ -333,7 +333,7 @@ class TestReadChromiumProfileCookies:
 
         captured: dict[str, object] = {}
 
-        class FakeRookiepy:
+        class FakeRookieCookies:
             @staticmethod
             def any_browser(db_path, domains=None):
                 captured["db_path"] = db_path
@@ -344,7 +344,7 @@ class TestReadChromiumProfileCookies:
             def chromium_based(*a, **kw):  # pragma: no cover
                 raise AssertionError("must not be called — see #511")
 
-        monkeypatch.setitem(sys.modules, "rookiepy", FakeRookiepy)
+        monkeypatch.setitem(sys.modules, "rookie_cookies", FakeRookieCookies)
 
         db = tmp_path / "Profile 1" / "Cookies"
         db.parent.mkdir(parents=True)

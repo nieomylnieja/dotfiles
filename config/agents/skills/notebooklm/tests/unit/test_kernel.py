@@ -20,6 +20,17 @@ def _auth_tokens() -> AuthTokens:
     )
 
 
+def test_auth_seed_is_kernel_owned_before_open() -> None:
+    auth = _auth_tokens()
+    kernel = Kernel(auth=auth)
+
+    assert kernel.cookies.get("SID") == "cookie-value"
+    assert kernel.cookies is not auth.cookie_jar
+
+    auth.cookie_jar.set("SID", "shadow-only")
+    assert kernel.cookies.get("SID") == "cookie-value"
+
+
 @pytest.mark.asyncio
 async def test_open_builds_http_client_and_captures_live_cookie_snapshot() -> None:
     kernel = Kernel()
@@ -276,5 +287,6 @@ async def test_aclose_marks_kernel_closed_and_is_idempotent() -> None:
     await kernel.aclose()
 
     assert kernel.http_client is None
+    assert kernel.cookies.get("SID") == "cookie-value"
     with pytest.raises(RuntimeError, match="Client not initialized"):
         kernel.get_http_client()

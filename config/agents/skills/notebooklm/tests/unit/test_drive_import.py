@@ -24,6 +24,8 @@ import pytest
 
 from notebooklm._source.drive_import import (
     _DRIVE_DOWNLOAD_URL,
+    _HTML_EXTS,
+    _UPLOAD_SUPPORTED_EXTS,
     DriveDownload,
     DriveFetcher,
     DriveImportService,
@@ -275,9 +277,10 @@ class TestFilenameFromDisposition:
 
 @pytest.mark.asyncio
 class TestDriveFetcherRouting:
-    @pytest.mark.parametrize(
-        "ext", ["epub", "docx", "txt", "md", "rtf", "odt", "csv", "tsv", "pdf"]
-    )
+    # Parametrized over the router's OWN set, not a copy of it. A hand-maintained
+    # list here is the same drift this consolidation removed from src (#2202):
+    # it had gone stale on doc/markdown and would have silently skipped pptx.
+    @pytest.mark.parametrize("ext", sorted(_UPLOAD_SUPPORTED_EXTS))
     async def test_supported_ext_downloads(self, ext: str, tmp_path: Path) -> None:
         body = b"payload-bytes-" + ext.encode()
         response = _FakeResponse(headers=_attachment_headers(f"book.{ext}"), body=body)
@@ -286,15 +289,18 @@ class TestDriveFetcherRouting:
         assert download.path.suffix == f".{ext}"
         assert download.path.read_bytes() == body
 
-    @pytest.mark.parametrize("ext", ["html", "htm", "xhtml"])
+    @pytest.mark.parametrize("ext", sorted(_HTML_EXTS))
     async def test_html_extension_rejected_before_body(self, ext: str, tmp_path: Path) -> None:
         response = _FakeResponse(headers=_attachment_headers(f"page.{ext}"), body=b"<html>")
         with pytest.raises(ValidationError, match="HTML"):
             await _fetcher(response, temp_dir=tmp_path)(DriveRef(_FILE_ID))
         assert response.body_reads == 0  # header-first: body never streamed
 
-    @pytest.mark.parametrize("ext", ["png", "exe", "zip", "bin"])
+    @pytest.mark.parametrize("ext", ["png", "exe", "zip", "bin", "ppt", "keynote"])
     async def test_unsupported_ext_rejected_before_body(self, ext: str, tmp_path: Path) -> None:
+        """``ppt`` is here deliberately: legacy PowerPoint is file-shaped but has
+        never been proven uploadable, so the router must still refuse it up front
+        rather than spend a full download on it (#2202)."""
         response = _FakeResponse(headers=_attachment_headers(f"file.{ext}"), body=b"xxxx")
         with pytest.raises(ValidationError, match="unsupported|Accepted"):
             await _fetcher(response, temp_dir=tmp_path)(DriveRef(_FILE_ID))

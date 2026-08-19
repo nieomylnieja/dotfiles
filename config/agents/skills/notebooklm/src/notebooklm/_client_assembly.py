@@ -52,13 +52,15 @@ from ._notebooks import NotebooksAPI
 from ._notes import NotesAPI
 from ._research import ResearchAPI
 from ._runtime.config import (
+    AUTO_READ_TIMEOUT,
     DEFAULT_CHAT_RESPONSE_MAX_BYTES,
-    DEFAULT_CHAT_TIMEOUT,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_KEEPALIVE_MIN_INTERVAL,
     DEFAULT_MAX_CONCURRENT_RPCS,
     DEFAULT_MAX_CONCURRENT_UPLOADS,
     DEFAULT_TIMEOUT,
+    resolve_chat_read_timeout,
+    validate_read_timeout_kwarg,
 )
 from ._runtime.init import compose_client_internals
 from ._runtime.lifecycle import CookieRotator, CookieSaver
@@ -107,7 +109,8 @@ def _assemble_client(
     on_rpc_event: Callable[[RpcTelemetryEvent], object] | None = None,
     cookie_saver: CookieSaver | None = None,
     cookie_rotator: CookieRotator | None = None,
-    chat_timeout: float | None = DEFAULT_CHAT_TIMEOUT,
+    chat_timeout: float | None = AUTO_READ_TIMEOUT,
+    import_research_timeout: float | None = AUTO_READ_TIMEOUT,
     chat_response_max_bytes: int | None = DEFAULT_CHAT_RESPONSE_MAX_BYTES,
     # --- Production-default overrides (test factory only) -----------------
     # ``NotebookLMClient.__init__`` never passes these; the sentinels
@@ -173,10 +176,11 @@ def _assemble_client(
     # runs this exact function, so tests exercise the same code path as
     # production.
     client._auth = auth
-    # Per-client memo for ``get_account_email`` (a successful live probe runs at
-    # most once per process). Set here — not in ``__init__`` — so the factory-built
-    # shell has it too (test_client_factory_parity, incidents #1196/#1225).
+    # Per-client, route-keyed memo for ``get_account_email``. Set here — not in
+    # ``__init__`` — so the factory-built shell has it too
+    # (test_client_factory_parity, incidents #1196/#1225).
     client._account_email_cache = None
+    client._account_email_cache_route = None
 
     # Production default: the client's own ``refresh_auth`` bound method.
     # The test factory overrides this (typically with ``None`` or a fake)
@@ -235,6 +239,15 @@ def _assemble_client(
         raise ValueError(
             f"chat_response_max_bytes must be >= 1 when supplied (got {chat_response_max_bytes!r})"
         )
+    # Both per-RPC read windows are validated here, at the one seam every
+    # construction path funnels through (constructor, ``from_storage``, the
+    # canonical test factory). A zero/negative window is accepted verbatim by
+    # ``httpx.Timeout`` and would otherwise surface only as an instant,
+    # unexplained transport timeout on every affected RPC (#2205).
+    chat_timeout = validate_read_timeout_kwarg(chat_timeout, name="chat_timeout")
+    import_research_timeout = validate_read_timeout_kwarg(
+        import_research_timeout, name="import_research_timeout"
+    )
 
     # The client is the composition root: :func:`compose_client_internals`
     # binds composition state onto ``client._composed`` and returns only the
@@ -275,9 +288,9 @@ def _assemble_client(
         max_concurrent_uploads=max_concurrent_uploads,
         max_concurrent_rpcs=max_concurrent_rpcs,
         on_rpc_event=on_rpc_event,
-        # Injectable seams — pass-through to the lifecycle. ``None``
-        # (default) preserves the late-binding contract via
-        # ``_default_cookie_saver`` / ``_default_cookie_rotator``.
+        # Injectable seams — pass-through to the lifecycle. A ``None`` cookie
+        # saver selects the canonical typed store path; a ``None`` rotator
+        # preserves its historical late-bound default.
         cookie_saver=cookie_saver,
         cookie_rotator=cookie_rotator,
         async_client_factory=async_client_factory,
@@ -370,9 +383,10 @@ def _assemble_client(
         transport=client._composed.transport,
         reqid=internals.collaborators.reqid,
         loop_guard=internals.collaborators.lifecycle,
-        chat_timeout=chat_timeout,
+        chat_timeout=resolve_chat_read_timeout(chat_timeout, timeout),
         chat_response_max_bytes=chat_response_max_bytes,
         notebooks=client.notebooks,
+        created_chat_sessions=client.notebooks,
     )
     client.notes = NotesAPI(
         notes=note_service,
@@ -389,7 +403,11 @@ def _assemble_client(
     # Pure-RPC features (typed as ``rpc: RpcCaller``). Pass the
     # ``RpcExecutor`` collaborator directly, sourced from the composed
     # executor.
-    client.research = ResearchAPI(internals.executor)
+    client.research = ResearchAPI(
+        internals.executor,
+        base_timeout=timeout,
+        import_research_timeout=import_research_timeout,
+    )
     client.settings = SettingsAPI(internals.executor)
     client.sharing = SharingAPI(internals.executor)
     # Source labels. Takes a narrow ``list_sources`` callable (not the whole

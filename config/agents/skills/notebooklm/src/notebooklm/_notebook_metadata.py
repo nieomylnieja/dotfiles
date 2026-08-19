@@ -38,6 +38,13 @@ class NotebookSourceIdProvider(Protocol):
         """Return source IDs for a notebook."""
 
 
+class CreatedChatSessionProvider(Protocol):
+    """One-shot CREATE_NOTEBOOK chat-session hint consumed by ChatAPI."""
+
+    def _take_created_chat_session_id(self, notebook_id: str) -> str | None:
+        """Return and remove the created notebook's volunteered session id."""
+
+
 NotebookGetter = Callable[[str], Awaitable[Notebook]]
 
 
@@ -86,6 +93,7 @@ class NotebookMetadataService:
 
 __all__ = [
     "NotebookMetadataService",
+    "CreatedChatSessionProvider",
     "NotebookSourceIdProvider",
     "NotebookSourceLister",
     "create_default_source_lister",

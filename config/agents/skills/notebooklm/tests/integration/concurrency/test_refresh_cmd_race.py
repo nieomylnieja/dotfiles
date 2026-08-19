@@ -87,13 +87,15 @@ async def test_failed_refresh_does_not_skip_concurrent_waiter(monkeypatch, tmp_p
     def fake_snapshot(_j):
         return None
 
-    monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", fake_run_refresh_cmd)
+    # The subprocess runner is INJECTED via ``RefreshCmdDeps`` rather than
+    # monkeypatched onto the module (plan §7 deps record).
+    deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=fake_run_refresh_cmd)
     monkeypatch.setattr(_auth_refresh, "_fetch_tokens_with_jar", fake_fetch_tokens_with_jar)
     monkeypatch.setattr(_auth_refresh, "build_httpx_cookies_from_storage", fake_build)
     monkeypatch.setattr(_auth_refresh, "snapshot_cookie_jar", fake_snapshot)
 
     async def caller(jar):
-        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage)
+        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage, deps=deps)
 
     jar_a = httpx.Cookies()
     jar_b = httpx.Cookies()
@@ -144,7 +146,9 @@ async def test_sibling_success_between_epoch_read_and_claim_skips_subprocess(mon
         nonlocal this_caller_subprocess_calls
         this_caller_subprocess_calls += 1
 
-    monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", fake_run_refresh_cmd)
+    # The subprocess runner is INJECTED via ``RefreshCmdDeps`` rather than
+    # monkeypatched onto the module (plan §7 deps record).
+    deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=fake_run_refresh_cmd)
 
     # The sibling already ran its subprocess and bumped the real epoch to 1.
     _single_flight.note_success(path_key)  # models the sibling's one subprocess
@@ -153,7 +157,9 @@ async def test_sibling_success_between_epoch_read_and_claim_skips_subprocess(mon
     # stale read so ``epoch_before == 0`` at the compare point.
     monkeypatch.setattr(_single_flight, "read_success_epoch", lambda _pk: 0)
 
-    await _auth_refresh._coalesced_run_refresh_cmd(path_key, storage.expanduser().resolve(), None)
+    await _auth_refresh._coalesced_run_refresh_cmd(
+        path_key, storage.expanduser().resolve(), None, deps=deps
+    )
 
     # This caller must have SKIPPED under exclusion — no redundant subprocess #2.
     assert this_caller_subprocess_calls == 0, (
@@ -203,13 +209,15 @@ async def test_concurrent_refresh_failure_followup_sees_attempt(monkeypatch, tmp
     def fake_snapshot(_j):
         return None
 
-    monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", fake_run_refresh_cmd)
+    # The subprocess runner is INJECTED via ``RefreshCmdDeps`` rather than
+    # monkeypatched onto the module (plan §7 deps record).
+    deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=fake_run_refresh_cmd)
     monkeypatch.setattr(_auth_refresh, "_fetch_tokens_with_jar", fake_fetch_tokens_with_jar)
     monkeypatch.setattr(_auth_refresh, "build_httpx_cookies_from_storage", fake_build)
     monkeypatch.setattr(_auth_refresh, "snapshot_cookie_jar", fake_snapshot)
 
     async def caller(jar):
-        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage)
+        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage, deps=deps)
 
     jar_a = httpx.Cookies()
     jar_b = httpx.Cookies()
@@ -296,13 +304,15 @@ async def test_waiter_cancellation_does_not_kill_inflight_subprocess(monkeypatch
     def fake_snapshot(_j):
         return None
 
-    monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", fake_run_refresh_cmd)
+    # The subprocess runner is INJECTED via ``RefreshCmdDeps`` rather than
+    # monkeypatched onto the module (plan §7 deps record).
+    deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=fake_run_refresh_cmd)
     monkeypatch.setattr(_auth_refresh, "_fetch_tokens_with_jar", fake_fetch_tokens_with_jar)
     monkeypatch.setattr(_auth_refresh, "build_httpx_cookies_from_storage", fake_build)
     monkeypatch.setattr(_auth_refresh, "snapshot_cookie_jar", fake_snapshot)
 
     async def caller(jar):
-        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage)
+        return await auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage, deps=deps)
 
     jar_a = httpx.Cookies()
     jar_b = httpx.Cookies()
@@ -380,13 +390,17 @@ async def test_cancel_settle_race_does_not_bump_on_failure(monkeypatch, tmp_path
     def fake_snapshot(_j):
         return None
 
-    monkeypatch.setattr(_auth_refresh, "_run_refresh_cmd", fake_run_refresh_cmd)
+    # The subprocess runner is INJECTED via ``RefreshCmdDeps`` rather than
+    # monkeypatched onto the module (plan §7 deps record).
+    deps = _auth_refresh.RefreshCmdDeps(run_refresh_cmd=fake_run_refresh_cmd)
     monkeypatch.setattr(_auth_refresh, "_fetch_tokens_with_jar", fake_fetch_tokens_with_jar)
     monkeypatch.setattr(_auth_refresh, "build_httpx_cookies_from_storage", fake_build)
     monkeypatch.setattr(_auth_refresh, "snapshot_cookie_jar", fake_snapshot)
 
     jar = httpx.Cookies()
-    task = asyncio.create_task(auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage))
+    task = asyncio.create_task(
+        auth_mod._fetch_tokens_with_refresh(jar, storage_path=storage, deps=deps)
+    )
     await cancel_now.wait()
     # Cancel the caller and release the subprocess in adjacent ticks so settle
     # and cancellation interleave.
@@ -422,7 +436,7 @@ async def test_cancel_before_subprocess_runs_no_phantom_bump(monkeypatch, tmp_pa
 
     coalesced_calls = 0
 
-    async def fake_coalesced_run_refresh_cmd(refresh_key, storage_path, profile):
+    async def fake_coalesced_run_refresh_cmd(refresh_key, storage_path, profile, *, deps=None):
         nonlocal coalesced_calls
         coalesced_calls += 1
         raise asyncio.CancelledError()
@@ -477,7 +491,7 @@ async def test_cancel_before_work_with_warm_epoch_no_phantom_bump(monkeypatch, t
     _single_flight.note_success(str(storage.expanduser().resolve()))
     assert _epoch(storage) == 1
 
-    async def fake_coalesced_run_refresh_cmd(refresh_key, storage_path, profile):
+    async def fake_coalesced_run_refresh_cmd(refresh_key, storage_path, profile, *, deps=None):
         raise asyncio.CancelledError()
 
     async def fake_fetch_tokens_with_jar(cookie_jar, storage_path, **kwargs):

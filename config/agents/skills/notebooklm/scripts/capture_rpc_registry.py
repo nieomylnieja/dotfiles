@@ -58,6 +58,12 @@ Usage::
     python scripts/capture_rpc_registry.py --check-enums    # exit 1 on CHANGED/STALE studio enums
     python scripts/capture_rpc_registry.py --check --check-enums  # both gates (combine freely)
     python scripts/capture_rpc_registry.py --bundle-file bundle.js   # offline, no auth
+
+Exit codes are ``0`` for a clean/report-only run, ``1`` for confirmed RPC or
+studio-enum drift, and ``2`` when the authenticated homepage is diverted to a
+login, cookie-mismatch, or region/anti-abuse surface.  Auth/infrastructure
+failures are deliberately distinct from drift so automation never turns an
+unreadable app bundle into an "all RPC ids disappeared" alarm.
 """
 
 from __future__ import annotations
@@ -90,6 +96,23 @@ _ID_LOOKBACK = 160
 _RPC_ID_RE = re.compile(r"[A-Za-z0-9]{5,8}")
 
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138 Safari/537.36"
+
+_AUTH_FAILURE_EXIT = 2
+
+
+class _BundleAuthenticationError(RuntimeError):
+    """The authenticated homepage did not reach the NotebookLM app surface."""
+
+
+class _BundleInfrastructureError(RuntimeError):
+    """The live app or CDN could not be inspected, so drift is unknowable."""
+
+
+def _write_outcome(path: Path | None, outcome: str) -> None:
+    """Publish a machine-readable result only after the script classified the run."""
+    if path is not None:
+        path.write_text(f"{outcome}\n", encoding="utf-8")
+
 
 # Resolved relative to this file (scripts/ -> repo root) so the script runs from
 # any working directory, not just the repo root.
@@ -409,6 +432,7 @@ def fetch_bundle() -> str:
     """
     import httpx
 
+    from notebooklm._auth.extraction import _safe_url, _url_only_extraction_failure
     from notebooklm._env import get_base_url
     from notebooklm.auth import authuser_query, build_httpx_cookies_from_storage
 
@@ -435,16 +459,45 @@ def fetch_bundle() -> str:
     # cookies (``OSID`` on the NotebookLM host, ``LSID`` on
     # ``accounts.google.com``) leaking across hosts dead-ends the post-cutover
     # sign-in chain on ``accounts.google.com/CookieMismatch`` — see issue #2019.
-    cookies = build_httpx_cookies_from_storage()
-    html = _fetch(
-        f"{get_base_url()}/?{authuser_query(0)}",
-        cookies=cookies,
-        follow_redirects=True,
-        timeout=30.0,
-    ).text
+    try:
+        cookies = build_httpx_cookies_from_storage()
+    except Exception as exc:
+        # This is a process-boundary diagnostic: malformed/missing storage,
+        # failed PSIDTS healing, and other credential-loader faults all mean
+        # "bundle unreadable", never "RPC ids disappeared". Keep the detail
+        # type-only so an exception cannot echo credential-shaped input.
+        raise _BundleAuthenticationError(
+            "Stored authentication could not be loaded "
+            f"({type(exc).__name__}). Run `notebooklm login` and retry."
+        ) from exc
+    try:
+        homepage = _fetch(
+            f"{get_base_url()}/?{authuser_query(0)}",
+            cookies=cookies,
+            follow_redirects=True,
+            timeout=30.0,
+        )
+    except httpx.HTTPStatusError as exc:
+        raise _BundleInfrastructureError(
+            "Authenticated homepage returned "
+            f"HTTP {exc.response.status_code} at {_safe_url(str(exc.request.url))}."
+        ) from exc
+    except httpx.RequestError as exc:
+        raise _BundleInfrastructureError(
+            "Authenticated homepage request failed with "
+            f"{type(exc).__name__} at {_safe_url(str(exc.request.url))}."
+        ) from exc
+    failure = _url_only_extraction_failure(
+        str(homepage.url),
+        [str(response.url) for response in homepage.history],
+    )
+    if failure is not None:
+        raise _BundleAuthenticationError(str(failure)) from failure
+
+    html = homepage.text
     urls = sorted(set(_BUNDLE_URL_RE.findall(html)))
     if not urls:
-        raise SystemExit(
+        raise _BundleInfrastructureError(
             f"No {_APP} bundle URL found in the homepage — not authenticated for "
             "NotebookLM? Run `notebooklm login` (or pass --bundle-file)."
         )
@@ -453,12 +506,25 @@ def fetch_bundle() -> str:
     # page), which would otherwise be parsed as a bundle and make every id ABSENT.
     bodies: list[str] = []
     for url in urls:
-        response = _fetch(url)
+        try:
+            response = _fetch(url)
+        except httpx.HTTPStatusError as exc:
+            raise _BundleInfrastructureError(
+                f"Public bundle returned HTTP {exc.response.status_code} at "
+                f"{_safe_url(str(exc.request.url))}."
+            ) from exc
+        except httpx.RequestError as exc:
+            raise _BundleInfrastructureError(
+                "Public bundle request failed with "
+                f"{type(exc).__name__} at {_safe_url(str(exc.request.url))}."
+            ) from exc
         content_type = response.headers.get("content-type", "")
         if "javascript" in content_type or "text/plain" in content_type:
             bodies.append(response.text)
     if not bodies:
-        raise SystemExit(f"No readable JS bundle content fetched from the {_APP} URLs.")
+        raise _BundleInfrastructureError(
+            f"No readable JS bundle content fetched from the {_APP} URLs."
+        )
     return "\n".join(bodies)
 
 
@@ -583,12 +649,15 @@ def _print_enum_report(
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: load/fetch the bundle, diff vs rpc/types.py, report.
 
-    Returns the process exit code: ``1`` when a gate fires —  ``--check`` with any
-    ABSENT id (id rotation), and/or ``--check-enums`` with any CHANGED/STALE
-    studio enum (a selectable format renumbered or retired). The two gates
-    combine (either firing exits ``1``); ``NEW``/``UNPARSED`` enum classes,
-    quota codes and proto assertions are report-only and never affect the exit
-    code. Without a gate flag the exit is always ``0`` (report mode).
+    Returns the process exit code: ``1`` when a drift gate fires — ``--check``
+    with any ABSENT id (id rotation), and/or ``--check-enums`` with any
+    CHANGED/STALE studio enum (a selectable format renumbered or retired).
+    ``2`` means the authenticated homepage hit a login, cookie-mismatch, or
+    region/anti-abuse surface, so no drift conclusion was possible. The two
+    drift gates combine (either firing exits ``1``); ``NEW``/``UNPARSED`` enum
+    classes, quota codes and proto assertions are report-only and never affect
+    the exit code. Without a gate flag the exit is ``0`` unless authentication
+    prevents the live bundle from being discovered.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument(
@@ -604,11 +673,65 @@ def main(argv: list[str] | None = None) -> int:
         "--bundle-file", type=Path, help="analyse a saved bundle file (no auth/network)"
     )
     parser.add_argument("--types", type=Path, default=_DEFAULT_TYPES, help="path to rpc/types.py")
+    parser.add_argument(
+        "--outcome-file",
+        type=Path,
+        help=(
+            "write clean, drift, authentication, or infrastructure after a classified run; "
+            "an absent file means the process failed before it could classify the result"
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.outcome_file is not None:
+        args.outcome_file.unlink(missing_ok=True)
 
     types_text = args.types.read_text(encoding="utf-8")
     ours = parse_ids_from_text(types_text)
-    bundle = args.bundle_file.read_text(encoding="utf-8") if args.bundle_file else fetch_bundle()
+    try:
+        bundle = (
+            args.bundle_file.read_text(encoding="utf-8") if args.bundle_file else fetch_bundle()
+        )
+    except _BundleAuthenticationError as exc:
+        _write_outcome(args.outcome_file, "authentication")
+        if args.json:
+            print(
+                json.dumps(
+                    {"error": {"kind": "authentication", "message": str(exc)}},
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(
+                "AUTHENTICATION FAILURE: the live NotebookLM bundle could not be inspected.\n"
+                f"{exc}\n"
+                "No RPC or studio-enum drift conclusion was drawn.",
+                file=sys.stderr,
+            )
+        return _AUTH_FAILURE_EXIT
+    except _BundleInfrastructureError as exc:
+        _write_outcome(args.outcome_file, "infrastructure")
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "error": {
+                            "kind": "infrastructure",
+                            "message": str(exc),
+                        }
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(
+                "INFRASTRUCTURE FAILURE: the live NotebookLM bundle could not be inspected.\n"
+                f"{exc}\n"
+                "No RPC or studio-enum drift conclusion was drawn.",
+                file=sys.stderr,
+            )
+        return _AUTH_FAILURE_EXIT
     live = extract_registry(bundle)
     buckets = diff(ours, live, bundle)
     # Services any CONFIRMED id resolves to are, empirically, serving our cohort.
@@ -665,6 +788,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         exit_code = 1
+    _write_outcome(args.outcome_file, "drift" if exit_code == 1 else "clean")
     return exit_code
 
 

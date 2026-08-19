@@ -7,6 +7,8 @@ import threading
 from enum import IntEnum
 from typing import Any
 
+from .._logging import _truncate_response_preview
+
 # Import exceptions from centralized module
 from ..exceptions import (
     AuthError,
@@ -17,9 +19,9 @@ from ..exceptions import (
     RPCTimeoutError,
     ServerError,
     UnknownRPCMethodError,
-    _truncate_response_preview,
 )
 from ._safe_index import safe_index
+from .types import GrpcStatusCode, RPCMethod
 
 # Re-export for backward compatibility (imports from notebooklm.rpc.decoder still work)
 __all__ = [
@@ -99,29 +101,103 @@ class RPCErrorCode(IntEnum):
     SERVER_ERROR = 500  # Internal server error
 
 
-# gRPC canonical status codes (google.rpc.Code) embedded by the batchexecute
-# backend at index 5 of a `wrb.fr` response when the RPC returns null result
-# data. The bare single-element form `[code]` is what issues #114 and #294
-# observed on the wire.
+# Human-readable labels for the gRPC canonical status codes the batchexecute
+# backend embeds at index 5 of a `wrb.fr` response when the RPC returns null
+# result data. The bare single-element form `[code]` is what issues #114 and
+# #294 observed on the wire.
+#
+# The codes themselves live in `GrpcStatusCode` (rpc/types.py) — the single
+# source of truth shared with the neutral error classifier and the notebook
+# not-found translation. This table only supplies the wording, and is keyed by
+# the enum so a member added there without a label fails the guardrail test
+# rather than silently degrading to an unlabelled status.
 _GRPC_STATUS_MESSAGES: dict[int, str] = {
-    0: "OK",
-    1: "Cancelled",
-    2: "Unknown",
-    3: "Invalid argument",
-    4: "Deadline exceeded",
-    5: "Not found",
-    6: "Already exists",
-    7: "Permission denied",
-    8: "Resource exhausted",
-    9: "Failed precondition",
-    10: "Aborted",
-    11: "Out of range",
-    12: "Not implemented",
-    13: "Internal",
-    14: "Unavailable",
-    15: "Data loss",
-    16: "Unauthenticated",
+    GrpcStatusCode.OK: "OK",
+    GrpcStatusCode.CANCELLED: "Cancelled",
+    GrpcStatusCode.UNKNOWN: "Unknown",
+    GrpcStatusCode.INVALID_ARGUMENT: "Invalid argument",
+    GrpcStatusCode.DEADLINE_EXCEEDED: "Deadline exceeded",
+    GrpcStatusCode.NOT_FOUND: "Not found",
+    GrpcStatusCode.ALREADY_EXISTS: "Already exists",
+    GrpcStatusCode.PERMISSION_DENIED: "Permission denied",
+    GrpcStatusCode.RESOURCE_EXHAUSTED: "Resource exhausted",
+    GrpcStatusCode.FAILED_PRECONDITION: "Failed precondition",
+    GrpcStatusCode.ABORTED: "Aborted",
+    GrpcStatusCode.OUT_OF_RANGE: "Out of range",
+    GrpcStatusCode.UNIMPLEMENTED: "Not implemented",
+    GrpcStatusCode.INTERNAL: "Internal",
+    GrpcStatusCode.UNAVAILABLE: "Unavailable",
+    GrpcStatusCode.DATA_LOSS: "Data loss",
+    GrpcStatusCode.UNAUTHENTICATED: "Unauthenticated",
 }
+
+# Index 5 of a ``wrb.fr`` frame is a JSON-array-encoded ``google.rpc.Status``
+# (the PUBLIC google/rpc/status.proto envelope, not a Tailwind message), so the
+# array positions are the proto tags minus one:
+#
+#   ===== ================== ==================================================
+#   Index Field              Evidence
+#   ===== ================== ==================================================
+#   0     ``code`` (tag 1)   Live: ``[3]`` INVALID_ARGUMENT from CREATE_ARTIFACT
+#                            on a source-less notebook and ``[5]`` NOT_FOUND for
+#                            an unknown notebook id (2026-08-13); ``[13]`` in
+#                            tests/cassettes/notebooks_remove_from_recent.yaml;
+#                            ``8`` (RESOURCE_EXHAUSTED) leading the recorded
+#                            ``UserDisplayableError`` shape.
+#   1     ``message`` (tag 2) NEVER OBSERVED POPULATED. Null in the recorded
+#                            rate-limit sample and absent from every captured
+#                            bare-status frame (the array is length 1). Read
+#                            defensively below so a server-authored reason is
+#                            surfaced *if* one ever arrives, but the
+#                            client-authored wording remains the observed
+#                            ceiling — see docs/rpc-reference.md and #2188.
+#   2     ``details``(tag 3) The ``[["type.googleapis.com/…UserDisplayableError",
+#                            …]]`` block; ``ErrorPayloadRow._ENTRIES_POS``
+#                            models the same slot for streamed chat.
+#   ===== ================== ==================================================
+#
+# ``_row_adapters/chat.py`` models the same envelope for streamed chat. Its
+# POSITIONS are declared separately because it imports ``notebooklm.rpc``, so a
+# decoder-side import of it would close a cycle — this table is the shared
+# rationale for both. The normalising rule is NOT duplicated: both layers call
+# :func:`sanitize_status_message` below, so they cannot drift in what users see.
+_STATUS_MESSAGE_POS = 1
+
+#: Ceiling on how much server-authored status text is echoed into an exception
+#: message. The field is server-controlled and unbounded; a runaway payload must
+#: not become a multi-kilobyte exception string.
+_MAX_STATUS_MESSAGE_CHARS = 300
+
+#: RPCs observed answering a null result with a non-OK ``google.rpc.Status`` on
+#: a flow this client currently treats as SUCCESSFUL. A sweep of all 141
+#: cassettes finds 397 ``wrb.fr`` frames, 5 of them null-result. FOUR of those
+#: five reach this decoder, across three RPCs:
+#:
+#:   ``REMOVE_RECENTLY_VIEWED``  ``[13]``  notebooks_remove_from_recent.yaml
+#:   ``SHARE_NOTEBOOK``          ``[3]``   cli_share_add.yaml, cli_share_remove.yaml
+#:   ``SHARE_ARTIFACT``          ``[3]``   notebooks_share.yaml
+#:
+#: The fifth is chat_ask_oversized_rejection.yaml's ``[3]`` (#1472). It carries
+#: no rpc id at all because streamed chat is not a ``batchexecute`` RPC, so it
+#: never passes through ``decode_response`` — it is handled by ``_chat/wire.py``
+#: and is not part of this list.
+#:
+#: Recorded here as a *finding*, not a blessing: only the first has ever been
+#: reasoned about (a cosmetic no-op), and whether the two share rejections are
+#: benign or a silently-dropped refusal is an open question this change does not
+#: answer. That unresolved-ness is exactly why the swallow below logs at DEBUG
+#: rather than WARNING — warning would fire on ordinary ``share add`` traffic and
+#: assert a judgement the evidence does not support (#2188).
+_RPCS_OBSERVED_SWALLOWING_A_STATUS = (
+    RPCMethod.REMOVE_RECENTLY_VIEWED.value,
+    RPCMethod.SHARE_NOTEBOOK.value,
+    RPCMethod.SHARE_ARTIFACT.value,
+)
+
+#: Statuses the decoder routes through ``ClientError`` rather than the generic
+#: ``RPCError``, so ``is_auth_error`` cannot misclassify them and fire a
+#: spurious token refresh. Both also carry the account-routing hint below.
+_ACCOUNT_ROUTED_STATUSES = (GrpcStatusCode.NOT_FOUND, GrpcStatusCode.PERMISSION_DENIED)
 
 # Hint appended to NOT_FOUND / PERMISSION_DENIED messages. Deliberately avoids
 # the substrings checked by AUTH_ERROR_PATTERNS in _runtime/helpers.py so these errors
@@ -304,8 +380,11 @@ def parse_chunked_response(response: str) -> list[Any]:
             try:
                 chunk = json.loads(json_str)
                 chunks.append(chunk)
-            except json.JSONDecodeError as e:
-                # Skip malformed chunks but warn
+            except (json.JSONDecodeError, RecursionError) as e:
+                # Skip malformed chunks but warn. RecursionError covers
+                # pathologically deep JSON that overflows the interpreter
+                # stack inside ``json.loads`` — treat it as malformed rather
+                # than letting it escape the decode pipeline raw (#2107).
                 malformed_payload_records += 1
                 logger.warning(
                     "Skipping malformed chunk at line %d: %s. Preview: %s",
@@ -321,8 +400,9 @@ def parse_chunked_response(response: str) -> list[Any]:
             try:
                 chunk = json.loads(line)
                 chunks.append(chunk)
-            except json.JSONDecodeError as e:
-                # Skip non-JSON lines but warn
+            except (json.JSONDecodeError, RecursionError) as e:
+                # Skip non-JSON lines but warn (RecursionError: same
+                # deep-JSON hardening as the byte-count branch above, #2107)
                 malformed_payload_records += 1
                 logger.warning(
                     "Skipping non-JSON line at %d: %s. Preview: %s",
@@ -423,13 +503,22 @@ def collect_rpc_ids(chunks: list[Any]) -> list[str]:
 
 
 def _extract_status_code(error_info: Any) -> tuple[int, str] | None:
-    """Extract a bare status code from a wrb.fr error_info block.
+    """Extract the leading status code from a wrb.fr error_info block.
 
-    Returns ``(code, label)`` only for the bare single-element form ``[code]``
-    in the gRPC canonical range (0-16). Longer structures (e.g. the
-    ``[8, None, [[UserDisplayableError, ...]]]`` rate-limit shape) are handled
-    by the UserDisplayableError path and fall through here by returning
-    ``None``.
+    ``error_info`` is a ``google.rpc.Status`` array, so the code is at index 0
+    whatever the array's length: the bare ``[code]`` form issues #114 / #294
+    observed, and the longer ``[code, message, details]` form the proto allows.
+    Only the leading value is inspected, and only when it is an ``int`` in the
+    gRPC canonical range; anything else returns ``None``.
+
+    The arity restriction this used to carry (``len(error_info) != 1``) made
+    every longer status invisible — including the ``message`` slot #2188 is
+    about, which can only ever appear in a longer array. The
+    ``[8, None, [[UserDisplayableError, ...]]]`` rate-limit shape still raises
+    on the ``UserDisplayableError`` path *before* this helper is consulted; when
+    that path does not fire (e.g. the marker scan hit its depth cap), reporting
+    the leading status is strictly better than the unqualified
+    "empty result" fallback.
 
     Note: we do not claim these codes are unambiguously gRPC — REMOVE_RECENTLY_VIEWED
     returns ``[13]`` on what the client treats as a successful no-op (see
@@ -440,9 +529,9 @@ def _extract_status_code(error_info: Any) -> tuple[int, str] | None:
         error_info: Value at index 5 of a ``wrb.fr`` response item.
 
     Returns:
-        ``(code, label)`` tuple for a recognized bare status, else ``None``.
+        ``(code, label)`` tuple for a recognized status, else ``None``.
     """
-    if not isinstance(error_info, list) or len(error_info) != 1:
+    if not isinstance(error_info, list) or not error_info:
         return None
     code = error_info[0]
     # type(code) is int (not isinstance) — bool is a subclass of int, so
@@ -453,19 +542,24 @@ def _extract_status_code(error_info: Any) -> tuple[int, str] | None:
     return code, _GRPC_STATUS_MESSAGES[code]
 
 
-def _find_wrb_status(chunks: list[Any], rpc_id: str) -> tuple[int, str] | None:
-    """Locate bare status code at index 5 of a wrb.fr entry for ``rpc_id``.
+def _null_result_payloads(chunks: list[Any], rpc_id: str) -> list[Any]:
+    """Every non-null index-5 payload on a null-result frame for ``rpc_id``.
 
-    Used by ``decode_response`` to enrich the null-result error message when
-    the server explicitly flagged the RPC with a status code.
+    Returns ALL of them rather than the first: in ``rt=c`` streamed mode the
+    backend can emit more than one frame per rpc id (``extract_rpc_result``
+    handles the same case), so stopping at the first would let a placeholder
+    frame's unclassifiable payload hide a real status on a later frame — which
+    is what the pre-#2188 loop avoided by continuing until a code parsed.
+
+    Shared walk behind :func:`_find_wrb_status` and
+    :func:`_has_null_result_payload` so the two agree on which frames they mean.
     """
-    source = "decoder._find_wrb_status"
+    source = "decoder._null_result_payloads"
+    payloads: list[Any] = []
     for chunk in chunks:
-        if not isinstance(chunk, list):
-            continue
-        # Skip empty chunks before safe_index, which raises on shape drift
-        # under strict decoding on an out-of-bounds descent.
-        if not chunk:
+        if not isinstance(chunk, list) or not chunk:
+            # Skip empty chunks before safe_index, which raises on shape drift
+            # under strict decoding on an out-of-bounds descent.
             continue
         first = safe_index(chunk, 0, method_id=rpc_id, source=source)
         items = chunk if isinstance(first, list) else [chunk]
@@ -480,51 +574,165 @@ def _find_wrb_status(chunks: list[Any], rpc_id: str) -> tuple[int, str] | None:
             error_info = safe_index(item, 5, method_id=rpc_id, source=source)
             if result_data is not None or error_info is None:
                 continue
-            status = _extract_status_code(error_info)
-            if status is not None:
-                return status
+            payloads.append(error_info)
+    return payloads
+
+
+def _has_null_result_payload(chunks: list[Any], rpc_id: str) -> bool:
+    """Whether the server attached anything at index 5 of a null-result frame.
+
+    Distinguishes "no payload at all" (a genuinely empty result — nothing to
+    report) from "a payload is there". The only caller consults this AFTER
+    :func:`_find_wrb_status` has already returned ``None``, so at that point
+    "a payload is there" means "there, and this decoder could not name it" —
+    which is drift worth logging. Re-checking classifiability here would be
+    dead logic, so it is not re-checked.
+    """
+    return bool(_null_result_payloads(chunks, rpc_id))
+
+
+def _find_wrb_status(chunks: list[Any], rpc_id: str) -> tuple[int, str, Any] | None:
+    """Locate the status code at index 5 of a null-result frame for ``rpc_id``.
+
+    Used by ``decode_response`` to enrich the null-result error message when
+    the server explicitly flagged the RPC with a status code.
+
+    Returns ``(code, label, payload)`` where ``payload`` is the raw
+    ``google.rpc.Status`` array, so the caller can also read the server's
+    ``message`` field without re-walking the chunks.
+    """
+    for payload in _null_result_payloads(chunks, rpc_id):
+        status = _extract_status_code(payload)
+        if status is not None:
+            code, label = status
+            return code, label, payload
     return None
 
 
-def _contains_user_displayable_error(obj: Any) -> bool:
+def _contains_user_displayable_error(obj: Any, max_depth: int = 20) -> bool:
     """Check if object contains a UserDisplayableError marker.
 
     Google's API embeds error information in index 5 of wrb.fr responses
     when the operation fails due to rate limiting, quota, or other
     user-facing restrictions.
 
+    Recursion is bounded because ``obj`` is server-controlled: a maliciously
+    or accidentally deep payload must not raise ``RecursionError`` (#2107).
+    Real markers live a handful of levels deep, so the cap is generous; at
+    the cap we treat the payload as carrying no marker, which lets
+    :func:`decode_response` fall through to its regular null-result handling
+    (mapped ``RPCError``) instead of a false rate-limit signal.
+
     Args:
         obj: Object to search (typically index 5 of response item)
+        max_depth: Maximum nesting depth to descend before giving up
 
     Returns:
         True if UserDisplayableError pattern is found
     """
+    if max_depth <= 0:
+        return False
     if isinstance(obj, str):
         return "UserDisplayableError" in obj
+    if isinstance(obj, (list, dict)) and max_depth == 1:
+        # Stop at the container itself so a wide list/dict at the boundary
+        # logs a single warning instead of one per child.
+        logger.warning("Max recursion depth reached in UserDisplayableError detection")
+        return False
     if isinstance(obj, list):
-        return any(_contains_user_displayable_error(item) for item in obj)
+        return any(_contains_user_displayable_error(item, max_depth - 1) for item in obj)
     if isinstance(obj, dict):
-        return any(_contains_user_displayable_error(v) for v in obj.values())
+        return any(_contains_user_displayable_error(v, max_depth - 1) for v in obj.values())
     return False
 
 
-def _extract_user_displayable_status(error_info: Any) -> tuple[int, str] | None:
-    """Extract the leading gRPC status from a UserDisplayableError block."""
-    if not isinstance(error_info, list) or not error_info:
+def sanitize_status_message(value: Any, *, source: str) -> str | None:
+    """Normalize a raw ``google.rpc.Status.message`` slot into display text.
+
+    Shared by the two layers that read the slot — this decoder for
+    ``batchexecute`` frames and ``_row_adapters.chat.ErrorPayloadRow`` for the
+    streamed-chat envelope. Only the *positions* are declared per layer (the
+    ``rpc`` → ``_row_adapters`` import direction forbids sharing those); the
+    sanitising rule is here so the two cannot drift in what users see.
+
+    The rule is deliberately narrow, because **no captured response has ever
+    carried a populated message** (#2188): only a non-empty ``str`` counts, so
+    the enrichment is inert on all traffic observed to date and cannot invent a
+    "reason" out of a slot holding something else — the failure mode #2134 was
+    about.
+
+    A non-string, non-null value is the interesting case: it would mean the
+    envelope is not the ``google.rpc.Status`` this client believes it is. That
+    cannot raise — this runs while *reporting* an error, and replacing a real
+    server rejection with a decoder crash is a worse outcome than the
+    client-authored fallback — but per ADR-0011's spirit it must not be
+    inaudible either, or the only evidence of the drift would be that the
+    message silently failed to change. So it warns and degrades.
+
+    Whitespace is collapsed and the text capped at
+    ``_MAX_STATUS_MESSAGE_CHARS`` so a server-controlled field cannot blow up
+    an exception message.
+    """
+    if value is None:
         return None
-    code = error_info[0]
-    if type(code) is not int or code not in _GRPC_STATUS_MESSAGES:
+    if not isinstance(value, str):
+        logger.warning(
+            "google.rpc.Status.message slot held %s, not a string (%s); "
+            "ignoring it and keeping the client-authored wording",
+            type(value).__name__,
+            source,
+        )
         return None
-    return code, _GRPC_STATUS_MESSAGES[code]
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) > _MAX_STATUS_MESSAGE_CHARS:
+        text = text[:_MAX_STATUS_MESSAGE_CHARS].rstrip() + "…"
+    return text
+
+
+def _server_status_message(status_payload: Any) -> str | None:
+    """Return the server-authored ``google.rpc.Status.message``, or ``None``.
+
+    ``status_payload`` is the raw value at index 5 of a ``wrb.fr`` frame — a
+    JSON-array-encoded ``google.rpc.Status`` whose ``message`` field (tag 2)
+    lands at index 1 (see the position table near ``_STATUS_MESSAGE_POS``).
+    """
+    if not isinstance(status_payload, list) or len(status_payload) <= _STATUS_MESSAGE_POS:
+        return None
+    return sanitize_status_message(
+        status_payload[_STATUS_MESSAGE_POS], source="decoder.wrb.fr[5][1]"
+    )
 
 
 def _user_displayable_error_message(error_info: Any) -> str:
-    """Build a non-sensitive diagnostic for a user-displayable rejection."""
-    message = "API rate limit or quota exceeded. Please wait before retrying."
-    status = _extract_user_displayable_status(error_info)
+    """Build a diagnostic for a user-displayable rejection.
+
+    The client-authored parts stay free of volatile internal detail — no
+    obfuscated method id, no raw numeric gRPC code (#1921). The server's own
+    ``message``, when present, is echoed as-is (whitespace-collapsed and capped)
+    because it is by definition the text Google chose to *display* to this user;
+    that part is outside this client's control, so "non-sensitive" is a
+    guarantee only over the wording this client writes.
+
+    Prefers the server's own ``google.rpc.Status.message`` when one is present;
+    otherwise falls back to the client-authored sentence below. The two are
+    NOT interchangeable and the distinction matters when reading a bug report:
+    the fallback is this client's guess at what a ``UserDisplayableError``
+    means, and every recorded sample has taken that branch.
+    """
+    message = _server_status_message(error_info) or (
+        "API rate limit or quota exceeded. Please wait before retrying."
+    )
+    # Same ``google.rpc.Status`` envelope as the bare-status path, so the same
+    # leading-code extractor serves both. Before #2188 these were two helpers
+    # differing only in their arity guard (``len(error_info) != 1`` here versus
+    # ``not error_info`` there); dropping the arity gate collapsed the
+    # difference, so the duplicate was removed rather than kept in sync.
+    status = _extract_status_code(error_info)
     if status is None:
         return message
-    code, label = status
+    _code, label = status
     # Keep the stable, human-readable status label but not the raw numeric gRPC
     # code — it carries no end-user value and is volatile internal detail
     # (#1921). The numeric code stays available on the exception's ``rpc_code``.
@@ -611,7 +819,11 @@ def extract_rpc_result(chunks: list[Any], rpc_id: str) -> Any:
                 if isinstance(result_data, str):
                     try:
                         parsed: Any = json.loads(result_data)
-                    except json.JSONDecodeError:
+                    except (json.JSONDecodeError, RecursionError):
+                        # RecursionError: pathologically deep JSON inside the
+                        # result_data string — same server-controlled-depth
+                        # hardening as parse_chunked_response (#2107). Fall
+                        # back to the raw string like any unparseable payload.
                         parsed = result_data
                 else:
                     parsed = result_data
@@ -628,7 +840,13 @@ def extract_rpc_result(chunks: list[Any], rpc_id: str) -> Any:
     return last_result
 
 
-def decode_response(raw_response: str, rpc_id: str, allow_null: bool = False) -> Any:
+def decode_response(
+    raw_response: str,
+    rpc_id: str,
+    allow_null: bool = False,
+    *,
+    raise_on_null_status: bool = False,
+) -> Any:
     """
     Complete decode pipeline: strip prefix -> parse chunks -> extract result.
 
@@ -636,6 +854,16 @@ def decode_response(raw_response: str, rpc_id: str, allow_null: bool = False) ->
         raw_response: Raw response text from batchexecute
         rpc_id: RPC method ID to extract result for
         allow_null: If True, return None instead of raising error when result is null
+        raise_on_null_status: Opt-in strictness for ``allow_null`` callers. When
+            True, a null result the server tagged with a **recognized** non-OK
+            ``google.rpc.Status`` at index 5 (a code this decoder can name — see
+            ``_GRPC_STATUS_MESSAGES``; an unrecognized one still decodes to
+            ``None``, loudly) raises instead of decoding to ``None``, so the
+            caller reports the server's reason rather than inventing one.
+            Callers that tolerate a status-tagged null leave it False. This is
+            opt-in per call site rather than a blanket change because three RPCs
+            are RECORDED doing exactly that on flows the client reports as
+            successful — see ``_RPCS_OBSERVED_SWALLOWING_A_STATUS`` (#2188).
 
     Returns:
         Decoded result data
@@ -704,12 +932,6 @@ def decode_response(raw_response: str, rpc_id: str, allow_null: bool = False) ->
                 raw_response=response_preview,
             )
 
-        # ``rpc_id`` is present in ``found_ids`` but ``extract_rpc_result`` returned
-        # None — the requested frame carried a genuinely null payload. Honor
-        # ``allow_null`` here and return None for callers that opt in.
-        if allow_null:
-            return None
-
         # RPC ID was found but extract_rpc_result returned None.
         # This means wrb.fr had null result_data without UserDisplayableError.
         # Enrich the message if the server attached a bare status code at
@@ -723,15 +945,64 @@ def decode_response(raw_response: str, rpc_id: str, allow_null: bool = False) ->
         # for logging and debugging, but keep the human-readable message free of
         # them — only the stable gRPC status label is user-facing.
         status = _find_wrb_status(chunks, rpc_id)
+
+        # ``rpc_id`` is present in ``found_ids`` but ``extract_rpc_result``
+        # returned None — the requested frame carried a genuinely null payload.
+        # Honor ``allow_null`` and return None for callers that opt in, EXCEPT
+        # when the caller asked for strictness and the server tagged that null
+        # with a non-OK status. A status-tagged null is the server saying "no",
+        # not an empty-but-fine payload; swallowing it made ``generate_*``
+        # report "<type> generation is unavailable" for a live INVALID_ARGUMENT
+        # rejection (#2188).
+        rejected = status is not None and status[0] != GrpcStatusCode.OK
+        if allow_null and not (raise_on_null_status and rejected):
+            if rejected and status is not None:
+                # Still swallowed, but no longer without trace. DEBUG, not
+                # WARNING: three RPCs are recorded doing this on flows the
+                # client reports as successful (see
+                # ``_RPCS_OBSERVED_SWALLOWING_A_STATUS``), so warning would fire
+                # on ordinary ``share add`` traffic while asserting a
+                # benign-vs-broken judgement nobody has made yet. The trace is
+                # what makes such a swallow findable; deciding which of them are
+                # real failures needs its own evidence (#2188).
+                logger.debug(
+                    "Null result for %s carried status %s; swallowed because the "
+                    "call site did not pass raise_on_null_status",
+                    rpc_id,
+                    status[1],
+                )
+            elif raise_on_null_status and _has_null_result_payload(chunks, rpc_id):
+                # The caller asked for strictness and the server DID attach
+                # something at index 5, but not a status this decoder can name —
+                # a code outside 0-16, a bool, a string, a nested ``[[3]]``. That
+                # is a rejection in a shape we do not recognise, so it lands back
+                # on the very defect #2188 fixed (the caller invents its own
+                # reason) and must not be the quietest branch here.
+                logger.warning(
+                    "Null result for %s carried an unrecognized index-5 payload; "
+                    "treating it as a benign null. If %s is being reported as "
+                    "unavailable, this is the drift to look at",
+                    rpc_id,
+                    rpc_id,
+                )
+            return None
+
         if status is not None:
-            code, label = status
+            code, label, payload = status
             message = f"The server rejected this request ({label.lower()})."
-            # Route NOT_FOUND (5) / PERMISSION_DENIED (7) through ClientError
-            # so is_auth_error does not misclassify them as auth
-            # failures and trigger a spurious token-refresh retry. The
-            # account-routing hint is only relevant for these two codes —
-            # other codes (e.g. INTERNAL 13) get a plain message.
-            if code in (5, 7):
+            # Echo the server's own ``google.rpc.Status.message`` when it sent
+            # one. No captured frame ever has (#2188), so in practice this is
+            # the client-authored sentence above — the wording is only
+            # server-authored when this suffix appears.
+            server_message = _server_status_message(payload)
+            if server_message is not None:
+                message = f"{message} {server_message}"
+            # Route NOT_FOUND / PERMISSION_DENIED through ClientError so
+            # is_auth_error does not misclassify them as auth failures and
+            # trigger a spurious token-refresh retry. The account-routing hint
+            # is only relevant for these two codes — other codes (e.g.
+            # INTERNAL 13) get a plain message.
+            if code in _ACCOUNT_ROUTED_STATUSES:
                 raise ClientError(
                     message + _ACCOUNT_MISMATCH_HINT,
                     method_id=rpc_id,

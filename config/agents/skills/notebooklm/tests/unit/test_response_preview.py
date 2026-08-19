@@ -9,7 +9,27 @@ from __future__ import annotations
 
 import pytest
 
-from notebooklm.exceptions import RPCError, _truncate_response_preview
+from notebooklm._logging import (
+    _PREVIEW_LIMIT as canonical_preview_limit,
+)
+from notebooklm._logging import (
+    _PREVIEW_SCRUB_CAP as canonical_preview_scrub_cap,
+)
+from notebooklm._logging import (
+    _truncate_response_preview as canonical_response_preview,
+)
+from notebooklm.exceptions import (
+    _PREVIEW_LIMIT,
+    _PREVIEW_SCRUB_CAP,
+    RPCError,
+    _truncate_response_preview,
+)
+
+
+def test_response_preview_keeps_its_exceptions_compatibility_import_path() -> None:
+    assert _truncate_response_preview is canonical_response_preview
+    assert canonical_preview_limit == _PREVIEW_LIMIT
+    assert canonical_preview_scrub_cap == _PREVIEW_SCRUB_CAP
 
 
 class TestTruncateResponsePreview:

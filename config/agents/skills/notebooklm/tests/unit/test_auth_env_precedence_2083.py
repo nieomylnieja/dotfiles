@@ -16,7 +16,6 @@ import json
 import os
 import time
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from pytest_httpx import HTTPXMock
@@ -102,7 +101,10 @@ def test_library_and_authsource_agree_on_env_over_profile(profiled_home: Path) -
 
 
 @pytest.mark.asyncio
-async def test_token_fetch_and_cookie_jar_read_the_same_account(profiled_home: Path) -> None:
+async def test_token_fetch_and_cookie_jar_read_the_same_account(
+    profiled_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """``get_client``'s two halves must not disagree.
 
     It calls ``fetch_tokens_with_domains(resolved_path, profile)`` and then
@@ -111,41 +113,62 @@ async def test_token_fetch_and_cookie_jar_read_the_same_account(profiled_home: P
     re-resolve to the profile file.
     """
     seen: dict[str, object] = {}
-    real = refresh.build_httpx_cookies_from_storage
 
-    def spy(path=None):
-        seen["path"] = path
-        return real(path)
-
-    with (
-        patch.object(refresh, "build_httpx_cookies_from_storage", spy),
-        pytest.raises(Exception),  # noqa: B017 - the network call is not the subject
+    async def fake_fetch(
+        cookie_jar,
+        storage_path,
+        profile,
+        *,
+        initial_baseline,
+        resolve_route,
+        allow_headless,
+        env_auth,
     ):
-        await refresh.fetch_tokens_with_domains(None, "work")
+        seen.update(
+            path=storage_path,
+            profile=profile,
+            env_auth=env_auth,
+            allow_headless=allow_headless,
+            route=await resolve_route(storage_path),
+            sid=next(cookie.value for cookie in initial_baseline if cookie.name == "SID"),
+            live_sid=next(cookie.value for cookie in cookie_jar.jar if cookie.name == "SID"),
+        )
+        return "csrf", "session", initial_baseline
+
+    monkeypatch.setattr(refresh, "_fetch_tokens_with_exact_baseline", fake_fetch)
+
+    assert await refresh.fetch_tokens_with_domains(None, "work") == ("csrf", "session")
 
     assert seen["path"] is None, "token fetch must not re-resolve the profile file"
+    assert seen == {
+        "path": None,
+        "profile": "work",
+        "env_auth": True,
+        "allow_headless": False,
+        "route": {"authuser": 0},
+        "sid": "sid-from-env-var",
+        "live_sid": "sid-from-env-var",
+    }
     assert tokens.load_auth_from_storage(None)["SID"] == "sid-from-env-var"
 
 
 @pytest.mark.asyncio
 async def test_auth_tokens_from_storage_keeps_env_auth_under_a_profile(
     profiled_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``AuthTokens.from_storage(profile=...)`` must not silently become file auth."""
     seen: dict[str, object] = {}
 
-    def spy(path=None):
-        seen["path"] = path
+    async def stop_after_resolution(self, source, policy):
+        seen["source"] = source
         raise RuntimeError("stop after resolution")
 
-    # ``from_storage`` loads through ``cookies.build_httpx_cookies_from_storage``.
-    with (
-        patch.object(cookies, "build_httpx_cookies_from_storage", spy),
-        pytest.raises(Exception),  # noqa: B017 - resolution is the subject
-    ):
+    monkeypatch.setattr(tokens.SessionSeedLoader, "load", stop_after_resolution)
+    with pytest.raises(RuntimeError, match="stop after resolution"):
         await tokens.AuthTokens.from_storage(profile="work")
 
-    assert seen.get("path", "unset") is None
+    assert isinstance(seen.get("source"), tokens.InlineAuthSource)
 
 
 @pytest.mark.asyncio

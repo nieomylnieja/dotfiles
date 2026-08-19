@@ -106,6 +106,9 @@ class TestCitedSourceSelection:
 
         assert urls == {"https://example.com/a"}
 
+    def test_extract_report_urls_empty_report_returns_empty_set(self):
+        assert extract_report_urls("") == set()
+
     def test_select_cited_sources_filters_urls_and_preserves_report_entry(self):
         sources = [
             {
@@ -830,7 +833,17 @@ class TestResearch:
     @pytest.mark.asyncio
     async def test_poll_deep_research_sources(self, auth_tokens, httpx_mock, build_rpc_response):
         """Test poll parses deep research sources (title only, no URL)."""
-        sources = [[None, "Deep Research Finding", None, 5, None, None, ["# Report markdown"]]]
+        sources = [
+            [
+                None,
+                "Deep Research Finding",
+                None,
+                5,
+                None,
+                None,
+                ["# Report markdown", 3, None, None, None, ["structured doc"]],
+            ]
+        ]
         task_info = [None, ["deep query", 1], 1, [sources, "Deep summary"], 2]
         response_body = build_rpc_response(RPCMethod.POLL_RESEARCH, [[["task_123", task_info]]])
         httpx_mock.add_response(content=response_body.encode(), method="POST")
@@ -878,11 +891,14 @@ class TestResearch:
         assert "task_id" in str(err)
 
     @pytest.mark.asyncio
-    async def test_poll_joins_legacy_report_chunks(
+    async def test_poll_ignores_web_snippet_before_report(
         self, auth_tokens, httpx_mock, build_rpc_response
     ):
-        """Test poll joins multiple legacy report chunks instead of truncating to the first one."""
-        sources = [[None, "Deep Research Finding", None, 5, None, None, ["chunk one", "chunk two"]]]
+        """A web content block cannot win report extraction by arriving first."""
+        sources = [
+            ["https://example.com", "Web result", "desc", 1, None, None, [None, 1, "snippet"]],
+            [None, "Deep Research Finding", None, 5, None, None, ["# Report", 3]],
+        ]
         task_info = [None, ["deep query", 1], 1, [sources, "Deep summary"], 2]
         response_body = build_rpc_response(RPCMethod.POLL_RESEARCH, [[["task_123", task_info]]])
         httpx_mock.add_response(content=response_body.encode(), method="POST")
@@ -890,8 +906,10 @@ class TestResearch:
         async with NotebookLMClient(auth_tokens) as client:
             result = await client.research.poll("nb_123")
 
-        assert result.report == "chunk one\n\nchunk two"
-        assert result.tasks[0].report == "chunk one\n\nchunk two"
+        assert result.report == "# Report"
+        assert result.sources[0].report_markdown == ""
+        assert result.sources[1].report_markdown == "# Report"
+        assert result.tasks[0].report == "# Report"
 
     @pytest.mark.asyncio
     async def test_poll_deep_research_current_report_shape(
@@ -909,7 +927,7 @@ class TestResearch:
                 None,
             ]
         ]
-        task_info = [None, ["deep query", 1], 1, [sources, "Deep summary"], 6]
+        task_info = [None, ["deep query", 1], 1, [sources, "Deep summary"], 2]
         response_body = build_rpc_response(RPCMethod.POLL_RESEARCH, [[["report_123", task_info]]])
         httpx_mock.add_response(content=response_body.encode(), method="POST")
 
@@ -942,8 +960,16 @@ class TestResearch:
         assert result.sources[0].result_type == 2
 
     @pytest.mark.asyncio
-    async def test_poll_status_code_6_completed(self, auth_tokens, httpx_mock, build_rpc_response):
-        """Test that status code 6 (deep research) is treated as completed."""
+    async def test_poll_unobserved_status_code_6_completed(
+        self, auth_tokens, httpx_mock, build_rpc_response
+    ):
+        """Status code 6 coarsens to completed, as forward-compat only (#2143).
+
+        Constructed input: 6 appears in no captured payload (0 of 9 task rows
+        across the POLL cassettes), and every completed run — deep included —
+        reports 2. This pins the fallback without claiming 6 is deep research's
+        completion code.
+        """
         task_info = [None, ["query", 1], 1, [[], ""], 6]
         response_body = build_rpc_response(RPCMethod.POLL_RESEARCH, [[["task_123", task_info]]])
         httpx_mock.add_response(content=response_body.encode(), method="POST")
@@ -1556,21 +1582,6 @@ class TestResearch:
             result = await client.research.poll("nb_123")
 
         assert result.sources[0].result_type == "video"
-
-    @pytest.mark.asyncio
-    async def test_poll_legacy_report_mixed_chunks(
-        self, auth_tokens, httpx_mock, build_rpc_response
-    ):
-        """Legacy report chunks filter out non-string and empty values."""
-        sources = [[None, "Report Title", None, 5, None, None, ["chunk1", None, "", "chunk2"]]]
-        task_info = [None, ["query", 1], 1, [sources, ""], 2]
-        response_body = build_rpc_response(RPCMethod.POLL_RESEARCH, [[["task_123", task_info]]])
-        httpx_mock.add_response(content=response_body.encode(), method="POST")
-
-        async with NotebookLMClient(auth_tokens) as client:
-            result = await client.research.poll("nb_123")
-
-        assert result.report == "chunk1\n\nchunk2"
 
     @pytest.mark.asyncio
     async def test_poll_source_single_element_list_title_dropped(

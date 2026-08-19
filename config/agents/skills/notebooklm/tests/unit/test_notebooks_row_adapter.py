@@ -15,9 +15,67 @@ from __future__ import annotations
 import pytest
 
 from notebooklm._row_adapters.notebooks import (
+    ProjectRow,
     PromptSuggestionRow,
     unwrap_prompt_suggestions,
 )
+
+
+class TestProjectRow:
+    def test_positions_pinned(self) -> None:
+        assert (
+            ProjectRow._EMOJI_POS,
+            ProjectRow._PREMIUM_FEATURE_INFO_POS,
+            ProjectRow._CHAT_SESSIONS_POS,
+        ) == (3, 9, 11)
+
+    def test_decodes_live_create_shape(self) -> None:
+        row = ProjectRow(
+            [
+                "Notebook",
+                None,
+                "nb",
+                "📖",
+                None,
+                None,
+                None,
+                None,
+                None,
+                [True, True, False],
+                None,
+                [["session-1"]],
+            ]
+        )
+        assert row.emoji == "📖"
+        assert row.premium_feature_flags == (True, True, False)
+        assert row.chat_session_ids == ["session-1"]
+
+    def test_optional_fields_degrade_per_leaf(self) -> None:
+        row = ProjectRow(
+            [
+                "Notebook",
+                None,
+                "nb",
+                7,
+                None,
+                None,
+                None,
+                None,
+                None,
+                [True, "x"],
+                None,
+                [[1], [], ["ok"]],
+            ]
+        )
+        assert row.emoji is None
+        assert row.premium_feature_flags == (True, None, None)
+        assert row.chat_session_ids == ["ok"]
+
+        for raw in (None, [], "x", 7):
+            short = ProjectRow(raw)
+            assert short.emoji is None
+            assert short.premium_feature_flags is None
+            assert short.chat_session_ids == []
 
 
 class TestPromptSuggestionPositionContract:

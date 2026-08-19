@@ -60,7 +60,7 @@ migrate.
 | Synchronous generation refusal returns `GenerationStatus(status="failed")` | ❌ silent | `try/except RateLimitError` (or `with_rate_limit_retry`) | v0.8.0 |
 | `notes.update` / `rename(return_object=False)` silently no-op on a missing target | ❌ silent | `try/except *NotFoundError` | v0.8.0 |
 | `sources.refresh` / `chat.delete_conversation` return `bool` (always `True`) | ❌ silent | Stop relying on the return value | v0.8.0 |
-| `client.settings.get_account_tier()` and the `AccountTier` type removed | ❌ silent | `client.settings.get_account_limits()` (`AccountLimits.notebook_limit` / `source_limit`) — the old tier could not tell free from paid. **In v0.9.0 a correct `AccountLimits.tier` returns**, read from the authoritative limits block (not the promotions RPC) | v0.8.0 |
+| `client.settings.get_account_tier()` and the `AccountTier` type removed | ❌ silent | `client.settings.get_account_limits()` (`AccountLimits.notebook_limit` / `source_limit`) — the old tier could not tell free from paid. **`AccountLimits.tier` restores a correct signal** within v0.8.0 itself, read from the authoritative limits block (not the promotions RPC) | v0.8.0 |
 | Derived-read / lister drift (`sources.check_freshness()`, note & artifact listers) returned an empty value on an unrecognized payload | ❌ silent | Handle `DecodingError` (only fires on server-side schema drift; legitimate empty/stale shapes are unchanged) | v0.8.0 |
 
 Legend: ✅ emitted a `DeprecationWarning` (or a stderr notice) in 0.7.0; ❌ was a
@@ -94,6 +94,7 @@ if src is None:
 
 # AFTER (b) — want the raising contract: catch the typed exception
 from notebooklm import SourceNotFoundError
+
 try:
     src = await client.sources.get(nb_id, source_id)
 except SourceNotFoundError:
@@ -146,12 +147,12 @@ print(guide["summary"], guide["keywords"])
 
 # AFTER — typed attribute access (warning-free, valid on both releases)
 result = await client.research.poll(nb_id)
-if result.status == ResearchStatus.COMPLETED:   # also == "completed"
-    for source in result.sources:               # tuple[ResearchSource, ...]
+if result.status == ResearchStatus.COMPLETED:  # also == "completed"
+    for source in result.sources:  # tuple[ResearchSource, ...]
         print(source.title, source.url)
 
 guide = await client.sources.get_guide(nb_id, src_id)
-print(guide.summary, guide.keywords)            # guide.keywords is a tuple
+print(guide.summary, guide.keywords)  # guide.keywords is a tuple
 ```
 
 `ResearchStatus` is a `str` enum, so `result.status == "completed"` keeps

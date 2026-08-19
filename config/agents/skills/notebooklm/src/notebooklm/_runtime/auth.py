@@ -32,7 +32,8 @@ tests/integration/concurrency/test_refresh_cancellation_propagation.py):
   ``auth.session_id`` under the snapshot lock. It does NOT touch the
   http client. The cookie-jar sync is a separate concern handled by
   :meth:`update_auth_headers` (sync, no await — it runs the
-  ``kernel.get_http_client().cookies`` read outside any auth lock).
+  ``kernel.cookies`` read outside any auth lock). That sync is public
+  compatibility-only; first-party decisions already read the kernel jar.
 * The ``_refresh_task`` slot is intentionally NOT cleared when a waiter is
   cancelled mid-shield — concurrency tests assert task identity across
   cancellation so siblings joined to the same single-flight refresh see the
@@ -57,6 +58,8 @@ import time
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
 
+import httpx
+
 from .._loop_affinity import assert_bound_loop
 from .._loop_bound import LoopBoundPrimitive
 from .._request_types import AuthSnapshot
@@ -64,6 +67,7 @@ from ..auth import AuthTokens
 from .config import CORE_LOGGER_NAME
 
 if TYPE_CHECKING:
+    from .._auth.cookie_types import CookieJar
     from .._client_metrics import ClientMetrics
     from .._kernel import Kernel
 
@@ -104,10 +108,12 @@ class AuthRefreshCoordinator(LoopBoundPrimitive):
         # ``_bound_loop`` (the loop-affinity guard consulted by
         # :meth:`await_refresh` before touching the lazy ``_refresh_lock``)
         # and ``set_bound_loop`` are provided by the
-        # :class:`~notebooklm._loop_bound.LoopBoundPrimitive` base. This
-        # coordinator only stores the binding, so it uses the default no-op
-        # ``_on_loop_rebind`` (the lazy locks are never held across
-        # ``open()`` and are rebuilt implicitly per ``open()``).
+        # :class:`~notebooklm._loop_bound.LoopBoundPrimitive` base. The
+        # coordinator overrides ``_on_loop_rebind`` (and exposes
+        # ``reset_after_open``) to discard both lazy locks on a loop change /
+        # reopen — a lazily-allocated lock is NOT rebuilt implicitly per
+        # ``open()``; once cached it survives close→reopen and would be
+        # reused on the new loop (#2106).
 
     @property
     def has_refresh_callback(self) -> bool:
@@ -120,6 +126,63 @@ class AuthRefreshCoordinator(LoopBoundPrimitive):
         ``_refresh_callback`` attribute from outside the coordinator.
         """
         return self._refresh_callback is not None
+
+    def _on_loop_rebind(
+        self,
+        old: asyncio.AbstractEventLoop | None,
+        new: asyncio.AbstractEventLoop | None,
+    ) -> None:
+        """Discard both cached lazy locks when the bound loop changes.
+
+        Fires from :meth:`~notebooklm._loop_bound.LoopBoundPrimitive.set_bound_loop`
+        only on a real loop change (and before ``_bound_loop`` is updated), so
+        ``set_bound_loop`` is self-consistent even if called independently of
+        :meth:`reset_after_open`: a stale lock bound to the old loop must never
+        be reused after a rebind. The production ``open()`` path also calls
+        :meth:`reset_after_open` immediately after, so the discard is
+        idempotent there.
+
+        Currently a latent (not active) hazard (#2106): every critical section
+        under these locks is purely synchronous, and ``asyncio.Lock`` binds its
+        loop only on the *contended* acquire path, so a stale lock cannot
+        actually trip the cross-loop ``RuntimeError`` today. The discard brings
+        the coordinator in line with its clear-on-rebind siblings
+        (:class:`~notebooklm._client_composed.ClientComposed`,
+        ``SourceUploadPipeline``, ``ChatAPI``) so any future ``await`` under
+        one of these locks cannot activate the trap.
+
+        Deliberately does NOT touch ``_refresh_task``: the slot-preservation
+        invariant in :meth:`cancel_inflight_refresh` keeps it intact so
+        sibling waiters can identify the shared single-flight task; after
+        ``close()`` the task is always ``done()`` (``cancel_inflight_refresh``
+        gathers it) and :meth:`await_refresh` replaces done tasks on the next
+        refresh wave.
+        """
+        self._refresh_lock = None
+        self._auth_snapshot_lock = None
+
+    def reset_after_open(self) -> None:
+        """Discard both lazy locks so a reopened client rebinds them.
+
+        Called from :meth:`ClientLifecycle.open` (alongside the
+        per-collaborator ``set_bound_loop`` propagation) so a client that was
+        closed and reopened on a *different* event loop builds fresh
+        ``asyncio.Lock`` instances on the new loop instead of reusing stale
+        ones bound to the old (now-dead) loop. On Python 3.10/3.11 a stale
+        lock raises "bound to a different event loop" on the contended
+        acquire path; today that path is unreachable here (no ``await`` runs
+        under either lock — see :meth:`_on_loop_rebind`), so this is a
+        consistency hardening, not an active-bug fix (#2106).
+
+        Mirrors :meth:`ClientComposed.reset_after_open`. Deliberately narrow:
+        dropping the references is enough because both locks are reallocated
+        lazily by :meth:`get_refresh_lock` / :meth:`get_auth_snapshot_lock`
+        from inside the new loop. ``_refresh_task`` and ``_refresh_callback``
+        are left untouched (see :meth:`_on_loop_rebind` for the task-slot
+        invariant).
+        """
+        self._refresh_lock = None
+        self._auth_snapshot_lock = None
 
     # ------------------------------------------------------------------
     # Lazy lock accessors. Both follow the same race-free check-then-assign
@@ -238,8 +301,56 @@ class AuthRefreshCoordinator(LoopBoundPrimitive):
         finally:
             lock.release()
 
+    async def install_profile_session(
+        self,
+        *,
+        auth: AuthTokens,
+        target_cookie_jar: httpx.Cookies,
+        source_cookie_jar: httpx.Cookies,
+        expected_cookie_jar: CookieJar,
+        expected_authuser: int,
+        expected_account_email: str | None,
+        expected_generation: int,
+        authuser: int,
+        account_email: str | None,
+    ) -> bool | None:
+        """Atomically install one stored cookie and account-route generation.
+
+        ``None`` means the authoritative live jar changed while the disk sample
+        was being selected, so the caller must preserve and retry that newer
+        live state. Once the lock is acquired, the check and all cookie/route
+        writes are synchronous: cancellation cannot leave a mixed generation,
+        and :meth:`snapshot` cannot observe a torn routing pair.
+        """
+        lock = self.get_auth_snapshot_lock()
+        wait_start = time.perf_counter()
+        await lock.acquire()
+        try:
+            if self._metrics is not None:
+                self._metrics.record_lock_wait(time.perf_counter() - wait_start)
+            return auth._replace_profile_session(
+                target_cookie_jar=target_cookie_jar,
+                source_cookie_jar=source_cookie_jar,
+                expected_cookie_jar=expected_cookie_jar,
+                expected_authuser=expected_authuser,
+                expected_account_email=expected_account_email,
+                expected_generation=expected_generation,
+                authuser=authuser,
+                account_email=account_email,
+            )
+        finally:
+            lock.release()
+
     def update_auth_headers(self, *, auth: AuthTokens, kernel: Kernel) -> None:
-        """Sync ``auth.cookie_jar`` with the live HTTP client's jar.
+        """Update public AuthTokens cookie shadows from the kernel-owned jar.
+
+        Compat-only (ADR-0032 Phase A): the kernel's jar is already the sole
+        internal live-cookie authority — persistence reads ``kernel.cookies``
+        and no internal code reads ``auth.cookie_jar`` after open. This
+        write-back exists solely so a PUBLIC holder of ``auth`` that reads
+        ``auth.cookies`` / ``auth.cookie_jar`` sees fresh values. When those
+        fields are removed (ADR-0032 Phase B, next major), this method and the
+        write-back go with them.
 
         Synchronous on purpose — no await — so callers can run this without
         any auth lock held. The httpx client's cookie jar is authoritative
@@ -251,10 +362,14 @@ class AuthRefreshCoordinator(LoopBoundPrimitive):
         coordinator does not need an owner-shaped host.
 
         Raises:
-            RuntimeError: If the kernel's HTTP client is not initialised (the
-                error originates from :meth:`Kernel.get_http_client`).
+            RuntimeError: If a directly constructed kernel has neither an auth
+                bootstrap seed nor an initialized HTTP client.
         """
-        auth.cookie_jar = kernel.get_http_client().cookies
+        # Compatibility-only assignment (ADR-0032 Phase A). Rebind the derived
+        # public map alongside the public jar; no first-party request, routing,
+        # recovery, or persistence decision reads either shadow after the
+        # bootstrap hand-off to Kernel.
+        auth.replace_cookie_jar(kernel.cookies)
 
     # ------------------------------------------------------------------
     # Single-flight refresh task.

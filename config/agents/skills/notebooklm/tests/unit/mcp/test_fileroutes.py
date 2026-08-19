@@ -1126,6 +1126,62 @@ def test_upload_validation_error_redacts_local_path(monkeypatch, mock_client, co
     assert "secretuser" not in resp.text  # home-dir username redacted
 
 
+def test_upload_partial_error_does_not_claim_bytes_were_sent(
+    monkeypatch, mock_client, config
+) -> None:
+    # A start_session failure means no bytes left the client. The generic upstream
+    # note says "your file uploaded", so this must NOT fall through to it.
+    from notebooklm.exceptions import NetworkError
+
+    async def fake(client, exec_plan):
+        # Mirrors raise_partial_upload_failure(): source_id/stage attached
+        # directly to the real cause, not a wrapper type.
+        exc = NetworkError("connection reset")
+        exc.source_id = "src_1"  # type: ignore[attr-defined]
+        exc.stage = "start_session"  # type: ignore[attr-defined]
+        raise exc
+
+    monkeypatch.setattr(_fileroutes.add_core, "execute_source_add", fake)
+    app = _build(mock_client, config)
+    url = config.upload_url({"op": "ul", "nb": NB})
+    with starlette_testclient.TestClient(app) as client:
+        resp = client.post(_path(url) + "?filename=a.pdf", content=b"DATA")
+    # A transport cause is upstream-infrastructure, not bad input: 502, not 4xx.
+    assert resp.status_code == 502
+    assert "did not complete" in resp.text
+    # Never claim bytes were transferred: the stage cannot prove it either way.
+    assert "uploaded" not in resp.text
+    # The retained row is named — a retry would otherwise register another orphan.
+    assert "src_1" in resp.text
+
+
+def test_upload_partial_error_from_a_rejected_file_keeps_the_400_wording(
+    monkeypatch, mock_client, config
+) -> None:
+    # #2138's own evidence is an HTTP-400 upload rejection. Attaching the recovery
+    # context must not downgrade the precise "Upload rejected" 400 into a generic
+    # upstream error.
+    from notebooklm.exceptions import ValidationError
+
+    async def fake(client, exec_plan):
+        exc = ValidationError("path /home/secretuser/private/x.pdf is not allowed")
+        exc.source_id = "src_1"  # type: ignore[attr-defined]
+        exc.stage = "upload_finalize"  # type: ignore[attr-defined]
+        raise exc
+
+    monkeypatch.setattr(_fileroutes.add_core, "execute_source_add", fake)
+    app = _build(mock_client, config)
+    url = config.upload_url({"op": "ul", "nb": NB})
+    with starlette_testclient.TestClient(app) as client:
+        resp = client.post(_path(url) + "?filename=a.pdf", content=b"DATA")
+    assert resp.status_code == 400
+    assert "Upload rejected:" in resp.text
+    assert "secretuser" not in resp.text  # the redaction still applies to the cause
+    # The rejection path must ALSO name the retained row: it is the likeliest way
+    # to reach this state (#2138's own evidence is an HTTP-400 file rejection).
+    assert "src_1" in resp.text
+
+
 def test_file_route_status_table_covers_every_error_category() -> None:
     """Every ``ErrorCategory`` has a file-route status (no silent fallback)."""
     from notebooklm._app.errors import ErrorCategory

@@ -44,9 +44,9 @@ pytestmark = [pytest.mark.vcr, skip_no_cassettes]
 _LIST_ARTIFACTS_RPC_ID = "gArtLc"
 
 _KNOWN_ARTIFACT_TYPE_CODES = frozenset(member.value for member in ArtifactTypeCode)
-# ``0`` is the "unknown" status the CLI degrades an unrecognized code to (see
-# ``conftest._ARTIFACT_STATUS_STR_VALUES`` which keeps ``artifact_status_to_str(0)``);
-# tolerate it here so a re-record carrying a status-0 row is not a spurious failure.
+# Since #2127 ``ArtifactStatus`` models the full backend range 0-6, so the enum
+# already includes ``0``; the union is kept explicit so a re-record carrying a
+# status-0 row stays tolerated even if the member is ever dropped again.
 _KNOWN_ARTIFACT_STATUS_CODES = frozenset(member.value for member in ArtifactStatus) | {0}
 
 

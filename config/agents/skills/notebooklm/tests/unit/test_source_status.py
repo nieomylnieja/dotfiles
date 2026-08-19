@@ -8,6 +8,7 @@ import pytest
 import notebooklm._sources as _sources_mod
 from notebooklm._sources import SourcesAPI
 from notebooklm.types import (
+    DriveSourceStatus,
     Source,
     SourceError,
     SourceNotFoundError,
@@ -61,6 +62,88 @@ class TestSourceStatusProperties:
         source = Source(id="src_1")
         assert source.status == SourceStatus.READY
         assert source.is_ready is True
+
+
+class TestDriveSourceStatusProperties:
+    """#2111 — Drive-side health is a SEPARATE axis from ingestion status.
+
+    ``SourceSettings.status`` (what ``is_ready`` reads) reports NotebookLM's own
+    ingestion pipeline and stays ``READY`` after the underlying Drive file is
+    deleted or unshared; ``userDriveSourceStatus`` is the only Drive-side
+    signal. These tests pin that the two never contaminate each other.
+    """
+
+    def test_drive_status_defaults_to_none(self):
+        """A source with no Drive claim (the overwhelming majority) reads None."""
+        source = Source(id="src_1")
+        assert source.drive_status is None
+        assert source.is_drive_degraded is False
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            DriveSourceStatus.INACCESSIBLE,
+            DriveSourceStatus.SYNCING,
+            DriveSourceStatus.DELETED,
+            DriveSourceStatus.GEN_AI_ACCESS_DENIED,
+        ],
+        ids=["inaccessible", "syncing", "deleted", "gen_ai_access_denied"],
+    )
+    def test_degraded_members_report_degraded(self, status):
+        source = Source(id="src_1", status=SourceStatus.READY, drive_status=status)
+        assert source.is_drive_degraded is True
+        # The behaviour the issue is about: ingestion still reports ready, and
+        # this library deliberately does NOT flip that (see is_ready's docstring).
+        assert source.is_ready is True
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            None,
+            DriveSourceStatus.ACTIVE,
+            DriveSourceStatus.UNKNOWN,
+        ],
+        ids=["absent", "active", "unknown"],
+    )
+    def test_non_degraded_members_report_healthy(self, status):
+        """Absent / ACTIVE / an unmodelled code are not degradation.
+
+        ``UNKNOWN`` in particular: a state we cannot name is not evidence that
+        anything is wrong. Callers who want to fail closed read ``drive_status``.
+        """
+        assert Source(id="src_1", drive_status=status).is_drive_degraded is False
+
+    def test_drive_status_does_not_change_ingestion_predicates(self):
+        """A degraded Drive file leaves is_processing / is_error alone."""
+        source = Source(
+            id="src_1",
+            status=SourceStatus.PROCESSING,
+            drive_status=DriveSourceStatus.DELETED,
+        )
+        assert source.is_processing is True
+        assert source.is_error is False
+        assert source.is_ready is False
+        assert source.is_drive_degraded is True
+
+    def test_every_enum_member_is_classified(self):
+        """No member of the enum is left unclassified by is_drive_degraded.
+
+        Guards the case where a future backend value is added to the enum but
+        nobody decides what it means for health — the predicate would answer
+        for it by accident.
+        """
+        classified = {
+            member: Source(id="s", drive_status=member).is_drive_degraded
+            for member in DriveSourceStatus
+        }
+        assert classified == {
+            DriveSourceStatus.UNKNOWN: False,
+            DriveSourceStatus.INACCESSIBLE: True,
+            DriveSourceStatus.SYNCING: True,
+            DriveSourceStatus.ACTIVE: False,
+            DriveSourceStatus.DELETED: True,
+            DriveSourceStatus.GEN_AI_ACCESS_DENIED: True,
+        }
 
 
 class TestSourceExceptions:

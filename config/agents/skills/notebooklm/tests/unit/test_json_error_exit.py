@@ -30,6 +30,8 @@ from notebooklm.types import (
     GenerationStatus,
     Label,
     Notebook,
+    ResearchStatus,
+    ResearchTask,
     Source,
 )
 
@@ -192,8 +194,8 @@ def _assert_json_error_contract(result, case_id: str) -> dict:
     return payload
 
 
-def _auth_inspect_rookiepy_cookies() -> list[dict[str, object]]:
-    """Return a minimal valid rookiepy cookie list for account-discovery tests."""
+def _auth_inspect_rookie_cookies() -> list[dict[str, object]]:
+    """Return a minimal valid rookie-cookies cookie list for account-discovery tests."""
     return [
         {
             "domain": ".google.com",
@@ -244,6 +246,21 @@ def _fail_notebook_list(client: MagicMock) -> None:
 def _research_no_research(client: MagicMock) -> None:
     # research wait + status both surface "no_research" as a failure.
     client.research.poll = AsyncMock(return_value={"status": "no_research"})
+
+
+def _research_import_in_progress(client: MagicMock) -> None:
+    # `research import` refuses a run that has not finished, rather than
+    # waiting for it — the fail-fast half of the command's contract (#2206).
+    client.research.poll = AsyncMock(
+        return_value=ResearchTask(
+            task_id="run_789",
+            status=ResearchStatus.IN_PROGRESS,
+            query="q",
+            sources=(),
+            summary="",
+            report="",
+        )
+    )
 
 
 def _fail_research_cancel(client: MagicMock) -> None:
@@ -477,6 +494,13 @@ JSON_ERROR_CASES: list[tuple[str, list[str], object]] = [
         "research_wait_no_research",
         ["research", "wait", "-n", "abc123def456ghi789jkl", "--json"],
         _research_no_research,
+    ),
+    # research import against a run that is still in flight: the whole point of
+    # the command is that this FAILS FAST (VALIDATION_ERROR) instead of waiting.
+    (
+        "research_import_not_complete_json",
+        ["research", "import", "-n", "abc123def456ghi789jkl", "--json"],
+        _research_import_in_progress,
     ),
     # research cancel: a transport failure surfaces as the typed JSON envelope.
     (
@@ -761,14 +785,14 @@ def test_auth_inspect_unknown_browser(runner: CliRunner) -> None:
 
 def test_auth_inspect_network_failure(runner: CliRunner) -> None:
     """``auth inspect --json`` must envelope account-discovery transport errors."""
-    mock_rookiepy = MagicMock()
-    mock_rookiepy.chrome = MagicMock(return_value=_auth_inspect_rookiepy_cookies())
+    mock_rookie_cookies = MagicMock()
+    mock_rookie_cookies.chrome = MagicMock(return_value=_auth_inspect_rookie_cookies())
 
     async def fail_enumerate(*args, **kwargs):
         raise httpx.RequestError("offline")
 
     with (
-        patch.dict("sys.modules", {"rookiepy": mock_rookiepy}),
+        patch.dict("sys.modules", {"rookie_cookies": mock_rookie_cookies}),
         patch.object(chromium_profiles, "discover_chromium_profiles", return_value=[]),
         patch.object(auth_module, "enumerate_accounts", new=fail_enumerate),
     ):

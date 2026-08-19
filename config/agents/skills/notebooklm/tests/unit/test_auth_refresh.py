@@ -11,6 +11,7 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import httpx
@@ -478,16 +479,28 @@ class TestFetchTokensPassive:
         return storage_file
 
     @pytest.mark.asyncio
-    async def test_passive_fetch_success(self, tmp_path, httpx_mock: HTTPXMock):
+    async def test_passive_fetch_success(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ):
         """Happy path: returns the tokens from the homepage GET."""
         storage_file = self._storage_with_sid(tmp_path)
         html = '"SNlM0e":"csrf_passive" "FdrFJe":"sess_passive"'
         httpx_mock.add_response(url="https://notebook.google.com/", content=html.encode())
+        route_threads: list[int] = []
+        event_loop_thread = threading.get_ident()
+        real_resolve = _auth_refresh._resolve_token_route_kwargs
+
+        def record_route_thread(*args, **kwargs):
+            route_threads.append(threading.get_ident())
+            return real_resolve(*args, **kwargs)
+
+        monkeypatch.setattr(_auth_refresh, "_resolve_token_route_kwargs", record_route_thread)
 
         csrf, session_id = await fetch_tokens_passive(storage_file)
 
         assert csrf == "csrf_passive"
         assert session_id == "sess_passive"
+        assert route_threads and all(thread_id != event_loop_thread for thread_id in route_threads)
 
     @pytest.mark.asyncio
     async def test_passive_skips_keepalive_poke(self, tmp_path, monkeypatch, httpx_mock: HTTPXMock):

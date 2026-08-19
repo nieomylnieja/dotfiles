@@ -1,49 +1,18 @@
-"""Google account discovery and profile metadata helpers for authentication."""
+"""Google account discovery and compatibility repair adapters."""
 
 from __future__ import annotations
 
-import json
-import logging
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from filelock import FileLock
 
-from .._atomic_io import atomic_write_json
 from .._env import get_base_url
 from .._url_utils import is_google_auth_redirect
-
-logger = logging.getLogger("notebooklm.auth")
-
-
-@dataclass(frozen=True)
-class Account:
-    """A Google account discovered via authuser=N probing.
-
-    Attributes:
-        authuser: The integer index used in ``?authuser=N`` URL parameters.
-            Index 0 is the default account; subsequent indices follow the
-            order Google reports for the browser session.
-        email: The account's email address as it appears in the NotebookLM
-            page's ``WIZ_global_data`` block.
-        is_default: True only for the account at ``authuser=0``.
-        browser_profile: For Chromium-family browsers with multiple
-            user-data profiles, the on-disk directory name (``"Default"``,
-            ``"Profile 1"``) the cookies came from. ``None`` for non-chromium
-            browsers and for the legacy single-jar path where source isn't
-            tracked.
-    """
-
-    authuser: int
-    email: str
-    is_default: bool
-    browser_profile: str | None = None
-
+from .account_repair import _compose_account_repair_service
+from .account_types import Account, PlaywrightAccountRepairResult
 
 # Hard cap on how many ``authuser`` indices to probe before giving up.
 # Google supports up to ~10 simultaneously signed-in accounts in a browser
@@ -200,125 +169,6 @@ async def enumerate_accounts(
         return accounts
 
 
-_ACCOUNT_CONTEXT_KEY = "account"
-
-# The unified atomic profile-state format embeds account metadata
-# inside ``storage_state.json`` under a ``notebooklm`` namespace key, so
-# a single ``atomic_write_json`` covers both cookies and account in one
-# crash-safe commit. ``version`` is bumped only when the in-band schema
-# changes incompatibly — version 1 is the initial shape.
-_STORAGE_NAMESPACE_KEY = "notebooklm"
-_STORAGE_NAMESPACE_VERSION = 1
-
-
-def _account_context_path(storage_path: Path) -> Path:
-    """Return the context.json path that annotates ``storage_path``.
-
-    Legacy two-file layout: this sibling held ``account`` metadata before
-    the unified format embedded it in ``storage_state.json``. Post-migration,
-    it keeps CLI context state (``notebook_id``, ``conversation_id``) but no
-    longer stores the ``account`` key.
-    """
-    return storage_path.with_name("context.json")
-
-
-def _read_in_band_account(storage_path: Path) -> dict[str, Any]:
-    """Read account metadata from inside ``storage_state.json``.
-
-    Returns ``{}`` when the namespace key is missing, malformed, or the file
-    cannot be read. Callers fall back to the legacy sibling ``context.json``.
-    """
-    if not storage_path.exists():
-        return {}
-    try:
-        data = json.loads(storage_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        logger.debug("in-band account read failed at %s: %s", storage_path, e)
-        return {}
-    return read_account_metadata_from_storage_state(data)
-
-
-def read_account_metadata_from_storage_state(storage_state: Any) -> dict[str, Any]:
-    """Read in-band account metadata from parsed Playwright storage state."""
-    if not isinstance(storage_state, dict):
-        return {}
-    namespace = storage_state.get(_STORAGE_NAMESPACE_KEY)
-    if not isinstance(namespace, dict):
-        return {}
-    account = namespace.get(_ACCOUNT_CONTEXT_KEY)
-    return account if isinstance(account, dict) else {}
-
-
-def _read_legacy_account(storage_path: Path) -> dict[str, Any]:
-    """Read account metadata from the legacy sibling ``context.json``."""
-    context_path = _account_context_path(storage_path)
-    if not context_path.exists():
-        return {}
-    try:
-        data = json.loads(context_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        logger.debug("account metadata read failed at %s: %s", context_path, e)
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    account = data.get(_ACCOUNT_CONTEXT_KEY)
-    return account if isinstance(account, dict) else {}
-
-
-def read_account_metadata(storage_path: Path | None) -> dict[str, Any]:
-    """Read profile account metadata, preferring the unified in-band record.
-
-    Unified layout: account metadata lives inside ``storage_state.json``
-    under the ``notebooklm`` namespace key. Legacy two-file installs are
-    still supported via fallback to sibling ``context.json``; the next write
-    will migrate them in-band.
-
-    The ``account`` object records the Google ``authuser`` index used when
-    the profile was authenticated. Profiles from before account-binding
-    shipped (and profiles for users with a single Google account) have no
-    account metadata and use ``authuser=0``.
-
-    Args:
-        storage_path: Path to ``storage_state.json``. ``None`` means the
-            profile is loaded from ``NOTEBOOKLM_AUTH_JSON``.
-
-    Returns:
-        Parsed metadata dict, or ``{}`` if no record is present.
-    """
-    if storage_path is None:
-        return {}
-    in_band = _read_in_band_account(storage_path)
-    if in_band:
-        return in_band
-    return _read_legacy_account(storage_path)
-
-
-def get_authuser_for_storage(storage_path: Path | None) -> int:
-    """Return the ``authuser`` index recorded for a profile, defaulting to 0.
-
-    Profiles without account metadata (legacy single-account installs and
-    fresh logins that never set an authuser) are treated as ``authuser=0``,
-    preserving existing behavior.
-
-    Returns:
-        Non-negative ``authuser`` index. Malformed values fall back to 0.
-    """
-    raw = read_account_metadata(storage_path).get("authuser")
-    if isinstance(raw, int) and raw >= 0:
-        return raw
-    return 0
-
-
-def get_account_email_for_storage(storage_path: Path | None) -> str | None:
-    """Return the persisted account email for stable routing, if available."""
-    raw = read_account_metadata(storage_path).get("email")
-    if isinstance(raw, str):
-        email = raw.strip()
-        if email:
-            return email
-    return None
-
-
 def format_authuser_value(authuser: int = 0, account_email: str | None = None) -> str:
     """Return the explicit NotebookLM auth routing value.
 
@@ -338,120 +188,65 @@ def authuser_query(authuser: int = 0, account_email: str | None = None) -> str:
     return urlencode({"authuser": format_authuser_value(authuser, account_email)})
 
 
-def _drop_legacy_account_key(storage_path: Path) -> None:
-    """Migration helper: remove ``account`` from sibling ``context.json``.
+def _select_playwright_account(
+    accounts: list[Account],
+    *,
+    active_email: str | None,
+) -> tuple[Account | None, str | None]:
+    """Select the account Playwright just logged into, or an ambiguity reason."""
+    if active_email:
+        normalized = active_email.casefold()
+        matches = [
+            account
+            for account in accounts
+            if isinstance(account.email, str) and account.email.casefold() == normalized
+        ]
+        if len(matches) == 1:
+            return matches[0], None
+        if matches:
+            return None, f"multiple discovered accounts matched {active_email}"
+        return None, f"current NotebookLM page email {active_email} was not discovered"
 
-    Preserves all other CLI context state (``notebook_id``,
-    ``conversation_id``, …). Best-effort: a failure here does not abort the
-    in-band write because the reader prefers the in-band record (legacy
-    fallback only kicks in when in-band is absent).
-    """
-    context_path = _account_context_path(storage_path)
-    if not context_path.exists():
-        return
-    lock_path = context_path.with_suffix(context_path.suffix + ".lock")
-    try:
-        with FileLock(str(lock_path), timeout=10.0):
-            if not context_path.exists():
-                return
-            try:
-                data = json.loads(context_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as e:
-                logger.debug("legacy account-key cleanup skipped at %s: %s", context_path, e)
-                return
-            if not isinstance(data, dict) or _ACCOUNT_CONTEXT_KEY not in data:
-                return
-            del data[_ACCOUNT_CONTEXT_KEY]
-            if data:
-                atomic_write_json(context_path, data)
-            else:
-                context_path.unlink()
-    except OSError as e:
-        # Best-effort migration; the in-band reader wins.
-        logger.debug("legacy account-key cleanup failed at %s: %s", context_path, e)
-
-
-def write_account_metadata(storage_path: Path, *, authuser: int, email: str | None = None) -> None:
-    """Persist account metadata atomically inside ``storage_state.json``.
-
-    The account record lands under the ``notebooklm`` namespace key so the
-    (cookies, account) pair commits together via a single
-    :func:`atomic_write_json`. An external reader observing the file
-    mid-update sees either the fully-old or fully-new commit — never a mix.
-
-    The legacy sibling ``context.json[account]`` is best-effort cleaned up
-    after the in-band write succeeds. CLI context state in the same file
-    (``notebook_id`` / ``conversation_id``) is preserved.
-
-    Args:
-        storage_path: Path to ``storage_state.json``. The file is created
-            with empty ``cookies`` / ``origins`` arrays if missing — matching
-            the previous semantics of "writing account metadata never fails
-            because cookies haven't been written yet."
-        authuser: ``authuser`` index used when extracting cookies for this
-            profile (0 for the default account).
-        email: Optional account email to record alongside the index.
-    """
-    # The in-band ``storage_state.json`` write is delegated to the canonical
-    # storage writer (which owns the atomic write, the unified storage lock, and
-    # the parent-dir/file permission contract). This function stays here as the
-    # ``notebooklm.auth``-exported facade symbol; it keeps its raise-on-lock-
-    # failure semantics (the writer raises ``LockUnavailableError`` — the
-    # documented replacement for the former ``filelock.Timeout``).
-    from . import storage_writer  # local import: avoid the account<->writer cycle
-
-    storage_writer.update_account_metadata(storage_path, authuser=authuser, email=email)
-
-    # Best-effort: drop the legacy account key from sibling context.json so
-    # the next reader doesn't see the same data in two places.
-    _drop_legacy_account_key(storage_path)
-
-
-def _load_storage_state_for_write(storage_path: Path) -> dict[str, Any]:
-    """Read ``storage_state.json`` for a read-modify-write under the lock.
-
-    Returns a synthetic empty document if the file is missing — matches
-    the earlier behavior where account writes never failed just because the
-    cookie file hadn't been written yet. Corruption is fatal because the
-    primary cookie data can't be recovered from account metadata; surface
-    a ``RuntimeError`` so the caller can prompt the user to re-run login.
-    """
-    if not storage_path.exists():
-        return {"cookies": [], "origins": []}
-    try:
-        loaded = json.loads(storage_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"storage state at {storage_path} is corrupted: {e}") from e
-    if not isinstance(loaded, dict):
-        raise RuntimeError(
-            f"storage state at {storage_path} has unexpected shape: {type(loaded).__name__}"
+    if len(accounts) == 1:
+        return accounts[0], None
+    if accounts:
+        return (
+            None,
+            "multiple Google accounts were discovered but the active page email was unavailable",
         )
-    return loaded
+    return None, "no Google accounts were discovered"
 
 
-def clear_account_metadata(storage_path: Path | None) -> None:
-    """Remove account metadata from both in-band and legacy locations.
-
-    Holds a sibling ``.lock`` file via :class:`filelock.FileLock` so
-    concurrent ``write_account_metadata`` calls serialize against the
-    migration cleanup.
-    """
-    if storage_path is None:
-        return
-    # 1. Strip the in-band record from ``storage_state.json``.
-    _clear_in_band_account(storage_path)
-    # 2. Strip the legacy sibling record too (back-compat with old installs).
-    _drop_legacy_account_key(storage_path)
+async def _enumerate_accounts_for_repair(
+    cookie_jar: httpx.Cookies,
+    poke_session: Callable[[httpx.AsyncClient, Path | None], Awaitable[None]],
+) -> list[Account]:
+    """Normalize the keyword-only network seam for account repair."""
+    return await enumerate_accounts(cookie_jar, poke_session=poke_session)
 
 
-def _clear_in_band_account(storage_path: Path) -> None:
-    """Remove the ``notebooklm.account`` key from ``storage_state.json``.
+def _select_account_for_repair(
+    accounts: list[Account],
+    active_email: str | None,
+) -> tuple[Account | None, str | None]:
+    """Normalize the keyword-only selection seam for account repair."""
+    return _select_playwright_account(accounts, active_email=active_email)
 
-    Delegates the in-band ``storage_state.json`` mutation to the canonical
-    storage writer (best-effort: it swallows lock unavailability and read/parse
-    errors, matching the pre-refactor semantics). No-op if the file is missing,
-    unreadable, or doesn't carry an in-band record.
-    """
-    from . import storage_writer  # local import: avoid the account<->writer cycle
 
-    storage_writer.clear_in_band_account(storage_path)
+def _extract_active_email_for_repair(html: str) -> str | None:
+    """Keep active-email extraction late-bound in this network module."""
+    return extract_email_from_html(html)
+
+
+async def repair_account_metadata_from_playwright_storage(
+    storage_path: Path,
+    *,
+    page_html: str | None = None,
+) -> PlaywrightAccountRepairResult:
+    """Populate ``notebooklm.account`` from Playwright storage when unambiguous."""
+    service = _compose_account_repair_service(
+        enumerate_accounts=_enumerate_accounts_for_repair,
+        select_account=_select_account_for_repair,
+        extract_active_email=_extract_active_email_for_repair,
+    )
+    return await service.repair(storage_path, page_html=page_html)

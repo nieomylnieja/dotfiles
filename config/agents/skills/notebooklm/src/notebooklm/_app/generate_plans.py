@@ -77,8 +77,13 @@ NotebookResolver = Callable[..., Awaitable[str]]
 #: Backend contract every resolver MUST honor: return ``None`` for "no sources
 #: given" (⇒ generate over ALL sources), NOT an empty list. ``[]``/``()`` means
 #: "zero sources", which the backend refuses for source-needing kinds
-#: (quiz/audio/flashcards): it replies HTTP 200 with a null artifact id, surfaced
-#: as ``ArtifactFeatureUnavailableError`` ("… generation is unavailable"). This was
+#: (quiz/audio/flashcards): it replies HTTP 200 with a null artifact id. Since
+#: #2188 that surfaces as whatever the server said — live 2026-08-13, a
+#: source-less notebook answers ``[3]`` INVALID_ARGUMENT, so the caller sees
+#: ``RPCError("The server rejected this request (invalid argument).")``; a null
+#: carrying no status at all still surfaces as
+#: ``ArtifactFeatureUnavailableError`` ("… generation is unavailable"). Either
+#: way it is a raised error, which is what the parity pin cares about. This was
 #: #1652 — the MCP pass-through resolver sent ``()`` where the CLI resolver sent
 #: ``None``, so the two adapters diverged. A new adapter's resolver must map the
 #: empty case to ``None``; ``tests/unit/cli/test_cli_mcp_parity.py`` pins it.

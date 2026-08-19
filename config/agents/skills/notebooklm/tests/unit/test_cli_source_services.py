@@ -677,3 +677,90 @@ async def test_source_wait_timeout_returns_typed_outcome() -> None:
         timeout=10.0,
         initial_interval=0.5,
     )
+
+
+# --- source_row_payload: the shared CLI source-row JSON shape (#2113/#2111) ---
+
+
+def _row(**kwargs) -> dict:
+    """Build a ``source_row_payload`` from a Source with the given overrides."""
+    from notebooklm.cli.services.source_serializers import source_row_payload
+
+    return source_row_payload(Source(id="src-1", **kwargs))
+
+
+def test_source_row_payload_labels_the_drive_status() -> None:
+    """The Drive axis ships the label plus the verdict — and no raw code."""
+    from notebooklm.types import DriveSourceStatus
+
+    row = _row(
+        title="Shared Doc",
+        drive_document_id="1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        drive_status=DriveSourceStatus.DELETED,
+    )
+
+    assert row["drive_document_id"] == "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+    assert row["drive_status"] == "deleted"
+    assert row["is_drive_degraded"] is True
+    # Ingestion completed and stays completed — the #2111 trap the Drive axis
+    # exists to disambiguate.
+    assert row["status"] == "ready"
+
+
+def test_source_row_payload_ships_no_raw_drive_code() -> None:
+    """No ``drive_status_id``: the code is a bijection with the label AND a trap.
+
+    ``drive_source_status_to_str`` is total over ``DriveSourceStatus``, and an
+    unmappable wire code is replaced by the ``UNKNOWN`` (-1) client sentinel in
+    the row adapter before it could ever reach this payload — so a raw code
+    would add no information. It would also collide with ``status_id``, whose
+    2/3 mean ready/error while the Drive 2/3 mean syncing/active.
+    """
+    from notebooklm.types import DriveSourceStatus
+
+    row = _row(drive_status=DriveSourceStatus.SYNCING)
+
+    assert "drive_status_id" not in row
+    assert row["drive_status"] == "syncing"
+    # The ingestion axis keeps its historical label+code pairing untouched.
+    assert row["status_id"] == 2
+
+
+def test_source_row_payload_drive_keys_are_present_and_null_for_non_drive() -> None:
+    """A non-Drive source gets the keys with ``null``/``false``, never omitted.
+
+    Deliberate: a stable row shape lets ``jq '.sources[] | select(.drive_status
+    == "deleted")'`` run over every row without a ``// empty`` guard, and it
+    matches ``_app.views.source_view``, which also emits the keys uncondi-
+    tionally for MCP/REST.
+    """
+    row = _row(title="Page", url="https://example.com", _type_code=5)
+
+    assert row["drive_document_id"] is None
+    assert row["drive_status"] is None
+    assert row["is_drive_degraded"] is False
+
+
+def test_source_row_payload_keeps_the_file_id_without_a_health_slot() -> None:
+    """Id and health decode from unrelated slots, so neither gates the other.
+
+    This is the only Drive shape captured on the wire in this repo
+    (``tests/cassettes/sources_add_drive.yaml``): a ``documentId`` with no Drive
+    status slot at all.
+    """
+    row = _row(drive_document_id="1AbC", drive_status=None)
+
+    assert row["drive_document_id"] == "1AbC"
+    assert row["drive_status"] is None
+    assert row["is_drive_degraded"] is False
+
+
+def test_source_row_payload_distinguishes_unknown_from_no_claim() -> None:
+    """``"unknown"`` (a code we could not read) is not ``None`` (no claim)."""
+    from notebooklm.types import DriveSourceStatus
+
+    unreadable = _row(drive_status=DriveSourceStatus.UNKNOWN)
+
+    assert unreadable["drive_status"] == "unknown"
+    # A state we cannot name is not evidence of degradation.
+    assert unreadable["is_drive_degraded"] is False

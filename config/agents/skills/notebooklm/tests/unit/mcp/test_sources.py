@@ -34,7 +34,10 @@ from notebooklm.mcp.tools._content_sanity import (  # noqa: E402 - after importo
     _BOT_CHALLENGE_BODY_SCAN_LIMIT,
     _THIN_SOURCE_CHAR_THRESHOLD,
 )
-from notebooklm.rpc.types import SourceStatus  # noqa: E402 - after importorskip guard
+from notebooklm.rpc.types import (  # noqa: E402 - after importorskip guard
+    DriveSourceStatus,
+    SourceStatus,
+)
 from notebooklm.types import Label, Source  # noqa: E402 - after importorskip guard
 
 from .conftest import AsyncMock  # noqa: E402 - after importorskip guard
@@ -67,6 +70,14 @@ class FakeSource:
     def status(self) -> SourceStatus:
         return SourceStatus.READY
 
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return None
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
+
 
 @dataclass
 class FakeNotReadySource:
@@ -90,6 +101,14 @@ class FakeNotReadySource:
     @property
     def status(self) -> SourceStatus:
         return SourceStatus.PROCESSING
+
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return None
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
 
 
 @dataclass
@@ -115,6 +134,14 @@ class FakeFailedSource:
     @property
     def status(self) -> SourceStatus:
         return SourceStatus.ERROR
+
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return None
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
 
 
 @dataclass
@@ -143,6 +170,14 @@ class FakeReadyTextSource:
     def status(self) -> SourceStatus:
         return SourceStatus.READY
 
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return None
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
+
 
 @dataclass
 class FakeFulltext:
@@ -164,7 +199,16 @@ async def test_source_list(mcp_call, mock_client) -> None:
     result = await mcp_call("source_list", {"notebook": NB_ID})
     assert result.structured_content == {
         "notebook_id": NB_ID,
-        "sources": [{"id": SRC_ID, "title": "Doc", "kind": "web_page", "status_label": "ready"}],
+        "sources": [
+            {
+                "id": SRC_ID,
+                "title": "Doc",
+                "kind": "web_page",
+                "status_label": "ready",
+                "drive_status_label": None,
+                "is_drive_degraded": False,
+            }
+        ],
         "total": 1,
         "offset": 0,
         "has_more": False,
@@ -189,6 +233,8 @@ async def test_source_list_status_filter(mcp_call, mock_client) -> None:
                 "title": "Broken Import",
                 "kind": "web_page",
                 "status_label": "error",
+                "drive_status_label": None,
+                "is_drive_degraded": False,
             }
         ],
         "total": 1,
@@ -270,6 +316,7 @@ async def test_source_list_compact(mcp_call, mock_client) -> None:
 
     Uses a real ``Source`` so ``created_at`` (dropped by the minimal fakes)
     actually serializes: the row is exactly ``{id, title, kind, status_label,
+    drive_status_label,
     created_at}`` — no ``url`` / raw ``status`` / ``_type_code`` — for a low-token
     listing with no extra read.
     """
@@ -294,6 +341,7 @@ async def test_source_list_compact(mcp_call, mock_client) -> None:
                 "title": "Doc",
                 "kind": "pdf",
                 "status_label": "ready",
+                "drive_status_label": None,
                 "created_at": "2024-01-01T00:00:00+00:00",
             }
         ],
@@ -316,7 +364,14 @@ async def test_source_list_compact_composes_with_status_filter(mcp_call, mock_cl
     )
     rows = result.structured_content["sources"]
     assert [r["id"] for r in rows] == [SRC2_ID]
-    assert set(rows[0]) == {"id", "title", "kind", "status_label", "created_at"}
+    assert set(rows[0]) == {
+        "id",
+        "title",
+        "kind",
+        "status_label",
+        "drive_status_label",
+        "created_at",
+    }
     assert rows[0]["status_label"] == "error"
 
 
@@ -331,9 +386,52 @@ async def test_source_list_compact_null_created_at(mcp_call, mock_client) -> Non
     mock_client.sources.list = AsyncMock(return_value=[src])
     result = await mcp_call("source_list", {"notebook": NB_ID, "detail": "compact"})
     row = result.structured_content["sources"][0]
-    assert set(row) == {"id", "title", "kind", "status_label", "created_at"}
+    assert set(row) == {"id", "title", "kind", "status_label", "drive_status_label", "created_at"}
     assert row["created_at"] is None
     assert row["status_label"] == "processing"
+
+
+async def test_source_list_full_projects_drive_health_of_a_real_source(
+    mcp_call, mock_client
+) -> None:
+    """#2111 end-to-end through the REAL ``Source`` dataclass, not a hand-built fake.
+
+    Every other exact-dict assertion in this module compares against a local
+    ``FakeSource``, so it pins the shape of the *fake*. This one builds a real
+    ``Source``, so the full projection is anchored to the actual dataclass — the
+    counter-example that catches a field the fakes would silently miss.
+    """
+    from notebooklm.types import DriveSourceStatus, Source
+
+    src = Source(
+        id=SRC_ID,
+        title="Shared Doc",
+        _type_code=1,
+        status=SourceStatus.READY,
+        drive_document_id="1AbC",
+        drive_status=DriveSourceStatus.DELETED,
+    )
+    mock_client.sources.list = AsyncMock(return_value=[src])
+    result = await mcp_call("source_list", {"notebook": NB_ID})
+    row = result.structured_content["sources"][0]
+
+    assert row == {
+        "id": SRC_ID,
+        "title": "Shared Doc",
+        "url": None,
+        "created_at": None,
+        "status": SourceStatus.READY.value,
+        "drive_document_id": "1AbC",
+        "drive_status": DriveSourceStatus.DELETED.value,
+        "_type_code": 1,
+        "kind": "google_docs",
+        # Ingestion completed and stays completed — the exact situation #2111
+        # is about — so the Drive axis is the only signal that the grounding
+        # snapshot is stale.
+        "status_label": "ready",
+        "drive_status_label": "deleted",
+        "is_drive_degraded": True,
+    }
 
 
 async def test_source_list_default_is_full_unchanged(mcp_call, mock_client) -> None:
@@ -341,7 +439,14 @@ async def test_source_list_default_is_full_unchanged(mcp_call, mock_client) -> N
     mock_client.sources.list = AsyncMock(return_value=[FakeSource(id=SRC_ID, title="Doc")])
     result = await mcp_call("source_list", {"notebook": NB_ID})
     assert result.structured_content["sources"] == [
-        {"id": SRC_ID, "title": "Doc", "kind": "web_page", "status_label": "ready"}
+        {
+            "id": SRC_ID,
+            "title": "Doc",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        }
     ]
 
 
@@ -360,6 +465,8 @@ async def test_source_read(mcp_call, mock_client) -> None:
             "title": "Doc",
             "kind": "web_page",
             "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
         },
         "content": "hello world",
         "char_count": 11,
@@ -549,6 +656,8 @@ async def test_source_read_not_ready_returns_null_without_fetch(mcp_call, mock_c
         "title": "Doc",
         "kind": "pdf",
         "status_label": "processing",
+        "drive_status_label": None,
+        "is_drive_degraded": False,
     }
     assert result.structured_content["content"] is None
     assert result.structured_content["char_count"] == 0
@@ -809,7 +918,14 @@ async def test_source_wait_single_source_ready(mcp_call, mock_client) -> None:
     _assert_aggregate_shape(sc)
     assert sc["ok"] is True
     assert sc["ready"] == [
-        {"id": SRC_ID, "title": "Ready", "kind": "web_page", "status_label": "ready"}
+        {
+            "id": SRC_ID,
+            "title": "Ready",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        }
     ]
     assert sc["timed_out"] == sc["failed"] == sc["not_found"] == []
 
@@ -1458,7 +1574,14 @@ async def test_source_add_text(mcp_call, mock_client) -> None:
     assert result.structured_content == {
         "notebook_id": NB_ID,
         "status": "added",
-        "source": {"id": SRC_ID, "title": "Notes", "kind": "web_page", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "Notes",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        },
     }
     mock_client.sources.add_text.assert_awaited_once_with(NB_ID, "Notes", "hello world")
 
@@ -1471,7 +1594,14 @@ async def test_source_add_url(mcp_call, mock_client) -> None:
     assert result.structured_content == {
         "notebook_id": NB_ID,
         "status": "added",
-        "source": {"id": SRC_ID, "title": "Page", "kind": "web_page", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "Page",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        },
     }
     mock_client.sources.add_url.assert_awaited_once_with(NB_ID, "https://example.com/a")
 
@@ -1506,7 +1636,14 @@ async def test_source_add_drive(mcp_call, mock_client) -> None:
     # SourceAddDriveResult carries the source plus the drive provenance fields.
     assert result.structured_content == {
         "status": "added",
-        "source": {"id": SRC_ID, "title": "Sheet", "kind": "web_page", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "Sheet",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        },
         "notebook_id": NB_ID,
         "file_id": "drivefile123",
         "mime_type": "google-sheets",
@@ -1732,7 +1869,14 @@ async def test_source_add_single_metadata_not_rejected(mcp_call, mock_client) ->
     assert result.structured_content == {
         "notebook_id": NB_ID,
         "status": "added",
-        "source": {"id": SRC_ID, "title": "My Page", "kind": "web_page", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "My Page",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        },
     }
     # The add actually proceeded (not silently rejected). A url source ignores
     # mime_type downstream but now honors ``title`` via a post-add rename (#1960),
@@ -1782,7 +1926,14 @@ async def test_source_add_youtube_accepts_youtube_url(mcp_call, mock_client) -> 
     assert result.structured_content == {
         "notebook_id": NB_ID,
         "status": "added",
-        "source": {"id": SRC_ID, "title": "Vid", "kind": "web_page", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "Vid",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        },
     }
     mock_client.sources.add_url.assert_awaited_once_with(NB_ID, yt)
 
@@ -1829,6 +1980,9 @@ async def test_source_add_batch_all_success(mcp_call, mock_client) -> None:
             },
         ],
     }
+    mock_client.sources._add_urls_batch.assert_awaited_once_with(
+        NB_ID, ["https://example.com/a", "https://example.com/b"]
+    )
     assert mock_client.sources.add_url.await_count == 2
     # Both ready web_page items were content-checked.
     assert mock_client.sources.get_fulltext.await_count == 2
@@ -1859,6 +2013,9 @@ async def test_source_add_batch_partial_failure(mcp_call, mock_client) -> None:
     assert bad["status"] == "error"
     assert bad["error"]["code"] == "VALIDATION"
     # The disallowed scheme is rejected by validate_url before reaching the client.
+    mock_client.sources._add_urls_batch.assert_awaited_once_with(
+        NB_ID, ["https://good.example.com"]
+    )
     mock_client.sources.add_url.assert_awaited_once_with(NB_ID, "https://good.example.com")
     # The one ready item was content-checked; the rejected entry never reaches it.
     mock_client.sources.get_fulltext.assert_awaited_once_with(NB_ID, SRC_ID, output_format="text")
@@ -1881,12 +2038,16 @@ async def test_source_add_batch_non_url_entry_errors_not_text(mcp_call, mock_cli
     mock_client.sources.add_url.assert_not_called()
     mock_client.sources.add_text.assert_not_called()
     mock_client.sources.add_file.assert_not_called()
+    mock_client.sources._add_urls_batch.assert_not_awaited()
 
 
 async def test_source_add_batch_fatal_error_aborts_the_call(mcp_call, mock_client) -> None:
-    """A mid-batch FATAL failure (network/auth/rate-limit/5xx) aborts the whole tool
-    call rather than being masked as a per-item error in a success envelope (#1871).
-    The batch stops at the first fatal item — the second URL is never attempted."""
+    """A batch-level fatal failure aborts instead of being masked per item (#1871).
+
+    The real RPC receives both URLs at once and may have committed an unknown
+    subset. The fixture's sequential outcome model happens to raise on its first
+    scripted item, but the adapter contract under test is the top-level failure.
+    """
     mock_client.sources.add_url = AsyncMock(
         side_effect=[NetworkError("boom"), FakeSource(id=SRC2_ID, title="Second")]
     )
@@ -1898,9 +2059,13 @@ async def test_source_add_batch_fatal_error_aborts_the_call(mcp_call, mock_clien
                 "urls": ["https://first.example.com", "https://second.example.com"],
             },
         )
-    assert "NETWORK" in str(excinfo.value)
-    # Aborted at the first fatal item — the batch did NOT continue to the second URL.
-    assert mock_client.sources.add_url.await_count == 1
+    error_text = str(excinfo.value)
+    assert "RPC" in error_text
+    assert "unconfirmed=true" in error_text
+    assert "reconcile" in error_text.lower()
+    mock_client.sources._add_urls_batch.assert_awaited_once_with(
+        NB_ID, ["https://first.example.com", "https://second.example.com"]
+    )
 
 
 async def test_source_add_batch_isolates_non_fatal_input_error(mcp_call, mock_client) -> None:
@@ -2415,7 +2580,14 @@ async def test_source_add_wait_url_ready(mcp_call, mock_client) -> None:
     assert sc["source_id"] == SRC_ID
     assert sc["ok"] is True
     assert sc["ready"] == [
-        {"id": SRC_ID, "title": "Page", "kind": "web_page", "status_label": "ready"}
+        {
+            "id": SRC_ID,
+            "title": "Page",
+            "kind": "web_page",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        }
     ]
     assert sc["timed_out"] == sc["failed"] == sc["not_found"] == []
     mock_client.sources.add_url.assert_awaited_once_with(NB_ID, "https://example.com/a")
@@ -2445,7 +2617,14 @@ async def test_source_add_wait_text_ready(mcp_call, mock_client) -> None:
     assert sc["source_id"] == SRC_ID
     assert sc["ok"] is True
     assert sc["ready"] == [
-        {"id": SRC_ID, "title": "Notes", "kind": "pasted_text", "status_label": "ready"}
+        {
+            "id": SRC_ID,
+            "title": "Notes",
+            "kind": "pasted_text",
+            "status_label": "ready",
+            "drive_status_label": None,
+            "is_drive_degraded": False,
+        }
     ]
     mock_client.sources.add_text.assert_awaited_once_with(NB_ID, "Notes", "hello world")
     mock_client.sources.get_fulltext.assert_not_called()
@@ -2581,6 +2760,260 @@ async def test_source_add_wait_thin_web_page_warns(mcp_call, mock_client) -> Non
     sc = result.structured_content
     assert sc["ok"] is True
     assert "warning" in sc["ready"][0]
+
+
+async def test_source_add_wait_url_title_miss_is_flagged(mcp_call, mock_client) -> None:
+    """#1989: the wait=True tail flags a rename miss the same way the immediate tail does.
+
+    Before this, the SAME add reported ``title_override_applied: false`` without
+    ``wait`` and said nothing at all with it — the caller lost the signal purely
+    by asking to wait.
+    """
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="Upstream"))
+    # The final GET_NOTEBOOK read is the authority: it still carries the upstream title.
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="Upstream")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "My Title",
+        },
+    )
+    sc = result.structured_content
+    assert sc["title_override_applied"] is False
+    assert "My Title" in sc["warning"]
+    assert "Upstream" in sc["warning"]
+    # Top-level, not inside the per-source ready row (that slot is the thin-content
+    # annotator's) — so the two warnings can coexist.
+    assert "warning" not in sc["ready"][0]
+
+
+async def test_source_add_wait_url_title_applied_is_not_flagged(mcp_call, mock_client) -> None:
+    """A rename that stuck adds no keys at all — the aggregate shape is untouched."""
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="My Title"))
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="My Title")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "My Title",
+        },
+    )
+    sc = result.structured_content
+    assert set(sc) == _AGGREGATE_KEYS | {"source_id"}
+
+
+async def test_source_add_wait_detects_a_backend_reverted_title(mcp_call, mock_client) -> None:
+    """The wait check reads the FINAL title, so it catches what the add echo cannot.
+
+    The add response carries the locally-patched title (the rename RPC succeeded),
+    so the immediate tail sees a match. Only the GET_NOTEBOOK re-read that
+    ``wait_until_ready`` performs can show the backend having reverted it.
+    """
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="My Title"))
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="Reverted Upstream")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "My Title",
+        },
+    )
+    sc = result.structured_content
+    assert sc["title_override_applied"] is False
+    assert "Reverted Upstream" in sc["warning"]
+
+
+async def test_source_add_wait_drive_title_miss_is_flagged(mcp_call, mock_client) -> None:
+    """Drive gets the check unconditionally on wait=True, matching its immediate tail."""
+    mock_client.sources.add_drive = AsyncMock(
+        return_value=FakeReadyTextSource(id=SRC_ID, title="Drive Name")
+    )
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeReadyTextSource(id=SRC_ID, title="Drive Name")
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "drive",
+            "document_id": "drivefile123",
+            "mime_type": "google-sheets",
+            "title": "My Title",
+        },
+    )
+    sc = result.structured_content
+    assert sc["title_override_applied"] is False
+    assert "My Title" in sc["warning"]
+
+
+async def test_source_add_wait_text_title_is_never_flagged(mcp_call, mock_client) -> None:
+    """``text`` honors ``title`` directly, so it is excluded here exactly as it is
+    on the immediate tail — the two paths must not disagree about which types can miss."""
+    mock_client.sources.add_text = AsyncMock(
+        return_value=FakeReadyTextSource(id=SRC_ID, title="Backend Renamed It")
+    )
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeReadyTextSource(id=SRC_ID, title="Backend Renamed It")
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "text",
+            "text": "hello world",
+            "title": "Notes",
+        },
+    )
+    sc = result.structured_content
+    assert set(sc) == _AGGREGATE_KEYS | {"source_id"}
+
+
+async def test_source_add_wait_timeout_does_not_flag_a_title_miss(mcp_call, mock_client) -> None:
+    """A timed-out source has no FINAL title, so claiming a miss would be a guess."""
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="Upstream"))
+    mock_client.sources.wait_until_ready = AsyncMock(side_effect=SourceTimeoutError(SRC_ID, 5.0))
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/slow",
+            "title": "My Title",
+            "timeout": 5,
+        },
+    )
+    sc = result.structured_content
+    assert "title_override_applied" not in sc
+    assert "warning" not in sc
+    assert sc["timed_out"] != []
+
+
+async def test_source_add_wait_youtube_title_miss_is_flagged(mcp_call, mock_client) -> None:
+    """YouTube is the other type the immediate tail gates on, so the waited tail must too.
+
+    Pins the "same gating as the immediate tail" claim on the half that url
+    coverage alone leaves free — narrowing the gate to ``("url",)`` must fail here.
+    """
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="Upstream"))
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="Upstream")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "youtube",
+            "url": "https://www.youtube.com/watch?v=abc123",
+            "title": "My Title",
+        },
+    )
+    sc = result.structured_content
+    assert sc["title_override_applied"] is False
+    assert "My Title" in sc["warning"]
+
+
+async def test_source_add_wait_padded_title_that_landed_is_not_a_miss(
+    mcp_call, mock_client
+) -> None:
+    """The strip is one-sided on purpose: request is stripped, observed is verbatim.
+
+    The client renames to the STRIPPED form, so a backend title of ``"My Title"``
+    for a requested ``"  My Title  "`` is a success, not a miss. Comparing the
+    unstripped request would emit a spurious warning on a rename that worked.
+    """
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="My Title"))
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="My Title")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "  My Title  ",
+        },
+    )
+    sc = result.structured_content
+    assert set(sc) == _AGGREGATE_KEYS | {"source_id"}
+
+
+async def test_source_add_padded_title_that_landed_is_not_a_miss_without_wait(
+    mcp_call, mock_client
+) -> None:
+    """Same one-sided strip on the immediate tail — the predicate is shared now."""
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="My Title"))
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "  My Title  ",
+        },
+    )
+    sc = result.structured_content
+    assert "title_override_applied" not in sc
+    assert "warning" not in sc
+
+
+async def test_source_add_wait_blank_title_is_not_a_miss(mcp_call, mock_client) -> None:
+    """A whitespace-only ``title`` requests nothing, so it can't be missed."""
+    mock_client.sources.add_url = AsyncMock(return_value=FakeSource(id=SRC_ID, title="Upstream"))
+    mock_client.sources.wait_until_ready = AsyncMock(
+        return_value=FakeSource(id=SRC_ID, title="Upstream")
+    )
+    mock_client.sources.get_fulltext = AsyncMock(
+        return_value=FakeFulltext(content="x" * 500, char_count=500)
+    )
+    result = await mcp_call(
+        "source_add",
+        {
+            "notebook": NB_ID,
+            "wait": True,
+            "source_type": "url",
+            "url": "https://example.com/a",
+            "title": "   ",
+        },
+    )
+    sc = result.structured_content
+    assert "title_override_applied" not in sc
 
 
 async def test_source_add_wait_remote_file_rejected(mcp_call, mock_client, monkeypatch) -> None:

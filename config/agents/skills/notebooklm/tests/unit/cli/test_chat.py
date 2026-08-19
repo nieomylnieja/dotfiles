@@ -16,6 +16,7 @@ from notebooklm.types import (
     ChatReference,
     ChatResponseLength,
     ChatSettings,
+    ConversationTurnKey,
     Note,
 )
 
@@ -1303,3 +1304,61 @@ class TestAskQuietSuppressesStatusProse:
         assert "Continuing conversation" not in result.output
         # ...but the answer itself still prints (quiet silences status, not output).
         assert "The answer." in result.output
+
+
+class TestAskJsonTurnKey:
+    """``ask --json`` must expose the turn key (#2122).
+
+    Two earlier wire additions reached the Python API but never the CLI,
+    because ``source list``'s payload is hand-built. The ask envelope is
+    ``dataclasses.asdict(result)`` instead, so a new ``AskResult`` field
+    arrives automatically — this pins that, since it is a property of the CLI's
+    serialization choice rather than of the change itself.
+    """
+
+    def test_ask_json_carries_the_turn_key_parts(self, runner, mock_auth):
+        import json
+
+        result_obj = make_ask_result()
+        result_obj.turn_key = ConversationTurnKey("conv-1", "turn-1", 2187103311)
+        mock_client = create_mock_client()
+        mock_client.chat.ask = AsyncMock(return_value=result_obj)
+        mock_client.chat.get_conversation_id = AsyncMock(return_value=None)
+
+        with patch.object(
+            auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = ("csrf", "session")
+            result = runner.invoke(
+                cli,
+                ["ask", "What is 42?", "-n", "nb_123", "--json"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0, result.stderr or result.output
+        data = json.loads(result.stdout)
+        assert data["turn_key"] == {
+            "session_id": "conv-1",
+            "turn_id": "turn-1",
+            "turn_code": 2187103311,
+        }
+
+    def test_ask_json_turn_key_is_null_when_absent(self, runner, mock_auth):
+        import json
+
+        mock_client = create_mock_client()
+        mock_client.chat.ask = AsyncMock(return_value=make_ask_result())
+        mock_client.chat.get_conversation_id = AsyncMock(return_value=None)
+
+        with patch.object(
+            auth_module, "fetch_tokens_with_domains", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = ("csrf", "session")
+            result = runner.invoke(
+                cli,
+                ["ask", "What is 42?", "-n", "nb_123", "--json"],
+                obj=inject_client(mock_client),
+            )
+
+        assert result.exit_code == 0, result.stderr or result.output
+        assert json.loads(result.stdout)["turn_key"] is None

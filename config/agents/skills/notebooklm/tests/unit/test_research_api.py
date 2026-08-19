@@ -421,7 +421,7 @@ class TestPollEdgeCases:
                                     5,
                                     None,
                                     None,
-                                    ["# Deep Report\nContent here"],
+                                    ["# Deep Report\nContent here", 3],
                                 ],
                             ],
                             "Deep summary",
@@ -442,13 +442,13 @@ class TestPollEdgeCases:
         assert result.report == "# Deep Report\nContent here"
 
     @pytest.mark.asyncio
-    async def test_poll_status_code_6_is_completed(
+    async def test_poll_deep_completion_code_is_completed(
         self,
         auth_tokens,
         httpx_mock: HTTPXMock,
         build_rpc_response,
     ):
-        """Status code 6 (deep research) should be treated as completed."""
+        """A deep run's captured completion code (2) is treated as completed."""
         response = build_rpc_response(
             RPCMethod.POLL_RESEARCH,
             [
@@ -464,7 +464,7 @@ class TestPollEdgeCases:
                             ],
                             "Summary",
                         ],
-                        6,  # status code 6 = completed (deep research)
+                        2,  # the completion code deep runs actually report (#2143)
                     ],
                 ]
             ],

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
+
+import httpx
 
 from .._env import get_base_url
 from .._url_utils import is_google_auth_redirect
 from ..exceptions import AuthExtractionError
 from ..paths import profile_from_storage_path
 from .account import authuser_query
+from .cookie_types import CookieJar
 from .extraction import extract_wiz_field
-from .recovery import try_headless_reauth, try_master_token_reauth
+from .recovery import try_headless_reauth, try_master_token_reauth, try_storage_cookie_reload
 from .refresh import try_refresh_cmd_reauth
 from .tokens import AuthTokens
 
@@ -67,16 +71,21 @@ async def refresh_auth_session(
     ``allow_headless`` straight through.
     """
     http_client = kernel.get_http_client()
-    url = f"{get_base_url()}/"
-    if auth.account_email or auth.authuser:
-        url = f"{url}?{authuser_query(auth.authuser, auth.account_email)}"
+    rejected_cookie_jar: CookieJar | None = None
 
     async def _get_and_extract() -> tuple[str, str] | None:
         """GET the homepage + extract tokens; ``None`` signals a dead-cookie 302."""
+        nonlocal rejected_cookie_jar
+        url = f"{get_base_url()}/"
+        if auth.account_email or auth.authuser:
+            url = f"{url}?{authuser_query(auth.authuser, auth.account_email)}"
+        request_cookie_jar = CookieJar.from_httpx(http_client.cookies)
         response = await http_client.get(url)
         response.raise_for_status()
         if is_google_auth_redirect(str(response.url)):
+            rejected_cookie_jar = request_cookie_jar
             return None
+        rejected_cookie_jar = None
         try:
             csrf_value = extract_wiz_field(response.text, "SNlM0e", strict=True)
             sid_value = extract_wiz_field(response.text, "FdrFJe", strict=True)
@@ -92,14 +101,42 @@ async def refresh_auth_session(
     extracted = await _get_and_extract()
     if extracted is None:
         # Dead first-party cookies. Mid-session recovery ladder, in order:
-        # L2.5 refresh-cmd (opt-in) → L3 headless re-mint → L4 master-token.
+        # persisted-profile reload (default) → L2.5 refresh-cmd (opt-in) →
+        # L3 headless re-mint → L4 master-token.
         # Each rung, on success, reloads cookies and retries the homepage GET.
         #
+        # A sibling CLI/server process may already have refreshed the same
+        # storage_state.json. Re-read it before invoking any credential-bearing
+        # or operator-configured recovery mechanism.
+        # File-backed recovery has three bounded attempts: retry one live-jar
+        # change; force a disk sample while preserving a new auth-bearing live
+        # candidate; if that candidate is also rejected, use the final sample.
+        # Inline auth has no disk candidate and retains two live-jar retries.
+        attempt_count = 3 if auth.storage_path is not None else 2
+        for _attempt in range(attempt_count):
+            if not await _try_storage_cookie_reload(
+                auth=auth,
+                kernel=kernel,
+                auth_coord=auth_coord,
+                cookie_persistence=cookie_persistence,
+                # Preserve a post-request jar mutation for the first retry. If
+                # that jar is also rejected, force the bounded second attempt
+                # to sample an available disk profile even when the response
+                # mutated another cookie. With no profile, retain the second
+                # response mutation as the only local recovery evidence.
+                rejected_cookie_jar=rejected_cookie_jar,
+                force_disk_read=_attempt > 0 and auth.storage_path is not None,
+                preserve_auth_material_change=_attempt < 2,
+            ):
+                break
+            extracted = await _get_and_extract()
+            if extracted is not None:
+                break
         # Layer-2.5: NOTEBOOKLM_REFRESH_CMD, promoted from cold-start-only into
         # the mid-session ladder (audit refresh-4). Gated OPT-IN for one release
         # by NOTEBOOKLM_REFRESH_CMD_MIDSESSION=1 (default OFF); it reuses the
         # SAME single-flight-coalesced cold-start machinery + per-path flock.
-        if await _try_refresh_cmd_reauth(auth=auth, kernel=kernel):
+        if extracted is None and await _try_refresh_cmd_reauth(auth=auth, kernel=kernel):
             extracted = await _get_and_extract()
         # Layer-3 headless re-auth (opt-in / env-gated); on a successful re-mint,
         # reload cookies and retry once.
@@ -130,6 +167,62 @@ async def refresh_auth_session(
     await lifecycle.save_cookies(cookie_persistence, http_client.cookies)
 
     return auth
+
+
+async def _try_storage_cookie_reload(
+    *,
+    auth: AuthTokens,
+    kernel: Kernel,
+    auth_coord: AuthRefreshCoordinator,
+    cookie_persistence: CookiePersistence,
+    rejected_cookie_jar: CookieJar | None,
+    force_disk_read: bool = False,
+    preserve_auth_material_change: bool = True,
+) -> bool:
+    """Reload newer/different file-backed cookies without external recovery."""
+    cookie_jar = kernel.get_http_client().cookies
+    expected_authuser = auth.authuser
+    expected_account_email = auth.account_email
+    expected_generation = auth._profile_session_generation
+
+    async def install_profile(
+        target: httpx.Cookies,
+        source: httpx.Cookies,
+        expected: CookieJar,
+        authuser: int,
+        account_email: str | None,
+    ) -> bool | None:
+        return await auth_coord.install_profile_session(
+            auth=auth,
+            target_cookie_jar=target,
+            source_cookie_jar=source,
+            expected_cookie_jar=expected,
+            expected_authuser=expected_authuser,
+            expected_account_email=expected_account_email,
+            expected_generation=expected_generation,
+            authuser=authuser,
+            account_email=account_email,
+        )
+
+    try:
+        return await try_storage_cookie_reload(
+            storage_path=auth.storage_path,
+            cookie_jar=cookie_jar,
+            rejected_cookie_jar=rejected_cookie_jar,
+            force_disk_read=force_disk_read,
+            preserve_auth_material_change=preserve_auth_material_change,
+            install_profile=install_profile,
+            adopt_baseline=lambda path, baseline: cookie_persistence._adopt_reloaded_baseline(
+                path,
+                baseline,
+                to_thread=asyncio.to_thread,
+            ),
+        )
+    finally:
+        # The reload mutates the authoritative HTTP jar before its optional
+        # adoption await. Keep public compatibility views synchronized even if
+        # cancellation lands while adoption is waiting on disk or save_lock.
+        auth.replace_cookie_jar(cookie_jar)
 
 
 async def _try_refresh_cmd_reauth(*, auth: AuthTokens, kernel: Kernel) -> bool:

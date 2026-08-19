@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from .._auth.profile_store import ProfileStore
 from .._client_composed import ClientComposed
 from .._client_metrics import ClientMetrics
 from .._client_seams import ClientSeams, resolve_client_seams
@@ -331,22 +332,34 @@ def build_collaborators(
     # are all bound to the loop that ``open()`` ran on; reusing them
     # under a different loop produces hangs and ``RuntimeError`` deep
     # in httpx instead of an actionable message at the call site.
-    kernel = Kernel(async_client_factory=config.async_client_factory)
+    # Seed the kernel-owned jar at composition time. This is the bootstrap
+    # hand-off defined by ADR-0032: after this call, post-open and closed-state
+    # first-party readers use ``kernel.cookies`` and never AuthTokens' public
+    # compatibility shadows.
+    kernel = Kernel(auth=auth, async_client_factory=config.async_client_factory)
     lifecycle = ClientLifecycle(
         timeout=config.timeout,
         connect_timeout=config.connect_timeout,
         limits=config.limits,
         keepalive_interval=config.keepalive_interval,
         keepalive_storage_path=config.keepalive_storage_path,
+        auth=auth,
+        cookie_persistence_path=config.keepalive_storage_path,
         kernel=kernel,
-        # Injectable seams. ``None`` is forwarded so the lifecycle's
-        # ``or _default_*`` resolves to the late-binding wrapper —
-        # preserving the existing monkeypatch surface for unchanged callers.
+        # Injectable seams. A ``None`` saver selects the unconditional typed
+        # ProfileStore route; only an explicit saver reaches the v0.x callback
+        # adapter. The rotator alone retains its late-bound default.
         cookie_saver=cookie_saver,
         cookie_rotator=cookie_rotator,
     )
-    # Owns the in-process save lock and open-time cookie baseline.
-    cookie_persistence = CookiePersistence(auth, config.keepalive_storage_path)
+    # Owns the in-process save lock and typed per-profile baselines. Preserve
+    # only the load-time snapshot, not the AuthTokens capability: re-reading a
+    # newer file at open would make the older live jar overwrite a sibling
+    # writer's intervening cookie update during the eventual three-way merge.
+    cookie_persistence = CookiePersistence._from_store(
+        ProfileStore(auth.storage_path) if auth.storage_path is not None else None,
+        initial_snapshot=auth.cookie_snapshot,
+    )
 
     return RuntimeCollaborators(
         metrics=metrics,

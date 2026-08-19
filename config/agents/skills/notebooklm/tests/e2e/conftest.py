@@ -1,5 +1,6 @@
 """E2E test fixtures and configuration."""
 
+import asyncio
 import contextlib
 import hashlib
 import logging
@@ -17,6 +18,7 @@ import pytest
 from notebooklm._env import get_base_url
 
 if TYPE_CHECKING:
+    from notebooklm._row_adapters.artifacts import QuizOptionPair
     from notebooklm.client import NotebookLMClient
 
 # Load .env file if python-dotenv is available
@@ -285,6 +287,58 @@ def assert_generation_started(result, artifact_type: str = "Artifact") -> None:
         "pending",
         "in_progress",
     ), f"Unexpected {artifact_type.lower()} status: {result.status}"
+
+
+async def read_back_option_pair(
+    client: "NotebookLMClient",
+    notebook_id: str,
+    task_id: str,
+    *,
+    family: str,
+    attempts: int = 10,
+) -> "QuizOptionPair":
+    """Return the ``[quantity, difficulty]`` pair the SERVER stored for an artifact.
+
+    The backend echoes the generation options it persisted, which makes this the
+    only tier that can check a request against reality rather than against a
+    fixture we wrote (#2195). Unit tests pin the decode positions against
+    ``docs/mobile/schema.proto``; this closes the loop against a live
+    generation, and is what would have caught the transposed flashcards pair
+    (#2116) and the ``MORE``-as-``STANDARD`` alias (#2117) without anyone
+    thinking to look.
+
+    The echo is written when the artifact row is created, so this does not wait
+    for generation to finish — only for the row to become listable.
+
+    Args:
+        client: Live client.
+        notebook_id: Notebook the artifact was generated in.
+        task_id: ``GenerationStatus.task_id`` (also the artifact id).
+        family: ``"quiz"`` or ``"flashcards"`` — which option slot to read.
+        attempts: Listing retries before failing.
+
+    Raises:
+        AssertionError: If the row never appears or carries no option pair.
+    """
+    from notebooklm._row_adapters.artifacts import ArtifactRow
+
+    assert family in ("quiz", "flashcards"), family
+    for attempt in range(attempts):
+        # ``_list_for_download`` is the sanctioned internal seam for the raw
+        # rows (#1488); no public API exposes the stored options today.
+        _, raw_rows, _ = await client.artifacts._list_for_download(notebook_id)
+        for raw in raw_rows:
+            if isinstance(raw, list) and raw and raw[0] == task_id:
+                row = ArtifactRow(raw)
+                options = row.quiz_options if family == "quiz" else row.flashcards_options
+                assert options is not None, (
+                    f"{family} artifact {task_id} carries no stored option pair; "
+                    f"variant={row.variant}, options block={raw[ArtifactRow._OPTIONS_POS]!r}"
+                )
+                return options
+        if attempt < attempts - 1:
+            await asyncio.sleep(POLL_INTERVAL)
+    raise AssertionError(f"artifact {task_id} never appeared in {notebook_id}'s listing")
 
 
 def has_auth() -> bool:

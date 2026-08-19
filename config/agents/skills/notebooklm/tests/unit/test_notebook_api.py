@@ -7,6 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from notebooklm._notebook_payloads import (
+    build_create_notebook_params as canonical_build_create_notebook_params,
+)
+from notebooklm._notebook_payloads import (
+    build_get_notebook_params as canonical_build_get_notebook_params,
+)
 from notebooklm._notebooks import (
     NotebooksAPI,
     build_create_notebook_params,
@@ -20,9 +26,18 @@ from notebooklm.exceptions import (
     NotebookLimitError,
     NotebookNotFoundError,
     RPCError,
+    ServerError,
+    ValidationError,
 )
 from notebooklm.rpc import RPCMethod
-from notebooklm.types import AccountLimits, Notebook, NotebookMetadata, Source, SourceType
+from notebooklm.types import (
+    AccountLimits,
+    Notebook,
+    NotebookMetadata,
+    SharePermission,
+    Source,
+    SourceType,
+)
 
 
 def _make_core(rpc_call: AsyncMock | None = None):
@@ -63,7 +78,33 @@ def _owned_notebooks(count: int) -> list[Notebook]:
 
 
 def _shared_notebooks(count: int) -> list[Notebook]:
-    return [Notebook(id=f"shared_{i}", title=f"Shared {i}", is_owner=False) for i in range(count)]
+    return [
+        Notebook(id=f"shared_{i}", title=f"Shared {i}", role=SharePermission.VIEWER)
+        for i in range(count)
+    ]
+
+
+def _owned_but_shared_notebooks(count: int) -> list[Notebook]:
+    """Notebooks the account OWNS and has shared with a collaborator.
+
+    Parsed from the live row shape rather than constructed with an explicit
+    ``is_owner``: ``meta[0] == 1`` (userRole OWNER) with ``meta[1] is True``
+    (the notebook has sharing) is exactly the combination the pre-#2125 decoder
+    mis-read as "not owned".
+    """
+    return [
+        Notebook.from_api_response(
+            [
+                f"Owned & Shared {i}",
+                [],
+                f"owned_shared_{i}",
+                "\U0001f4d3",
+                None,
+                [1, True, True, None, None, None, 1, False, None],
+            ]
+        )
+        for i in range(count)
+    ]
 
 
 def _create_invalid_argument_error(
@@ -98,6 +139,11 @@ def test_build_get_notebook_params_matches_live_payload() -> None:
         None,
         0,
     ]
+
+
+def test_notebook_payload_builders_keep_their_compatibility_import_path() -> None:
+    assert build_create_notebook_params is canonical_build_create_notebook_params
+    assert build_get_notebook_params is canonical_build_get_notebook_params
 
 
 def test_direct_notebooks_api_construction_remains_supported() -> None:
@@ -304,6 +350,65 @@ def _set_account_limit(api: NotebooksAPI, limit: int | None) -> AsyncMock:
     return mock
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "baseline_failure",
+    [
+        # A drifted LIST_NOTEBOOKS: the strict decoder raises, not the transport.
+        pytest.param(RPCError("baseline decode failed"), id="decode_failure"),
+        # A transport failure. The probe deliberately re-RAISES this class; the
+        # baseline capture deliberately swallows it, so pin that asymmetry.
+        pytest.param(ServerError("baseline 503"), id="transport_failure"),
+    ],
+)
+async def test_create_baseline_failure_makes_a_match_ambiguous(
+    caplog: pytest.LogCaptureFixture,
+    baseline_failure: Exception,
+) -> None:
+    """No baseline + a match = ``RPCError``, not a guess (#2232).
+
+    The notebook twin of ``test_add_url_baseline_failure_makes_a_match_ambiguous``.
+    Titles are not unique in NotebookLM, so without a baseline a probe match may
+    predate the create; adopting it hands the caller someone else's notebook
+    under the name of one they think they just made, and every subsequent write
+    in that session lands there. The error must carry enough to act on: what
+    broke the baseline, and which notebook is ambiguous.
+    """
+    transport_error = NetworkError("temporary network failure")
+    api = _make_api(rpc_call=AsyncMock(side_effect=transport_error))
+    pre_existing = Notebook(id="nb_pre_existing", title="Quarterly Review")
+    # First call = the baseline (fails); second = the probe.
+    api.list = AsyncMock(side_effect=[baseline_failure, [pre_existing]])  # type: ignore[method-assign]
+
+    with (
+        caplog.at_level(logging.WARNING, logger="notebooklm._notebooks"),
+        pytest.raises(RPCError) as raised,
+    ):
+        await api.create("Quarterly Review")
+
+    # Not the pre-existing notebook, under any guise.
+    assert "disambiguate" in str(raised.value)
+    assert pre_existing.id in str(raised.value)
+    # The message names what broke the baseline — otherwise nothing reaching the
+    # caller can explain why the snapshot was unavailable.
+    assert type(baseline_failure).__name__ in str(raised.value)
+    # The transport error that triggered the probe survives as context, and
+    # ``__cause__`` is deliberately left unset so the traceback keeps printing
+    # it — ``idempotent_create`` promises both halves stay visible.
+    assert raised.value.__context__ is transport_error
+    assert raised.value.__cause__ is None
+    # The action survives the 300-char truncation the MCP/REST surfaces apply.
+    assert "check your notebook list before retrying" in str(raised.value)[:300].lower()
+    # An ambiguity IS an unconfirmed create (#2220): nothing threw inside the
+    # probe, so this looks like an ordinary rejection — but the server may hold
+    # a notebook either way, which is precisely what the marker names.
+    assert getattr(raised.value, "unconfirmed", False) is True
+    # One create attempt: the ambiguity aborts the loop, it does not re-issue.
+    assert api._rpc.rpc_call.await_count == 1
+    # The swallow is visible at the default logger level (WARNING), not DEBUG.
+    assert "baseline list() failed" in caplog.text
+
+
 class TestCreateNotebookQuotaDetection:
     @pytest.mark.asyncio
     async def test_create_uses_canonical_payload(self):
@@ -333,6 +438,31 @@ class TestCreateNotebookQuotaDetection:
         )
 
     @pytest.mark.asyncio
+    async def test_create_retains_and_caches_volunteered_chat_session(self) -> None:
+        api = _make_api()
+        api.list = AsyncMock(return_value=[])
+        api._rpc.rpc_call.return_value = [
+            "Session Notebook",
+            None,
+            "nb-session",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            [["chat-session-1"]],
+        ]
+
+        notebook = await api.create("Session Notebook")
+
+        assert [session.id for session in notebook.chat_sessions] == ["chat-session-1"]
+        assert api._take_created_chat_session_id("nb-session") == "chat-session-1"
+        assert api._take_created_chat_session_id("nb-session") is None
+
+    @pytest.mark.asyncio
     async def test_create_invalid_argument_near_paid_limit_raises_limit_error(self):
         original = _create_invalid_argument_error()
         api = _make_api(rpc_call=AsyncMock(side_effect=original))
@@ -350,6 +480,59 @@ class TestCreateNotebookQuotaDetection:
         # ``create`` calls ``list`` twice on an RPC failure path:
         # once for the baseline snapshot, once for the quota check.
         assert api.list.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_quota_check_counts_owned_notebooks_the_user_has_shared(self):
+        """#2125: sharing a notebook must not remove it from ``owned_count``.
+
+        The pre-fix decoder derived ``is_owner`` from the "has any sharing"
+        slot, so every notebook the account owned *and had shared* dropped out
+        of this count and ``NotebookLimitError`` was never raised. Here all 500
+        notebooks are owned-and-shared, so a correct count reaches the limit.
+        """
+        original = _create_invalid_argument_error()
+        api = _make_api(rpc_call=AsyncMock(side_effect=original))
+        _set_account_limit(api, 500)
+        owned_and_shared = _owned_but_shared_notebooks(500)
+        assert all(nb.role is SharePermission.OWNER for nb in owned_and_shared)
+        api.list = AsyncMock(return_value=owned_and_shared)
+
+        with pytest.raises(NotebookLimitError) as exc_info:
+            await api.create("At Paid Limit")
+
+        assert exc_info.value.current_count == 500
+
+    @pytest.mark.asyncio
+    async def test_quota_check_counts_rows_with_no_stated_role(self):
+        """An unstated role counts as owned — matching ``is_owner``'s soft-degrade.
+
+        Pinned deliberately: it means widespread protocol drift would inflate
+        ``owned_count`` rather than deflate it. That direction is the safe one
+        here — this path only runs to reclassify an already-failed create, so
+        the worst case is a more specific error message, never a blocked create.
+        """
+        api = _make_api(rpc_call=AsyncMock(side_effect=_create_invalid_argument_error()))
+        _set_account_limit(api, 500)
+        unstated = [Notebook(id=f"nb_{i}", title=f"N{i}") for i in range(500)]
+        assert all(nb.role is None for nb in unstated)
+        api.list = AsyncMock(return_value=unstated)
+
+        with pytest.raises(NotebookLimitError) as exc_info:
+            await api.create("Unknown Roles")
+
+        assert exc_info.value.current_count == 500
+
+    @pytest.mark.asyncio
+    async def test_quota_check_excludes_notebooks_shared_with_the_user(self):
+        """Notebooks owned by *someone else* still must not count toward quota."""
+        api = _make_api(rpc_call=AsyncMock(side_effect=_create_invalid_argument_error()))
+        _set_account_limit(api, 500)
+        api.list = AsyncMock(return_value=_owned_notebooks(100) + _shared_notebooks(400))
+
+        with pytest.raises(RPCError) as exc_info:
+            await api.create("Mostly Someone Else's")
+
+        assert not isinstance(exc_info.value, NotebookLimitError)
 
     @pytest.mark.asyncio
     async def test_create_invalid_argument_at_paid_limit_raises_limit_error(self):
@@ -537,6 +720,72 @@ class TestCreateNotebookQuotaDetection:
             [None, [1, None, None, None, None, None, None, None, None, None, [1]]],
             source_path="/",
         )
+
+
+class TestUpdateNotebook:
+    @pytest.mark.asyncio
+    async def test_rename_preserves_title_only_wire_shape(self) -> None:
+        rpc_call = AsyncMock(
+            side_effect=[
+                None,
+                [["Renamed", None, "nb-1", "", None, None, None, None]],
+            ]
+        )
+        api = _make_api(rpc_call=rpc_call)
+
+        await api.rename("nb-1", "Renamed")
+
+        assert rpc_call.await_args_list[0].args[1] == [
+            "nb-1",
+            [[None, None, None, [None, "Renamed"]]],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_set_emoji_uses_change_property_tag_three(self) -> None:
+        rpc_call = AsyncMock(
+            side_effect=[
+                None,
+                [["Notebook", None, "nb-1", "🧬", None, None, None, None]],
+            ]
+        )
+        api = _make_api(rpc_call=rpc_call)
+
+        notebook = await api.set_emoji("nb-1", "🧬")
+
+        assert notebook.emoji == "🧬"
+        first = rpc_call.await_args_list[0]
+        assert first.args == (
+            RPCMethod.RENAME_NOTEBOOK,
+            ["nb-1", [[None, None, None, [None, None, "🧬"]]]],
+        )
+        assert first.kwargs == {"source_path": "/", "allow_null": True}
+
+    @pytest.mark.asyncio
+    async def test_update_title_and_emoji_in_one_mutation(self) -> None:
+        rpc_call = AsyncMock(
+            side_effect=[
+                None,
+                [["Renamed", None, "nb-1", "📖", None, None, None, None]],
+            ]
+        )
+        api = _make_api(rpc_call=rpc_call)
+
+        notebook = await api.update("nb-1", title="Renamed", emoji="📖")
+
+        assert (notebook.title, notebook.emoji) == ("Renamed", "📖")
+        assert rpc_call.await_args_list[0].args[1] == [
+            "nb-1",
+            [[None, None, None, [None, "Renamed", "📖"]]],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_update_requires_at_least_one_property(self) -> None:
+        api = _make_api()
+
+        with pytest.raises(ValidationError, match="At least one"):
+            await api.update("nb-1")
+
+        api._rpc.rpc_call.assert_not_awaited()
 
 
 class TestGetNotebookFailsClosed:

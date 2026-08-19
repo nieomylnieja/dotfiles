@@ -52,7 +52,7 @@ import notebooklm.cli.services.session_context as session_context_module
 import notebooklm.cli.session_cmd as session_cmd
 import notebooklm.paths as paths_module
 from notebooklm.notebooklm_cli import cli
-from notebooklm.types import Notebook
+from notebooklm.types import Notebook, SharePermission
 from tests._fixtures import patch_session_login_dual
 
 from .conftest import create_mock_client, inject_client
@@ -248,6 +248,7 @@ class TestUseCharacterization:
                 title="JSON Char Notebook",
                 created_at=datetime(2024, 2, 1),
                 is_owner=False,
+                role=SharePermission.VIEWER,
             )
         )
         with (
@@ -276,7 +277,9 @@ class TestUseCharacterization:
                 "id": "nb_json_001",
                 "title": "JSON Char Notebook",
                 "is_owner": False,
+                "role": "viewer",
                 "created_at": "2024-02-01T00:00:00",
+                "last_viewed_at": None,
                 "modified_at": None,
             },
         }
@@ -351,6 +354,7 @@ class TestStatusCharacterization:
                     "notebook_id": "nb_status_2",
                     "title": "Status Notebook 2",
                     "is_owner": False,
+                    "role": "viewer",
                     "created_at": "2024-04-05",
                     "conversation_id": "conv_xyz",
                 }
@@ -365,6 +369,7 @@ class TestStatusCharacterization:
                 "id": "nb_status_2",
                 "title": "Status Notebook 2",
                 "is_owner": False,
+                "role": "viewer",
             },
             "conversation_id": "conv_xyz",
         }

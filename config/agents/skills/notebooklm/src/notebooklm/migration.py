@@ -214,6 +214,27 @@ def _migrate_to_profiles_locked(home: Path) -> bool:
     # Update config.json with default_profile
     _set_default_profile_in_config()
 
+    # Promote a legacy account record in-band while we are here, so the layout
+    # migration finishes the whole job (layout AND account unified) in one
+    # pass rather than leaving the account half for the next reader.
+    #
+    # This is a completeness nicety, not a correctness requirement, and NOT a
+    # general durable-promotion backstop for anyone else: this function only
+    # runs for a pre-v0.5.0 two-file HOME layout, so profiles created after
+    # that (and the ``NOTEBOOKLM_AUTH_JSON`` env-auth path) never reach it.
+    # Durable promotion for every other profile hangs off the read path itself
+    # (``storage._schedule_legacy_promotion``); correctness for all of them
+    # hangs off neither, because ``read_account_metadata`` derives the same
+    # record read-only. Best-effort — never fails the migration.
+    migrated_storage = default_dir / "storage_state.json"
+    if migrated_storage.exists():
+        from ._auth.storage import promote_legacy_account  # local: keep import cost off startup
+
+        try:
+            promote_legacy_account(migrated_storage)
+        except Exception as e:  # noqa: BLE001 — migration must not fail on promotion
+            logger.debug("legacy account promotion during migration skipped: %s", e)
+
     # Write marker LAST — signals that migration is fully complete.
     # If the process dies before this point, next run retries (safe because
     # copies use exist_ok/rmtree and originals may already be gone).

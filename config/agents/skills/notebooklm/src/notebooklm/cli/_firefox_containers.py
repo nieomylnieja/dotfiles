@@ -5,13 +5,13 @@ Ports yt-dlp's Firefox Multi-Account Container handling
 so callers can target a single container instead of getting every container's
 cookies merged into one jar.
 
-``rookiepy.firefox`` selects ``moz_cookies`` without filtering on
+``rookie_cookies.firefox`` selects ``moz_cookies`` without filtering on
 ``originAttributes``, which silently merges cookies from every Firefox
 Multi-Account Container plus the no-container default into a single return.
 For users who isolate their Google session in a container (a common privacy
 pattern), that produces an inconsistent / wrong session and no warning.
 
-This module bypasses ``rookiepy`` for Firefox when the user requests a
+This module bypasses ``rookie_cookies`` for Firefox when the user requests a
 specific container via ``--browser-cookies 'firefox::<name>'`` (or
 ``firefox::none`` for the explicit no-container default).
 
@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import configparser
 import json
+import logging
 import re
 import shutil
 import sqlite3
@@ -47,6 +48,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
+
+logger = logging.getLogger(__name__)
 
 # ``"none"`` is a sentinel for the no-container default. An ``int`` selects a
 # specific container by ``userContextId``. ``None`` means "no filter at all"
@@ -346,24 +349,32 @@ def _firefox_db_uses_millisecond_expiry(cursor: sqlite3.Cursor) -> bool:
         return False
 
 
-def _row_to_rookiepy_dict(row: tuple[Any, ...], *, expiry_in_ms: bool) -> dict[str, Any]:
-    """Reshape a ``moz_cookies`` row into a rookiepy-compatible dict.
+def _row_to_rookie_cookies_dict(row: tuple[Any, ...], *, expiry_in_ms: bool) -> dict[str, Any]:
+    """Reshape a ``moz_cookies`` row into a rookie-cookies-compatible dict.
 
     Columns match the SELECT in :func:`_select_for_container` exactly:
     ``(host, name, value, path, expiry, isSecure, isHttpOnly, sameSite)``.
 
-    rookiepy's Firefox path emits the same shape (verified against rookiepy
-    0.5.6), so the resulting list can flow into
-    :func:`notebooklm.auth.convert_rookiepy_cookies_to_storage_state`
-    unchanged.
+    The output keys match rookie-cookies' Firefox row shape, so the result
+    can flow into :func:`notebooklm.auth.convert_rookiepy_cookies_to_storage_state`
+    unchanged, but the ``expires`` *value* is not a blind passthrough:
+    ``moz_cookies.expiry`` uses ``0`` as Firefox's "session cookie, no
+    persistent expiry" sentinel (rookie-cookies maps this to ``None``), and
+    schema version >= 16 stores it in milliseconds rather than seconds.
     """
     host, name, value, path, expiry, is_secure, is_http_only, same_site = row
-    if expiry_in_ms and expiry is not None:
+    if expiry == 0:
+        expiry = None
+    elif expiry_in_ms and expiry is not None:
         try:
             expiry = expiry // 1000
         except TypeError:
-            # best-effort: cookie expiry is non-numeric; leave as-is.
-            pass
+            logger.warning(
+                "Firefox cookie %r on %r has non-numeric expiry %r; leaving as-is",
+                name,
+                host,
+                expiry,
+            )
     return {
         "domain": host or "",
         "name": name or "",
@@ -436,7 +447,7 @@ def extract_firefox_container_cookies(
         expiry_in_ms = _firefox_db_uses_millisecond_expiry(cursor)
         rows = _select_for_container(cursor, container_id)
 
-    cookies = [_row_to_rookiepy_dict(row, expiry_in_ms=expiry_in_ms) for row in rows]
+    cookies = [_row_to_rookie_cookies_dict(row, expiry_in_ms=expiry_in_ms) for row in rows]
 
     if domains is None:
         return cookies

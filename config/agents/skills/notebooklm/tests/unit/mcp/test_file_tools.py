@@ -42,7 +42,10 @@ from notebooklm.mcp._filelink import (  # noqa: E402 - after importorskip guard
     FileTransferConfig,
 )
 from notebooklm.mcp.server import create_server  # noqa: E402 - after importorskip guard
-from notebooklm.rpc.types import SourceStatus  # noqa: E402 - after importorskip guard
+from notebooklm.rpc.types import (  # noqa: E402 - after importorskip guard
+    DriveSourceStatus,
+    SourceStatus,
+)
 from notebooklm.types import Artifact, ArtifactType  # noqa: E402 - after importorskip guard
 
 from .conftest import AsyncMock  # noqa: E402 - after importorskip guard
@@ -94,6 +97,14 @@ class FakeReadyPdf:
     @property
     def status(self) -> SourceStatus:
         return SourceStatus.READY
+
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return None
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
 
 
 @pytest.fixture

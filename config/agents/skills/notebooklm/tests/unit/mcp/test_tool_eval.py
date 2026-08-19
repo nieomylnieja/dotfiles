@@ -31,8 +31,26 @@ pytest.importorskip("fastmcp")
 #: to ~36.0k). Move these DOWN as the surface gets leaner; a rise means
 #: description/param bloat that must be justified, not rubber-stamped.
 SCHEMA_CHAR_BUDGET = (
-    39_050  # total serialized inputSchema + description chars (current 39_015; +35 slack)
+    39_400  # total serialized inputSchema + description chars (current 39_377; +23 slack)
 )
+# #2129 added the genuine listable FANTASY_MAP and FILE artifact types to the
+# `studio_list.kind` enum. Their two required enum strings move the surface from
+# 39_349 to 39_377 (+28); ratcheted to 39_400 with the existing ~20-char slack.
+# #2111 (Drive-backed source health) added `drive_status_label` to the `source_list`
+# / `source_read` roster descriptions plus the two sentences an agent needs to act on
+# it: that it is a SEPARATE axis from `status_label`, and that a deleted/unshared
+# Drive file keeps reading `status_label="ready"` because ingestion did finish. That
+# is the whole point of the field — emitting it without saying what it means would
+# leave the signal as invisible in practice as it was on the wire. Net 39_081 ->
+# 39_349 (+268) after trimming the first draft (~+516) by half. Ratcheted UP to
+# 39_370, keeping the ~20-char slack convention.
+# #1964 (Drive research termination reasons, merged to main independently of this
+# ratchet) added `research_status`'s `termination_reason` field + docstring
+# paragraph explaining the no_results/cancelled/unknown split — genuine new
+# agent-facing information, not bloat. Net effect after that PR's own partial
+# docstring tightening: 39_015 -> 39_081 (+66), breaching the prior 39_050 cap by
+# 31. Ratcheted UP to 39_100 (not left at the exact 39_081 floor) so the modest
+# existing slack convention holds.
 # #1896 folded studio_get_prompt into studio_list (each artifact's generation_prompt
 # rides the default summary listing / the item= single-fetch), a net −1 tool and
 # −367 schema chars. Ratcheted DOWN from 39_400 to the new 39_015 actual (don't leave

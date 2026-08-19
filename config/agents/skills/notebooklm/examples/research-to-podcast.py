@@ -43,7 +43,7 @@ async def main(topic: str):
             status = await client.research.wait_for_completion(
                 nb.id,
                 task_id=task_id,
-                timeout=300,
+                timeout=1800,
                 interval=10,
             )
         except TimeoutError:

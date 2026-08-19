@@ -26,9 +26,28 @@ fragile because the source had no stable rationale to cite.
 ## Decision
 
 **Auth Instance Invariant.** `NotebookLMClient` keeps one authoritative
-`AuthTokens` object at
-`self._auth`, and all collaborators that need auth observe that object rather
-than a copied replacement. Refresh paths update the same object in place.
+`AuthTokens` object at `self._auth`, and all collaborators that need mutable
+request/account state observe that object rather than a copied replacement.
+Refresh paths update the same object in place.
+
+ADR-0032 narrows this invariant: it does **not** make `AuthTokens` a live-cookie
+authority. Client composition copies the cookie bootstrap projection once into
+the kernel, whose `httpx.Cookies` is the sole jar used by first-party transport,
+routing, recovery, and persistence paths. Runtime writes back to
+`AuthTokens.cookies` / `cookie_jar` only as a v0.x public compatibility service;
+no first-party post-open decision reads those shadows. The exact reader/write
+inventory is equality-pinned by `test_authtokens_jar_sync.py`.
+
+The single mutable identity remains load-bearing for responsibilities that the
+v1 successor must re-home before `AuthTokens` can be frozen:
+
+- refresh-mutated `csrf_token` and `session_id`;
+- the paired `authuser` / `account_email` route and its
+  `_profile_session_generation` CAS marker;
+- construction-normalized `storage_path` and the load-time `cookie_snapshot`
+  hand-off;
+- the temporary public cookie-shadow sync-back required during the v0.x
+  compatibility runway.
 
 `CORE_LOGGER_NAME` remains the literal string `"notebooklm._core"` even though
 there is no active `notebooklm._core` compatibility module. Treat the string as
@@ -45,6 +64,11 @@ Auth refresh remains identity-sensitive: construction may normalize
 construction, but once `self._auth` is set, runtime collaborators must alias
 that object. Tests that validate auth propagation should assert identity where
 identity is the contract, not only value equality.
+
+Cookie ownership is deliberately different: the kernel retains the exact
+transport jar across close/reopen rather than relying on the public AuthTokens
+shadow. Network-free account-email resolution therefore works before open and
+after close without reviving AuthTokens as a routing dependency.
 
 Logging refactors must not rename the core logger casually. A future rename
 requires a compatibility plan that preserves or deliberately deprecates filters

@@ -56,7 +56,11 @@ class TestParseGenerationResultHappyPath:
     """Real response shape parses successfully when ``method_id`` is supplied."""
 
     def test_create_artifact_real_shape(self, artifacts_api):
-        """CREATE_ARTIFACT response: [[task_id, title, type_code, None, status]]."""
+        """CREATE_ARTIFACT response: [[task_id, title, type_code, None, status]].
+
+        The captured status is code 1 (``ARTIFACT_STATUS_INITIALIZED``) — the
+        row exists but the worker has not started, i.e. ``"pending"`` (#2127).
+        """
         result = [["task_abc", "Audio Overview", 1, None, 1]]
 
         status = artifacts_api._parse_generation_result(
@@ -64,7 +68,7 @@ class TestParseGenerationResultHappyPath:
         )
 
         assert status.task_id == "task_abc"
-        assert status.status == "in_progress"
+        assert status.status == "pending"
         assert status.error is None
 
     def test_revise_slide_real_shape(self, artifacts_api):

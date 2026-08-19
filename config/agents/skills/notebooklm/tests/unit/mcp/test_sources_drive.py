@@ -18,7 +18,10 @@ from fastmcp.exceptions import ToolError  # noqa: E402 - after importorskip guar
 
 from notebooklm._types.sources import SourceType  # noqa: E402 - after importorskip guard
 from notebooklm.exceptions import ValidationError  # noqa: E402 - after importorskip guard
-from notebooklm.rpc.types import SourceStatus  # noqa: E402 - after importorskip guard
+from notebooklm.rpc.types import (  # noqa: E402 - after importorskip guard
+    DriveSourceStatus,
+    SourceStatus,
+)
 
 from .conftest import AsyncMock  # noqa: E402 - after importorskip guard
 
@@ -48,6 +51,14 @@ class FakeSource:
     def status(self) -> SourceStatus:
         return SourceStatus.READY
 
+    @property
+    def drive_status(self) -> DriveSourceStatus | None:
+        return DriveSourceStatus.ACTIVE
+
+    @property
+    def is_drive_degraded(self) -> bool:
+        return False
+
 
 async def test_source_add_drive_file_happy_path(mcp_call, mock_client) -> None:
     mock_client.sources.add_drive_file = AsyncMock(return_value=FakeSource(id=SRC_ID, title="Book"))
@@ -59,7 +70,14 @@ async def test_source_add_drive_file_happy_path(mcp_call, mock_client) -> None:
         "status": "added",
         "notebook_id": NB_ID,
         "document_id": FILE_ID,
-        "source": {"id": SRC_ID, "title": "Book", "kind": "epub", "status_label": "ready"},
+        "source": {
+            "id": SRC_ID,
+            "title": "Book",
+            "kind": "epub",
+            "status_label": "ready",
+            "drive_status_label": "active",
+            "is_drive_degraded": False,
+        },
     }
     mock_client.sources.add_drive_file.assert_awaited_once_with(
         NB_ID, FILE_ID, title="Book", wait=False, wait_timeout=120.0

@@ -430,7 +430,7 @@ class ArtifactsAPI:
         Re-runs generation for an already-failed artifact without deleting it
         first; the same ``artifact_id`` is preserved as the task id, so existing
         :meth:`poll_status` / :meth:`wait_for_completion` flows keep working. An
-        accepted retry returns ``GenerationStatus(status="in_progress")``.
+        accepted retry returns ``GenerationStatus(status="pending")`` (#2127).
 
         Follows the ADR-0019 "async kickoff" contract: a synchronous
         ``USER_DISPLAYABLE_ERROR`` refusal (rate limit, quota, non-retryable
@@ -734,7 +734,6 @@ class ArtifactsAPI:
             list_raw=self._list_raw,
             is_media_ready=self._is_media_ready,
             get_artifact_type_name=self._get_artifact_type_name,
-            extract_artifact_error=self._extract_artifact_error,
         )
 
     async def wait_for_completion(
@@ -969,17 +968,6 @@ class ArtifactsAPI:
         the implementation lives on :class:`ArtifactGenerationService`.
         """
         return self._generation._parse_generation_result(result, method_id=method_id, source=source)
-
-    @staticmethod
-    def _extract_artifact_error(art: builtins.list[Any]) -> str | None:
-        """Extract a human-readable error from a failed artifact, or ``None``.
-
-        Google's batchexecute responses embed error info in varying positions;
-        this walks known (reverse-engineered) locations and returns the first
-        non-empty string. ``art[3]`` sometimes holds an error reason string;
-        ``art[5]`` may hold a nested UserDisplayableError-style payload.
-        """
-        return _artifact_polling._extract_artifact_error(art)
 
     def _get_artifact_type_name(self, artifact_type: int) -> str:
         """Human-readable name for an ``ArtifactTypeCode``, else the raw int as str."""

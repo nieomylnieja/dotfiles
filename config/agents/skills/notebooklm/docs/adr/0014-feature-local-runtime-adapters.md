@@ -154,8 +154,8 @@ class ArtifactsRuntimeAdapter:
     """
 
     rpc: RpcCaller
-    drain: TransportDrainTracker     # satisfies OperationScopeProvider + DrainHookRegistration after Wave 0.5
-    lifecycle: ClientLifecycle       # satisfies LoopGuard after Wave 0.5
+    drain: TransportDrainTracker  # satisfies OperationScopeProvider + DrainHookRegistration after Wave 0.5
+    lifecycle: ClientLifecycle  # satisfies LoopGuard after Wave 0.5
 
     async def rpc_call(self, *args: Any, **kwargs: Any) -> Any:
         return await self.rpc.rpc_call(*args, **kwargs)

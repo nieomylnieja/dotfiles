@@ -28,7 +28,7 @@
         [
           "wrb.fr",
           "wXbhsf",
-          "[[[\"Scrubbed Notebook One\",[[\"SCRUBBED_SRC_001\"]],\"SCRUBBED_NB_001\",\"\\ud83d\\udcd3\",null,[null,false,null,null,null,[1704153600,0],null,null,[1704067200,0]]],[\"Scrubbed Notebook Two\",[],\"SCRUBBED_NB_002\",\"\\ud83d\\udcd8\",null,[null,true,null,null,null,[1704240000,0],null,null,[1704067200,0]]]]]",
+          "[[[\"Scrubbed Notebook One\",[[\"SCRUBBED_SRC_001\"]],\"SCRUBBED_NB_001\",\"\\ud83d\\udcd3\",null,[1,false,null,null,null,[1704153600,0],null,null,[1704067200,0]]],[\"Scrubbed Notebook Two\",[],\"SCRUBBED_NB_002\",\"\\ud83d\\udcd8\",null,[3,true,null,null,null,[1704240000,0],null,null,[1704067200,0]]]]]",
           null,
           null,
           null,
@@ -50,7 +50,7 @@
           "📓",
           null,
           [
-            null,
+            1,
             false,
             null,
             null,
@@ -74,7 +74,7 @@
           "📘",
           null,
           [
-            null,
+            3,
             true,
             null,
             null,
@@ -221,7 +221,13 @@
       "created_at": "2024-01-01T00:00:00+00:00",
       "sources_count": 1,
       "is_owner": true,
-      "modified_at": "2024-01-02T00:00:00+00:00"
+      "modified_at": "2024-01-02T00:00:00+00:00",
+      "role": 1,
+      "last_viewed_at": "2024-01-02T00:00:00+00:00",
+      "emoji": "📓",
+      "premium_features": null,
+      "chat_sessions": [],
+      "chat_settings": null
     },
     {
       "id": "SCRUBBED_NB_002",
@@ -229,7 +235,13 @@
       "created_at": "2024-01-01T00:00:00+00:00",
       "sources_count": 0,
       "is_owner": false,
-      "modified_at": "2024-01-03T00:00:00+00:00"
+      "modified_at": "2024-01-03T00:00:00+00:00",
+      "role": 3,
+      "last_viewed_at": "2024-01-03T00:00:00+00:00",
+      "emoji": "📘",
+      "premium_features": null,
+      "chat_sessions": [],
+      "chat_settings": null
     }
   ]
 }

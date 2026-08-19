@@ -234,6 +234,7 @@ def test_json_stdout_routing_and_exit_codes_for_download_runtime(
 # (``agent show`` / ``skill install`` / ``profile``); the concrete commands
 # that actually carry ``--json`` today and bypass the error envelope are:
 JSON_CONTRACT_EXEMPTIONS: dict[str, str] = {
+    "auth inspect": "Diagnostic command: inspects browser accounts, no active auth tokens required.",
     "auth logout": "Local auth-state mutation: clears on-disk creds, no auth required.",
     "auth refresh": "Local keepalive: rotates/rewrites the on-disk cookie jar, not an auth-gated RPC.",
     "clear": "Local context reset: clears the active-notebook file, no auth required.",

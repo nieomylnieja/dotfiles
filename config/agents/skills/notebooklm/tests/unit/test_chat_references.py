@@ -49,7 +49,7 @@ class TestParseCitations:
                                         100,  # start_char
                                         200,  # end_char
                                         [  # nested passages
-                                            [[50, 100, "This is the cited text."]]
+                                            [[100, 200, ["This is the cited text."]]]
                                         ],
                                     ]
                                 ]
@@ -97,7 +97,7 @@ class TestParseCitations:
                             None,
                             0.9,
                             [[None]],
-                            [[[10, 50, [[[5, 20, "First passage."]]]]]],
+                            [[[10, 50, [[[10, 50, ["First passage."]]]]]]],
                             [[[["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]]]],
                             ["chunk-1"],
                         ],
@@ -110,7 +110,7 @@ class TestParseCitations:
                             None,
                             0.8,
                             [[None]],
-                            [[[60, 100, [[[55, 80, "Second passage."]]]]]],
+                            [[[60, 100, [[[60, 100, ["Second passage."]]]]]]],
                             [[[["11111111-2222-3333-4444-555555555555"]]]],
                             ["chunk-2"],
                         ],
@@ -182,7 +182,7 @@ class TestParseCitations:
                             None,
                             0.9,
                             [[None]],
-                            [[[10, 50, [[[[5, 20, "Some text."]]]]]]],
+                            [[[10, 50, [[[[5, 20, ["Some text."]]]]]]]],
                             [[[["not-a-valid-uuid"]]]],  # Invalid UUID
                             ["chunk-1"],
                         ],
@@ -488,7 +488,7 @@ class TestAskWithReferences:
                                 None,
                                 0.9,
                                 [[None]],
-                                [[[100, 200, [[[50, 100, "The cited passage."]]]]]],
+                                [[[100, 200, [[[100, 200, ["The cited passage."]]]]]]],
                                 [[[["abcdefab-1234-5678-9012-abcdefabcdef"]]]],
                                 ["chunk-id"],
                             ],
@@ -585,7 +585,7 @@ class TestAskWithReferences:
                                 None,
                                 0.9,
                                 [[None]],
-                                [[[10, 50, [[[5, 20, "First text."]]]]]],
+                                [[[10, 50, [[[10, 50, ["First text."]]]]]]],
                                 [[[["aaaaaaaa-1234-5678-9012-abcdefabcdef"]]]],
                                 ["chunk-1"],
                             ],
@@ -598,7 +598,7 @@ class TestAskWithReferences:
                                 None,
                                 0.8,
                                 [[None]],
-                                [[[60, 100, [[[55, 80, "Second text."]]]]]],
+                                [[[60, 100, [[[60, 100, ["Second text."]]]]]]],
                                 [[[["aaaaaaaa-1234-5678-9012-abcdefabcdef"]]]],
                                 ["chunk-2"],
                             ],
@@ -663,7 +663,7 @@ class TestMultiChunkReferenceInflation:
                                 None,
                                 0.9,
                                 [[None]],
-                                [[[10, 50, [[[5, 20, f"Text from {chunk_id}."]]]]]],
+                                [[[10, 50, [[[10, 50, [f"Text from {chunk_id}."]]]]]]],
                                 [[[[source_id]]]],
                                 [chunk_id],
                             ],

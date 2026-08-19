@@ -32,16 +32,28 @@ import json
 
 import pytest
 
-from notebooklm._row_adapters.artifacts import ArtifactRow, ReportSuggestionRow
+from notebooklm._artifact.payloads import (
+    build_flashcards_artifact_params,
+    build_quiz_artifact_params,
+)
+from notebooklm._row_adapters.artifacts import ArtifactRow, QuizOptionPair, ReportSuggestionRow
 from notebooklm._row_adapters.notes import NoteRow
 from notebooklm._row_adapters.sources import (
     SourceRow,
     SourceRowShape,
+    _warned_status_codes,
     interpret_source_freshness,
 )
 from notebooklm._types.common import _datetime_from_timestamp
 from notebooklm.exceptions import DecodingError, UnknownRPCMethodError
-from notebooklm.rpc.types import ArtifactStatus, ArtifactTypeCode, SourceStatus
+from notebooklm.rpc.types import (
+    ArtifactStatus,
+    ArtifactTypeCode,
+    QuizDifficulty,
+    QuizQuantity,
+    SourceStatus,
+    artifact_status_to_str,
+)
 
 # ---------------------------------------------------------------------------
 # 1. Position-contract pin (the canary)
@@ -65,14 +77,8 @@ class TestPositionContract:
     def test_type_position_is_2(self) -> None:
         assert ArtifactRow._TYPE_POS == 2
 
-    def test_error_text_position_is_3(self) -> None:
-        assert ArtifactRow._ERROR_TEXT_POS == 3
-
     def test_status_position_is_4(self) -> None:
         assert ArtifactRow._STATUS_POS == 4
-
-    def test_error_payload_position_is_5(self) -> None:
-        assert ArtifactRow._ERROR_PAYLOAD_POS == 5
 
     def test_audio_metadata_position_is_6(self) -> None:
         assert ArtifactRow._AUDIO_METADATA_POS == 6
@@ -85,6 +91,27 @@ class TestPositionContract:
 
     def test_options_position_is_9(self) -> None:
         assert ArtifactRow._OPTIONS_POS == 9
+
+    def test_options_block_inner_positions(self) -> None:
+        """The leaves inside ``data[9]`` (#2195).
+
+        ``AppArtifact.generationOptions`` is tag 2, and inside it ``appType``
+        is 1, ``flashcardsGenerationOptions`` 7 and ``quizGenerationOptions``
+        8 — each ``tag - 1`` here, asserted against ``docs/mobile/schema.proto``
+        in ``tests/_guardrails/test_wire_contract.py``.
+        """
+        assert (
+            ArtifactRow._GENERATION_OPTIONS_POS,
+            ArtifactRow._APP_TYPE_POS,
+            ArtifactRow._FLASHCARDS_OPTIONS_POS,
+            ArtifactRow._QUIZ_OPTIONS_POS,
+        ) == (1, 0, 6, 7)
+
+    def test_option_pair_positions_are_quantity_then_difficulty(self) -> None:
+        """Quantity FIRST. This is the ordering #2116 got backwards on the
+        encode side; the decode side must not repeat it."""
+        assert ArtifactRow._OPTION_QUANTITY_POS == 0
+        assert ArtifactRow._OPTION_DIFFICULTY_POS == 1
 
     def test_infographic_metadata_position_is_14(self) -> None:
         assert ArtifactRow._INFOGRAPHIC_METADATA_POS == 14
@@ -106,9 +133,7 @@ class TestPositionContract:
             ArtifactRow._ID_POS,
             ArtifactRow._TITLE_POS,
             ArtifactRow._TYPE_POS,
-            ArtifactRow._ERROR_TEXT_POS,
             ArtifactRow._STATUS_POS,
-            ArtifactRow._ERROR_PAYLOAD_POS,
             ArtifactRow._AUDIO_METADATA_POS,
             ArtifactRow._REPORT_MARKDOWN_POS,
             ArtifactRow._VIDEO_METADATA_POS,
@@ -117,7 +142,10 @@ class TestPositionContract:
             ArtifactRow._TIMESTAMP_POS,
             ArtifactRow._SLIDE_DECK_METADATA_POS,
             ArtifactRow._DATA_TABLE_PAYLOAD_POS,
-        ) == (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 18)
+        ) == (0, 1, 2, 4, 6, 7, 8, 9, 14, 15, 16, 18)
+        # 3 and 5 are absent on purpose: they are `sources` and
+        # `isPubliclyReadable`, not the error slots the adapter used to claim
+        # (#2134). Nothing reads them, so nothing pins them.
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +226,23 @@ class TestRequiredPositionsAcceptShortRows:
         row = ArtifactRow(["id", "title", 1, None, None])
         assert row.status == 0
 
+    def test_synthetic_zero_is_indistinguishable_from_backend_unknown(self) -> None:
+        """Pins the consequence #2127 accepted rather than fixed.
+
+        Modeling ``ArtifactStatus.UNKNOWN = 0`` means the ``0`` this adapter
+        synthesizes for a truncated or non-int status leaf now resolves to a
+        real member — where ``ArtifactStatus(...)`` used to raise ``ValueError``
+        and thereby signal a malformed row. The documented clean fix is to
+        narrow this property to ``int | None``; until then this test makes the
+        accepted conflation visible, and will fail (correctly) when someone
+        does narrow it.
+        """
+        truncated = ArtifactRow(["id", "title"])
+        non_int_leaf = ArtifactRow(["id", "title", 1, None, "not-a-code"])
+        for row in (truncated, non_int_leaf):
+            assert ArtifactStatus(row.status) is ArtifactStatus.UNKNOWN
+            assert artifact_status_to_str(row.status) == "unknown"
+
     def test_minimal_row_no_variant_no_timestamp(self) -> None:
         """The smallest meaningful row: positions 0..4 present, 9 and 15 absent."""
         row = ArtifactRow(["art_minimal", "Audio", 1, None, 3])
@@ -241,6 +286,280 @@ class TestVariantDescent:
         raw[ArtifactRow._OPTIONS_POS] = [None, ["not_an_int"]]
         row = ArtifactRow(raw)
         assert row.variant is None
+
+
+#: Two rows captured verbatim from a live ``LIST_ARTIFACTS`` response (#2195),
+#: for a scratch notebook created and deleted in the same run. Both artifacts
+#: were requested with the SAME asymmetric pair — ``quantity=FEWER(1)``,
+#: ``difficulty=HARD(3)`` — so a transposed read decodes as ``(3, 1)`` and is
+#: detectable. A symmetric pair could not distinguish the two, which is exactly
+#: how #2116 hid (and why pairing ``MORE`` with ``HARD`` is banned here: both
+#: are ``3`` under ``int``-Enum comparison).
+#:
+#: Captured, not synthesised, on purpose: a fixture written from the code's
+#: belief about the wire can only ever confirm that belief.
+_LIVE_FLASHCARDS_ROW: list = [
+    "03124504-a1a6-4357-97b0-f2cfc4ee10fd",
+    "Photosynthesis Flashcards",
+    4,
+    [[["06bbfd9c-17bf-4372-ac86-a3dfaaf880bb"], None, 4]],
+    3,
+    None,
+    None,
+    None,
+    None,
+    ["", [1, None, None, "en", None, None, [1, 3], None, True]],
+    [1786619721, 886749000],
+    None,
+    None,
+    None,
+    None,
+    [1786619697, 143474000],
+    None,
+    [None, None, None, None, True],
+    None,
+    1,
+    None,
+    "MTc4NjYxOTcyMS04ODY3NDkwMDA=",
+]
+
+_LIVE_QUIZ_ROW: list = [
+    "8116e9aa-f6ac-4586-8bae-0d36f59ab283",
+    "Photosynthesis Quiz",
+    4,
+    [[["06bbfd9c-17bf-4372-ac86-a3dfaaf880bb"], None, 4]],
+    2,
+    None,
+    None,
+    None,
+    None,
+    ["", [2, None, None, "en", None, None, None, [1, 3], True]],
+    [1786619698, 906408000],
+    None,
+    None,
+    None,
+    None,
+    [1786619698, 709194000],
+    None,
+    [None, None, None, None, True],
+    None,
+    1,
+    None,
+    "MTc4NjYxOTY5OC05MDY0MDgwMDA=",
+]
+
+
+class TestQuizOptionEcho:
+    """``data[9][1][6]`` / ``data[9][1][7]`` — the server's echo of the stored
+    ``[quantity, difficulty]`` pair (#2195).
+
+    Before this accessor existed, nothing in the client read the option pair
+    back, so a transposed or mis-valued pair was caught only by fixtures we
+    wrote ourselves — the structural reason #2116 and #2117 survived. These
+    tests decode rows captured from the live backend; the e2e round-trip
+    (``tests/e2e/test_generation.py``) closes the loop against a fresh
+    generation.
+    """
+
+    def test_flashcards_pair_decoded_from_a_live_row(self) -> None:
+        row = ArtifactRow(_LIVE_FLASHCARDS_ROW)
+        assert row.variant == 1  # APP_TYPE_FLASHCARDS
+        assert row.flashcards_options == QuizOptionPair(quantity=1, difficulty=3)
+
+    def test_quiz_pair_decoded_from_a_live_row(self) -> None:
+        row = ArtifactRow(_LIVE_QUIZ_ROW)
+        assert row.variant == 2  # APP_TYPE_QUIZ
+        assert row.quiz_options == QuizOptionPair(quantity=1, difficulty=3)
+
+    def test_pair_compares_against_the_client_enums(self) -> None:
+        """The raw codes compare equal to the enum members callers hold.
+
+        Asserted field-by-field: an equality against a 2-tuple would be
+        satisfied by a transposed decode of a symmetric pair, and this is the
+        assertion downstream tests are most likely to copy.
+        """
+        options = ArtifactRow(_LIVE_FLASHCARDS_ROW).flashcards_options
+        assert options is not None
+        assert options.quantity == QuizQuantity.FEWER
+        assert options.difficulty == QuizDifficulty.HARD
+        assert options.quantity != QuizQuantity.MORE
+        assert options.difficulty != QuizDifficulty.EASY
+
+    def test_each_family_reads_only_its_own_slot(self) -> None:
+        """A quiz row leaves the flashcards slot null and vice versa.
+
+        This is what makes the two accessors independent: reading the wrong
+        slot would return ``None`` rather than the sibling's pair, so a
+        crossed-wires accessor cannot silently look correct.
+        """
+        assert ArtifactRow(_LIVE_FLASHCARDS_ROW).quiz_options is None
+        assert ArtifactRow(_LIVE_QUIZ_ROW).flashcards_options is None
+
+    def test_empty_options_message_reads_as_unspecified(self) -> None:
+        """A ``[0, 0]`` (proto3 default) request echoes back as ``[]``.
+
+        Live-observed: default-valued proto fields are dropped from the JSON
+        encoding, so "unspecified" arrives as an empty list rather than
+        ``[0, 0]``. It is present-but-unset, which is not the same as absent.
+        """
+        raw = json.loads(json.dumps(_LIVE_FLASHCARDS_ROW))
+        raw[ArtifactRow._OPTIONS_POS][1][6] = []
+        assert ArtifactRow(raw).flashcards_options == QuizOptionPair(quantity=None, difficulty=None)
+
+    @pytest.mark.parametrize(
+        ("description", "row"),
+        [
+            ("short row without position 9", ["id", "title", 4, None, 3]),
+            ("options block is None", _full_row(type_code=ArtifactTypeCode.QUIZ, variant=None)),
+            (
+                "generation options too short for the slots",
+                ["id", "title", 4, None, 3, None, None, None, None, ["", [1, None]]],
+            ),
+            (
+                "option slot is null (the other family's row)",
+                [
+                    "id",
+                    "title",
+                    4,
+                    None,
+                    3,
+                    None,
+                    None,
+                    None,
+                    None,
+                    ["", [1, None, None, "en", None, None, None, None]],
+                ],  # fmt: skip
+            ),
+        ],
+    )
+    def test_absent_or_unusable_slots_return_none(self, description: str, row: list) -> None:
+        assert ArtifactRow(row).flashcards_options is None, description
+
+    @pytest.mark.parametrize(
+        ("description", "generation_options"),
+        [
+            ("option slot holds a scalar", [1, None, None, "en", None, None, 3, None]),
+            ("option slot holds a dict", [1, None, None, "en", None, None, {"a": 1}, None]),
+        ],
+    )
+    def test_malformed_option_container_raises(
+        self, description: str, generation_options: list
+    ) -> None:
+        """A present-but-wrong-shaped option slot is drift, not absence.
+
+        The distinction this pins: ``null`` at the slot means "this row is not
+        that family" and must stay soft, but a scalar or dict there means the
+        message changed shape. Returning ``None`` for both would make a
+        reshaped payload indistinguishable from an unset option — in the one
+        accessor whose whole job is reporting what the server stored.
+        """
+        row = ["id", "title", 4, None, 3, None, None, None, None, ["", generation_options]]
+        with pytest.raises(UnknownRPCMethodError):
+            _ = ArtifactRow(row).flashcards_options, description
+
+    def test_malformed_generation_options_container_raises(self) -> None:
+        """Same policy one level up, at ``data[9][1]`` itself."""
+        row = ["id", "title", 4, None, 3, None, None, None, None, ["", 7]]
+        with pytest.raises(UnknownRPCMethodError):
+            _ = ArtifactRow(row).flashcards_options
+
+    def test_null_generation_options_stays_soft(self) -> None:
+        """``data[9][1] = null`` is a genuine absence, not drift."""
+        row = ["id", "title", 4, None, 3, None, None, None, None, ["", None]]
+        assert ArtifactRow(row).flashcards_options is None
+
+    def test_non_int_codes_degrade_to_none(self) -> None:
+        """Strings and bools at the option leaves are not codes.
+
+        ``True`` matters specifically: ``isinstance(True, int)`` is ``True`` in
+        Python, and the row genuinely carries a bool two slots later, so an
+        unguarded read would happily decode ``difficulty=True``.
+        """
+        raw = json.loads(json.dumps(_LIVE_FLASHCARDS_ROW))
+        raw[ArtifactRow._OPTIONS_POS][1][6] = ["fewer", True]
+        assert ArtifactRow(raw).flashcards_options == QuizOptionPair(quantity=None, difficulty=None)
+
+    def test_reshaped_options_block_raises(self) -> None:
+        """A present-but-reshaped ``data[9]`` is drift, not absence.
+
+        Matches ``variant``'s policy: once the options block is a list, the
+        descent to ``[1]`` goes through ``safe_index``, which is strict-only
+        since v0.7.0 (ADR-0011). A block missing the generation-options element
+        entirely means Google reshaped it — the exact signal the adapter exists
+        to raise rather than swallow.
+        """
+        raw = json.loads(json.dumps(_LIVE_FLASHCARDS_ROW))
+        raw[ArtifactRow._OPTIONS_POS] = [""]
+        with pytest.raises(UnknownRPCMethodError):
+            _ = ArtifactRow(raw).flashcards_options
+
+
+class TestOptionPairRoundTrip:
+    """The payload the builders SEND decodes back to the options requested.
+
+    This is the encode↔decode loop #2116 lacked. It is only meaningful because
+    the decode positions are pinned independently of the encode positions —
+    against ``docs/mobile/schema.proto`` in
+    ``tests/_guardrails/test_wire_contract.py`` and against a live capture in
+    ``TestQuizOptionEcho`` — so this cannot pass by two mistakes agreeing.
+
+    Transposing either builder fails these.
+    """
+
+    @staticmethod
+    def _echo_row(variant: int, slot: int, pair: list) -> list:
+        """Wrap a sent pair in the row shape the backend echoes it back in."""
+        row: list = ["art_id", "Title", 4, None, 3, None, None, None, None]
+        generation_options: list = [variant, None, None, "en", None, None, None, None, True]
+        generation_options[slot] = pair
+        row.append(["", generation_options])
+        return row
+
+    def test_quiz_builder_pair_round_trips(self) -> None:
+        params = build_quiz_artifact_params(
+            "nb",
+            ["src"],
+            instructions=None,
+            quantity=QuizQuantity.FEWER,
+            difficulty=QuizDifficulty.HARD,
+        )
+        sent = params[2][9][1][7]
+        row = ArtifactRow(self._echo_row(2, ArtifactRow._QUIZ_OPTIONS_POS, sent))
+        assert row.quiz_options == QuizOptionPair(
+            quantity=QuizQuantity.FEWER.value, difficulty=QuizDifficulty.HARD.value
+        )
+
+    def test_flashcards_builder_pair_round_trips(self) -> None:
+        params = build_flashcards_artifact_params(
+            "nb",
+            ["src"],
+            instructions=None,
+            quantity=QuizQuantity.FEWER,
+            difficulty=QuizDifficulty.HARD,
+        )
+        sent = params[2][9][1][6]
+        row = ArtifactRow(self._echo_row(1, ArtifactRow._FLASHCARDS_OPTIONS_POS, sent))
+        assert row.flashcards_options == QuizOptionPair(
+            quantity=QuizQuantity.FEWER.value, difficulty=QuizDifficulty.HARD.value
+        )
+
+    def test_builders_write_the_slots_the_adapter_reads(self) -> None:
+        """The encode and decode sides agree on WHICH slot each family uses.
+
+        A builder writing the sibling's slot would still round-trip above if
+        the test wrapped whatever it produced; this pins the positions.
+        """
+        quiz = build_quiz_artifact_params(
+            "nb", ["src"], instructions=None, quantity=None, difficulty=None
+        )[2][9][1]
+        flashcards = build_flashcards_artifact_params(
+            "nb", ["src"], instructions=None, quantity=None, difficulty=None
+        )[2][9][1]
+        assert isinstance(quiz[ArtifactRow._QUIZ_OPTIONS_POS], list)
+        assert isinstance(flashcards[ArtifactRow._FLASHCARDS_OPTIONS_POS], list)
+        assert len(quiz) <= ArtifactRow._FLASHCARDS_OPTIONS_POS or (
+            quiz[ArtifactRow._FLASHCARDS_OPTIONS_POS] is None
+        )
 
 
 class TestTimestampDescent:
@@ -390,19 +709,6 @@ class TestArtifactPayloadAccessors:
 
         assert ArtifactRow(raw).data_table_raw_payload is payload
 
-    def test_failed_error_text_prefers_plain_error_over_nested_payload(self) -> None:
-        raw = _full_row(status=ArtifactStatus.FAILED)
-        raw[ArtifactRow._ERROR_TEXT_POS] = " Primary "
-        raw[ArtifactRow._ERROR_PAYLOAD_POS] = ["Secondary"]
-
-        assert ArtifactRow(raw).failed_error_text == "Primary"
-
-    def test_failed_error_text_falls_back_to_nested_payload(self) -> None:
-        raw = _full_row(status=ArtifactStatus.FAILED)
-        raw[ArtifactRow._ERROR_PAYLOAD_POS] = [["Nested quota limit"]]
-
-        assert ArtifactRow(raw).failed_error_text == "Nested quota limit"
-
     def test_artifact_url_dispatches_by_type(self) -> None:
         raw = _full_row(type_code=ArtifactTypeCode.AUDIO)
         raw[ArtifactRow._AUDIO_METADATA_POS] = [
@@ -435,7 +741,6 @@ class TestArtifactPayloadAccessors:
         assert row.slide_deck_pptx_url is None
         assert row.report_markdown is None
         assert row.data_table_raw_payload is None
-        assert row.failed_error_text is None
         assert row.artifact_url(ArtifactTypeCode.AUDIO.value, suppress_drift=True) is None
 
 
@@ -1225,25 +1530,37 @@ class TestSourceRowPositionContract:
     """
 
     def test_top_level_positions(self) -> None:
-        """Entry-level positions: id, title, metadata, status block."""
+        """Entry-level positions: identity, settings, and downloadable content."""
         assert SourceRow._ID_POS == 0
         assert SourceRow._TITLE_POS == 1
         assert SourceRow._METADATA_POS == 2
         assert SourceRow._STATUS_BLOCK_POS == 3
         assert SourceRow._STATUS_INNER_POS == 1
+        assert SourceRow._DOWNLOAD_URL_POS == 5
+        assert SourceRow._VIEWER_URL_POS == 6
+        assert SourceRow._CONTENT_DESCRIPTOR_POS == 7
+        assert SourceRow._CONTENT_DESCRIPTOR_MIME_POS == 2
 
     def test_metadata_positions(self) -> None:
-        """Metadata-sub-list positions: bare-url, timestamp, type, yt, url."""
-        assert SourceRow._META_BARE_URL_POS == 0
+        """Metadata-sub-list positions: google-docs block, timestamp, type, yt, url."""
+        assert SourceRow._META_GOOGLE_DOCS_POS == 0
+        assert SourceRow._META_WORD_COUNT_POS == 1
         assert SourceRow._META_TIMESTAMP_POS == 2
+        assert SourceRow._META_REVISION_POS == 3
         assert SourceRow._META_TYPE_POS == 4
         assert SourceRow._META_YOUTUBE_POS == 5
         assert SourceRow._META_URL_POS == 7
         # Drive-hosted MIME positions used to disambiguate the type_code==14
         # overload (native Sheet vs Drive PDF) — live-captured #1832.
         assert SourceRow._META_DRIVE_DESCRIPTOR_POS == 9
+        assert SourceRow._META_LAST_MODIFIED_POS == 14
         assert SourceRow._META_MIME_POS == 19
         assert SourceRow._DRIVE_DESCRIPTOR_MIME_POS == 2
+        # Drive documentId position — one constant for both blocks, since
+        # GoogleDocs/GoogleDrive SourceMetadata both declare it as tag 1 (#2113).
+        assert SourceRow._DRIVE_DOCUMENT_ID_POS == 0
+        assert SourceRow._REVISION_ID_POS == 0
+        assert SourceRow._REVISION_TIMESTAMP_POS == 1
 
     def test_id_envelope_positions(self) -> None:
         """Id-envelope positions: plain id at [0]; drive-backed at [2][0]."""
@@ -1267,19 +1584,29 @@ class TestSourceRowPositionContract:
             SourceRow._METADATA_POS,
             SourceRow._STATUS_BLOCK_POS,
             SourceRow._STATUS_INNER_POS,
-            SourceRow._META_BARE_URL_POS,
+            SourceRow._DOWNLOAD_URL_POS,
+            SourceRow._VIEWER_URL_POS,
+            SourceRow._CONTENT_DESCRIPTOR_POS,
+            SourceRow._CONTENT_DESCRIPTOR_MIME_POS,
+            SourceRow._META_GOOGLE_DOCS_POS,
+            SourceRow._META_WORD_COUNT_POS,
             SourceRow._META_TIMESTAMP_POS,
+            SourceRow._META_REVISION_POS,
             SourceRow._META_TYPE_POS,
             SourceRow._META_YOUTUBE_POS,
             SourceRow._META_URL_POS,
             SourceRow._META_DRIVE_DESCRIPTOR_POS,
+            SourceRow._META_LAST_MODIFIED_POS,
             SourceRow._META_MIME_POS,
             SourceRow._DRIVE_DESCRIPTOR_MIME_POS,
+            SourceRow._DRIVE_DOCUMENT_ID_POS,
+            SourceRow._REVISION_ID_POS,
+            SourceRow._REVISION_TIMESTAMP_POS,
             SourceRow._ID_ENVELOPE_PLAIN_POS,
             SourceRow._ID_ENVELOPE_DRIVE_PAYLOAD_POS,
             SourceRow._ID_ENVELOPE_DRIVE_INNER_POS,
             SourceRow._LIST_FIRST_POS,
-        ) == (0, 1, 2, 3, 1, 0, 2, 4, 5, 7, 9, 19, 2, 0, 2, 0, 0)
+        ) == (0, 1, 2, 3, 1, 5, 6, 7, 2, 0, 1, 2, 3, 4, 5, 7, 9, 14, 19, 2, 0, 0, 1, 0, 2, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -1700,11 +2027,25 @@ class TestSourceRowTimestamp:
 
 
 class TestSourceRowStatus:
-    """:attr:`SourceRow.status` mirrors legacy ``SourceLister._extract_status``."""
+    """Source status decoding fails closed for missing or unknown wire values."""
 
-    def test_status_ready_when_status_block_absent(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _reset_warned_status_codes(self):
+        """Clear the warn-once set so drift assertions do not depend on test order.
+
+        ``_warned_status_codes`` is module-level (it has to outlive a row), so any
+        earlier test that decoded the same unmapped code would otherwise consume
+        this code's single warning. Mirrors how the sibling
+        ``_warned_source_types`` set is handled in ``tests/unit/test_types.py``.
+        """
+        _warned_status_codes.clear()
+        yield
+        _warned_status_codes.clear()
+
+    def test_status_unknown_when_status_block_absent(self, caplog) -> None:
         row = SourceRow.from_entry(_entry(status_code=None))
-        assert row.status == SourceStatus.READY
+        assert row.status == SourceStatus.UNKNOWN
+        assert not caplog.records
 
     def test_status_processing(self) -> None:
         row = SourceRow.from_entry(_entry(status_code=SourceStatus.PROCESSING))
@@ -1718,33 +2059,45 @@ class TestSourceRowStatus:
         row = SourceRow.from_entry(_entry(status_code=SourceStatus.PREPARING))
         assert row.status == SourceStatus.PREPARING
 
-    def test_unknown_status_falls_back_to_ready(self) -> None:
-        """Status codes outside the known enum coerce to READY."""
-        row = SourceRow.from_entry(_entry(status_code=999))
-        assert row.status == SourceStatus.READY
+    @pytest.mark.parametrize("status_code", [0, 4, 999])
+    def test_unknown_status_falls_back_to_unknown_and_warns(self, status_code: int, caplog) -> None:
+        """An unmapped integer is non-ready and observable as enum drift."""
+        row = SourceRow.from_entry(_entry(status_code=status_code))
+        assert row.status is SourceStatus.UNKNOWN
+        assert f"Unknown source status code {status_code}" in caplog.text
 
-    def test_non_list_status_block_falls_back_to_ready(self) -> None:
+    def test_unknown_status_warns_once_per_code(self, caplog) -> None:
+        """A polled source re-decodes every interval; the drift line fires once."""
+        for _ in range(3):
+            assert SourceRow.from_entry(_entry(status_code=999)).status is SourceStatus.UNKNOWN
+        assert caplog.text.count("Unknown source status code 999") == 1
+
+        # A *different* unmapped code is still reported.
+        assert SourceRow.from_entry(_entry(status_code=998)).status is SourceStatus.UNKNOWN
+        assert caplog.text.count("Unknown source status code 998") == 1
+
+    def test_non_list_status_block_falls_back_to_unknown(self, caplog) -> None:
         entry = _entry()
         entry.append("not_a_list")  # status block at position 3
         row = SourceRow.from_entry(entry)
-        assert row.status == SourceStatus.READY
+        assert row.status is SourceStatus.UNKNOWN
+        assert not caplog.records
 
-    def test_short_status_block_falls_back_to_ready(self) -> None:
+    def test_short_status_block_falls_back_to_unknown(self, caplog) -> None:
         entry = _entry()
         entry.append([None])  # status block too short — no [1]
         row = SourceRow.from_entry(entry)
-        assert row.status == SourceStatus.READY
+        assert row.status is SourceStatus.UNKNOWN
+        assert not caplog.records
 
-    def test_non_int_status_code_falls_back_to_ready(self) -> None:
-        """Non-int status codes (None, str, etc.) fall back via the
-        ``SourceStatus(...)`` ValueError path (claude review feedback on
-        #1029 — switching from explicit membership tuple to try/except
-        retains this behavior for any non-enum value)."""
-        for bad_code in (None, "not_a_status", []):
+    def test_non_int_status_code_falls_back_to_unknown_without_warning(self, caplog) -> None:
+        """Malformed status blocks fail closed without noisy enum-drift warnings."""
+        for bad_code in (None, "not_a_status", [], True, 2.0):
             entry = _entry()
             entry.append([None, bad_code])  # whatever-type status code at [3][1]
             row = SourceRow.from_entry(entry)
-            assert row.status == SourceStatus.READY, f"failed for {bad_code!r}"
+            assert row.status is SourceStatus.UNKNOWN, f"failed for {bad_code!r}"
+        assert "Unknown source status code" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -1763,7 +2116,7 @@ class TestSourceRowSchemaDrift:
         assert row.type_code is None
         assert row.url is None
         assert row.created_at_raw is None
-        assert row.status == SourceStatus.READY
+        assert row.status == SourceStatus.UNKNOWN
 
     def test_id_only_row(self) -> None:
         row = SourceRow(_raw=[["only_id"]])

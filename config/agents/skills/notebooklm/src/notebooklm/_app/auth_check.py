@@ -191,55 +191,46 @@ def _psidts_status(storage_state: dict[str, Any]) -> dict[str, Any]:
 def _account_info(plan: AuthCheckPlan, storage_state: dict[str, Any]) -> dict[str, Any]:
     """Resolve the persisted account ``{email, authuser}`` for this profile.
 
-    For env-var auth the in-band record lives in the parsed inline JSON; for a
-    file profile, the on-disk reader also consults the legacy sibling record.
+    Thin call into :func:`notebooklm._auth.storage.resolve_account_identity`
+    (auth cross-boundary ledger shrink, follow-up to #2103): for env-var auth
+    the in-band record lives in the already-parsed ``storage_state``; for a
+    file profile a pre-v0.5.0 legacy ``context.json[account]`` record is
+    derived into in-band shape rather than returned as a raw pass-through (see
+    ``_auth.storage.read_account_metadata``, #2103 PR-0). The derivation is
+    read-only — the durable migration is a detached one-shot (ADR-0033 PR 5.1),
+    so this is a plain consult with no write side effect.
     """
-    from ..auth import (
-        get_account_email_for_storage,
-        get_authuser_for_storage,
-        read_account_metadata_from_storage_state,
-    )
+    from ..auth import resolve_account_identity
 
-    if plan.has_env_auth:
-        meta = read_account_metadata_from_storage_state(storage_state)
-        raw_email = meta.get("email")
-        email = raw_email.strip() if isinstance(raw_email, str) else ""
-        raw_authuser = meta.get("authuser")
-        # Match the file path's get_authuser_for_storage: a real int only (``bool``
-        # is an ``int`` subclass, so exclude it), negatives clamped to 0.
-        authuser = raw_authuser if type(raw_authuser) is int and raw_authuser >= 0 else 0
-        return {"email": email or None, "authuser": authuser}
-    return {
-        "email": get_account_email_for_storage(plan.storage_path),
-        "authuser": get_authuser_for_storage(plan.storage_path),
-    }
+    return resolve_account_identity(
+        has_env_auth=plan.has_env_auth,
+        storage_path=plan.storage_path,
+        env_auth_storage_state=storage_state,
+    )
 
 
 def _master_token_status(plan: AuthCheckPlan) -> dict[str, Any]:
-    """Note a sibling ``master_token.json`` (headless master-token profile).
-
-    The record lives beside ``storage_state.json`` (login --master-token writes
-    both into the profile dir), so resolve it relative to the actual storage path
-    — this also honors a ``--storage`` override. Env-var auth carries no profile
-    directory, so master-token is N/A there.
-    """
-    if plan.has_env_auth:
-        return {"present": False, "path": None, "account": None}
-
-    from ..auth import read_master_token
-
-    path = plan.storage_path.with_name("master_token.json")
-    if not path.exists():
-        return {"present": False, "path": str(path), "account": None}
-    account: str | None = None
+    """Project the coarse master-token app status into auth-check details."""
+    status = None
     try:
-        record = read_master_token(path)
-    except Exception as exc:  # malformed/unreadable — still report presence
-        logger.debug("master_token.json present but unreadable: %s", type(exc).__name__)
-        record = None
-    if record:
-        account = record.get("email")
-    return {"present": True, "path": str(path), "account": account}
+        from . import master_token
+
+        status = master_token.inspect_master_token_status(
+            plan.storage_path,
+            has_env_auth=plan.has_env_auth,
+        )
+        if status.unreadable_error_type is not None:
+            logger.debug(
+                "master_token.json present but unreadable: %s",
+                status.unreadable_error_type,
+            )
+        return {
+            "present": status.present,
+            "path": str(status.path) if status.path is not None else None,
+            "account": status.account,
+        }
+    finally:
+        del status
 
 
 async def run_auth_check(

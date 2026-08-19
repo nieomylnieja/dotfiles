@@ -13,15 +13,27 @@ import mimetypes
 import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 from urllib.parse import SplitResult, parse_qsl, urlsplit
 
 import httpx
 
 from .._env import PERSONAL_APP_HOSTS
 from .._transport_errors import parse_retry_after
-from ..exceptions import AuthError, RateLimitError, ServerError, ValidationError
+from .._types.sources import _HTML_FILE_EXTENSIONS
+from ..exceptions import (
+    AuthError,
+    NetworkError,
+    RateLimitError,
+    ServerError,
+    ValidationError,
+)
 from ..rpc import get_upload_url
+
+#: The two HTTP boundaries after the source registration RPC has succeeded.
+#: Internal: surfaced to callers only as the duck-typed ``stage`` attribute
+#: :func:`raise_partial_upload_failure` attaches, never in a public signature.
+SourceAddStage = Literal["start_session", "upload_finalize"]
 
 _SOURCE_ID_UUID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -43,7 +55,7 @@ _MEDIA_APPLICATION_CONTENT_TYPES = frozenset(
 )
 _MEDIA_TRANSIENT_ERROR_TYPES: tuple[int | None, ...] = (10, 0, None)
 _STRICT_TRANSIENT_ERROR_TYPES: tuple[int | None, ...] = ()
-_HTML_UPLOAD_SUFFIXES = frozenset({".html", ".htm", ".xhtml", ".xht"})
+_HTML_UPLOAD_SUFFIXES = _HTML_FILE_EXTENSIONS
 _HTML_UPLOAD_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 # ``mimetypes.guess_type`` returns ``None`` for some text suffixes on Python 3.10
 # and on hosts without a populated ``/etc/mime.types`` (notably ``.md``). Without
@@ -399,6 +411,37 @@ def _validate_upload_file_supported(file_path: Path, content_type: str) -> None:
             "HTML file uploads are not supported by NotebookLM's upload endpoint: "
             f"{file_path.name}. Convert the page to .txt, .md, or .pdf first, then retry."
         )
+
+
+def raise_partial_upload_failure(
+    exc: Exception, filename: str, *, source_id: str, stage: SourceAddStage
+) -> NoReturn:
+    """Attach retained-source recovery context to a post-registration upload failure,
+    categorising a bare transport reset, and re-raise the real exception UNWRAPPED.
+
+    Companion to :func:`_raise_from_upload_http_status`, for the failures that never
+    reach an HTTP status at all. ``SourceUploadPipeline.upload_file_streaming`` POSTs
+    the body through a bare ``httpx.AsyncClient``, so a reset mid-body surfaces as
+    ``httpx.RequestError`` — untyped, and therefore indistinguishable downstream from
+    a rejected file. Normalising it to :class:`~notebooklm.exceptions.NetworkError`
+    first keeps the HTTP-status projection honest (502, not the per-source-rejection
+    422) while ``original_error`` and ``__cause__`` both retain the httpx exception.
+
+    ``source_id`` and ``stage`` are set directly as attributes on the exception that
+    actually propagates rather than a wrapper type, so ``except AuthError:`` /
+    ``except NetworkError:`` / ``except ValidationError:`` around ``add_file()``
+    keeps matching a post-registration failure exactly as it would without this
+    recovery context. Callers that want the retained source read it with
+    ``getattr(exc, "source_id", None)`` / ``getattr(exc, "stage", None)``.
+    """
+    cause: Exception = exc
+    if isinstance(exc, httpx.RequestError):
+        cause = NetworkError(f"Network error uploading {filename!r} ({stage})", original_error=exc)
+    cause.source_id = source_id  # type: ignore[attr-defined]
+    cause.stage = stage  # type: ignore[attr-defined]
+    if cause is exc:
+        raise cause
+    raise cause from exc
 
 
 def _raise_from_upload_http_status(exc: httpx.HTTPStatusError, filename: str) -> NoReturn:

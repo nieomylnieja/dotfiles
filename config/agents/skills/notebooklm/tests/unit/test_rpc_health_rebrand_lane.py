@@ -169,11 +169,12 @@ def test_main_issue_lanes_are_untouched_by_the_rebrand_lane() -> None:
     """Every health-script lane still keys off ``steps.health.outputs.exit_code``.
 
     The bundle-drift lane is a different script (``steps.bundle``) and keeps its
-    own gate; everything else the health script drives must stay exit-coded.
+    own gate. Authentication is intentionally shared because either script can
+    prove the homepage is unavailable; all remaining health-script lanes stay
+    keyed only to their health exit code.
     """
     expected = {
         "RPC ID Mismatch Detected": "1",
-        "RPC Health Check: Authentication Failure": "2",
         MAIN_ERROR_TITLE: "3",
         "Studio customization cohort flipped — re-capture VideoStyle codes": "4",
     }
@@ -185,6 +186,15 @@ def test_main_issue_lanes_are_untouched_by_the_rebrand_lane() -> None:
         seen.add(title)
         assert f"steps.health.outputs.exit_code == '{expected[title]}'" in step["if"]
     assert seen == set(expected)
+
+    auth = next(
+        step
+        for step in _issue_steps()
+        if step["with"]["title"] == "RPC Health Check: Authentication Failure"
+    )
+    assert "steps.health.outputs.exit_code == '2'" in auth["if"]
+    assert "steps.bundle.outputs.exit_code == '2'" in auth["if"]
+    assert "||" in auth["if"]
 
 
 # ---------------------------------------------------------------------------

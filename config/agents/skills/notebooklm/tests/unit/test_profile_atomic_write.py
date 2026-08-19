@@ -33,6 +33,8 @@ This module covers:
 4. Torn-write fault injection: if ``storage_state.json`` write fails after
    cookies + account were serialized into the same temp file, the original
    on-disk file is preserved untouched (no half-written state).
+5. Login/import replacement keeps this same single profile commit while its
+   legacy promote-or-scrub reconciliation remains a later sibling-file step.
 """
 
 from __future__ import annotations
@@ -43,13 +45,19 @@ from typing import Any
 
 import pytest
 
-from notebooklm._auth.account import (
+from notebooklm._auth.profile_migration import LegacyPromotionScheduler
+from notebooklm._auth.storage import (
     clear_account_metadata,
     get_account_email_for_storage,
     get_authuser_for_storage,
+    promote_legacy_account,
     read_account_metadata,
     write_account_metadata,
 )
+
+
+def _drain_promotions_for_tests() -> None:
+    LegacyPromotionScheduler.process_default().drain(30.0)
 
 
 def _write_storage_state(path: Path, payload: dict[str, Any]) -> None:
@@ -98,11 +106,33 @@ def test_read_account_metadata_prefers_in_band_record(tmp_path: Path) -> None:
 
 
 def test_legacy_two_file_fixture_reads_cleanly(tmp_path: Path) -> None:
-    """ACCEPTANCE-CRITICAL: existing two-file profile loads under new reader.
+    """ACCEPTANCE-CRITICAL: existing two-file profile reads correctly, no caller
+    action required.
 
-    If this migration test breaks for any existing user, they will lose their
-    account binding (authuser/email) on the next CLI run — Tier-9 P1-20 PR
-    body must surface this.
+    Since the master-token-relocation PR-0 (issue #2103), ``read_account_metadata``
+    never returns a raw pass-through of the sibling ``context.json[account]``
+    record — a standing legacy-sibling fallback on every read meant a missed
+    ``authuser`` could silently route requests to a *different* signed-in Google
+    account (a #2103-class hazard), so the fallback was removed rather than
+    patched at each call site.
+
+    In its place, ``read_account_metadata`` DERIVES the record from the legacy
+    sibling read-only, through the same sanitizer promotion embeds with — so
+    THIS call, the very first read of any kind (``get_authuser_for_storage``,
+    ``get_account_email_for_storage``, ``read_account_metadata`` directly, or
+    any future caller), returns the correct value immediately. No caller
+    anywhere has to remember an extra promotion step; that is the point of
+    putting it at the chokepoint instead of at each of the read helpers built
+    on it.
+
+    Since ADR-0033 PR 5.1 the *durable* half is detached: the read schedules a
+    one-shot background promotion and does not wait for it, so this test
+    drains before asserting on disk state. The correct read values above are
+    asserted BEFORE the drain, which is the actual acceptance property — a
+    user's binding survives even if the write never lands.
+
+    If this breaks, an existing user loses their account binding
+    (authuser/email) on the next CLI run.
     """
     storage_path = tmp_path / "storage_state.json"
     _write_storage_state(
@@ -123,8 +153,26 @@ def test_legacy_two_file_fixture_reads_cleanly(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
+    # The very first read already self-heals — no separate promotion call, and
+    # no waiting on the durable write either.
     assert get_authuser_for_storage(storage_path) == 3
     assert get_account_email_for_storage(storage_path) == "charlie@example.com"
+    assert read_account_metadata(storage_path) == {
+        "authuser": 3,
+        "email": "charlie@example.com",
+    }
+
+    # Now let the detached one-shot finish and assert the durable half.
+    _drain_promotions_for_tests()
+    in_band = json.loads(storage_path.read_text(encoding="utf-8"))["notebooklm"]["account"]
+    assert in_band == {"authuser": 3, "email": "charlie@example.com"}
+    # Non-account legacy context state (notebook_id) survives the promotion.
+    legacy_after = json.loads(_context_path(storage_path).read_text(encoding="utf-8"))
+    assert "account" not in legacy_after
+    assert legacy_after.get("notebook_id") == "nb-123"
+
+    # Idempotent: nothing left to promote, and the migrated values are stable.
+    assert promote_legacy_account(storage_path) is False
     assert read_account_metadata(storage_path) == {
         "authuser": 3,
         "email": "charlie@example.com",
@@ -164,7 +212,12 @@ def test_migration_on_write_removes_legacy_account_key_only(tmp_path: Path) -> N
 
 
 def test_in_band_account_overrides_legacy_account(tmp_path: Path) -> None:
-    """When both forms exist, in-band wins."""
+    """When both forms exist, in-band wins — because legacy is never consulted.
+
+    Since #2103's PR-0, ``read_account_metadata`` has no legacy-fallback read at
+    all, so this isn't a precedence contest the in-band record wins; the stale
+    legacy record is simply invisible to the reader.
+    """
     storage_path = tmp_path / "storage_state.json"
     _write_storage_state(
         storage_path,
@@ -348,34 +401,36 @@ def test_storage_state_mutators_share_one_lock_file(
     Tier-0 data-loss regression: cookie saves and account-metadata writes once
     used DIFFERENT lock files and could lose updates under concurrency. After
     the storage-writer refactor every mutator serializes on the project-internal
-    ``storage._file_lock`` primitive (cookie saves via ``_file_lock_exclusive``,
-    account/clear via the storage writer's bounded acquire). This test captures
-    the lock path each mutator passes to that ONE primitive and asserts they all
+    shared ``StorageLockManager`` (cookie saves via ``ProfileStore``'s blocking
+    primitive, account/clear/replacement via its bounded transaction). This test captures
+    the lock request each mutator passes to that ONE owner and asserts they all
     derive the identical dotted ``.storage_state.json.lock`` sibling. The sibling
     ``context.json.lock`` (still ``filelock``, taken by
-    ``_drop_legacy_account_key``) uses a different mechanism and is not captured
+    ``LegacyAccountContext.scrub``) uses a different mechanism and is not captured
     here.
     """
-    import contextlib
-
     import httpx
 
-    from notebooklm._auth import storage as storage_mod
-    from notebooklm._auth.storage import save_cookies_to_storage
+    from notebooklm._auth import profile_store
+    from notebooklm._auth.storage import (
+        persist_minted_jar,
+        replace_from_remint,
+        save_cookies_to_storage,
+    )
+    from notebooklm._auth.storage_lock import StorageLockManager
 
     storage_path = tmp_path / "storage_state.json"
     _write_storage_state(storage_path, {"cookies": [], "origins": []})
 
     seen: list[Path] = []
-    real_file_lock = storage_mod._file_lock
+    real_locks = StorageLockManager()
 
-    @contextlib.contextmanager
-    def capturing_file_lock(lock_path: Path, *, blocking: bool, log_prefix: str):  # type: ignore[no-untyped-def]
-        seen.append(Path(lock_path).expanduser().resolve())
-        with real_file_lock(lock_path, blocking=blocking, log_prefix=log_prefix) as state:
-            yield state
+    class CapturingLocks:
+        def acquire(self, request):  # type: ignore[no-untyped-def]
+            seen.append(request.path.expanduser().resolve())
+            return real_locks.acquire(request)
 
-    monkeypatch.setattr(storage_mod, "_file_lock", capturing_file_lock)
+    monkeypatch.setattr(profile_store, "_STORAGE_LOCKS", CapturingLocks())
 
     # Canonical name is the dotted, hidden sibling (storage.py contract).
     expected = storage_path.with_name(f".{storage_path.name}.lock").expanduser().resolve()
@@ -394,6 +449,26 @@ def test_storage_state_mutators_share_one_lock_file(
     cookie_save_locks = _locks_taken_by(
         lambda: save_cookies_to_storage(httpx.Cookies(), path=storage_path, original_snapshot={})
     )
+    remint_locks = _locks_taken_by(
+        lambda: replace_from_remint(
+            storage_path,
+            {
+                "cookies": [{"name": "SID", "value": "v", "domain": ".google.com", "path": "/"}],
+                "origins": [],
+            },
+            carry_account=True,
+        )
+    )
+    minted = httpx.Cookies()
+    minted.set("SID", "v", domain=".google.com", path="/")
+    minted_locks = _locks_taken_by(
+        lambda: persist_minted_jar(
+            storage_path,
+            minted,
+            email="alice@example.com",
+            refuse_unknown_owner=False,
+        )
+    )
 
     assert account_write_locks == {expected}, (
         f"write_account_metadata must take exactly the shared lock; got {account_write_locks}"
@@ -403,4 +478,10 @@ def test_storage_state_mutators_share_one_lock_file(
     )
     assert cookie_save_locks == {expected}, (
         f"save_cookies_to_storage must take exactly the shared lock; got {cookie_save_locks}"
+    )
+    assert remint_locks == {expected}, (
+        f"replace_from_remint must take exactly the shared lock; got {remint_locks}"
+    )
+    assert minted_locks == {expected}, (
+        f"persist_minted_jar must take exactly the shared lock; got {minted_locks}"
     )

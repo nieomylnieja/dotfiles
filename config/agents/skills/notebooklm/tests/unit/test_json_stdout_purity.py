@@ -389,6 +389,41 @@ def _customize_research_wait(client: MagicMock) -> None:
     )
 
 
+class _ImportedResearchSourcesStub(list):
+    """Mirrors ``notebooklm._research_import._ImportedResearchSources``: a ``list``
+    of newly-imported entries carrying the ``already_present`` side channel."""
+
+    def __init__(self, items, already_present=()):
+        super().__init__(items)
+        self.already_present = list(already_present)
+
+
+def _customize_research_import(client: MagicMock) -> None:
+    # `research import --json` polls once (resolving the bare "current run"
+    # from that same poll), then imports. A completed run with one source is
+    # the minimum that clears the importable-state ladder.
+    client.research.poll = AsyncMock(
+        return_value=_research_task(
+            {
+                "task_id": "run_789",
+                "status": "completed",
+                "sources": [{"url": "https://example.com/a", "title": "A"}],
+                "query": "q",
+                "report": "",
+            }
+        )
+    )
+    # A bare list is a shape the real client never returns — it hands back an
+    # ``_ImportedResearchSources`` (a list subclass carrying ``already_present``),
+    # so mirror that or the sweep never exercises the side channel.
+    client.research.import_sources_with_verification = AsyncMock(
+        return_value=_ImportedResearchSourcesStub(
+            [{"id": "src_1", "title": "A", "url": "https://example.com/a"}],
+            already_present=[{"id": "src_0", "title": "B", "url": "https://example.com/b"}],
+        )
+    )
+
+
 def _customize_research_cancel(client: MagicMock) -> None:
     # `research cancel <run_id> --json` is fire-and-forget: ``cancel`` returns
     # None and the command emits a fixed JSON acknowledgement.
@@ -524,6 +559,11 @@ JSON_COMMANDS: list[tuple[str, list[str], object]] = [
         "research_wait",
         ["research", "wait", "-n", "abc123def456ghi789jkl", "--json"],
         _customize_research_wait,
+    ),
+    (
+        "research_import",
+        ["research", "import", "-n", "abc123def456ghi789jkl", "--json"],
+        _customize_research_import,
     ),
     (
         "research_cancel",

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -31,7 +32,7 @@ from notebooklm._app.research import (
     validate_research_wait_flags,
 )
 from notebooklm.exceptions import ValidationError
-from notebooklm.types import ResearchSource, ResearchStatus, ResearchTask
+from notebooklm.types import DiscoveryMode, ResearchSource, ResearchStatus, ResearchTask
 
 
 def _task(
@@ -42,6 +43,11 @@ def _task(
     sources: list[dict[str, Any]] | None = None,
     summary: str = "",
     report: str = "",
+    status_code: int | None = None,
+    source_type: int | None = None,
+    discovery_mode: DiscoveryMode | None = None,
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ) -> ResearchTask:
     coerced = tuple(ResearchSource.from_public_dict(s) for s in (sources or []))
     return ResearchTask(
@@ -51,6 +57,11 @@ def _task(
         sources=coerced,
         summary=summary,
         report=report,
+        status_code=status_code,
+        source_type=source_type,
+        discovery_mode=discovery_mode,
+        created_at=created_at,
+        updated_at=updated_at,
     )
 
 
@@ -218,6 +229,141 @@ async def test_poll_importable_refuses_completed_empty() -> None:
     client = _client(poll=_task(status=ResearchStatus.COMPLETED, sources=[]))
     with pytest.raises(ValidationError):
         await poll_importable_research(client, "nb_1", "run_1")
+
+
+# ---------------------------------------------------------------------------
+# Differentiated termination reasons (#1964)
+# ---------------------------------------------------------------------------
+
+
+async def test_poll_and_classify_surfaces_reason_message_and_hint() -> None:
+    """An empty Drive search reaches the adapter with a reason and remediation,
+    not a bare ``failed``."""
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.FAILED,
+            query="Example Document.md",
+            status_code=3,
+            source_type=2,
+        )
+    )
+    result = await poll_and_classify(client, "nb_1", "run_1")
+    assert result.status == "failed"
+    assert result.status_code == 3
+    assert result.termination_reason == "no_results"
+    assert "no matches" in result.reason_message
+    assert "document id" in result.hint
+
+
+async def test_poll_and_classify_leaves_reason_fields_none_on_success() -> None:
+    client = _client(poll=_task(status=ResearchStatus.COMPLETED, status_code=2, source_type=1))
+    result = await poll_and_classify(client, "nb_1", "run_1")
+    assert result.termination_reason == "completed"
+    assert result.reason_message is None
+    assert result.hint is None
+
+
+async def test_poll_and_classify_reason_none_without_status_code() -> None:
+    client = _client(poll=_task(status=ResearchStatus.NO_RESEARCH))
+    result = await poll_and_classify(client, "nb_1", "run_1")
+    assert result.termination_reason is None
+    assert result.reason_message is None
+
+
+async def test_poll_importable_empty_drive_search_explains_instead_of_misdirecting() -> None:
+    """Regression for #1964: the old message told the caller to 'start a new
+    research session', which is the wrong remediation for a query that simply
+    matched nothing."""
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.FAILED,
+            query="Example Document.md",
+            status_code=3,
+            source_type=2,
+        )
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        await poll_importable_research(client, "nb_1", "run_1")
+    message = str(excinfo.value)
+    assert "no matches" in message
+    assert "document id" in message
+    assert "start a new research session" not in message
+
+
+async def test_poll_importable_cancelled_run_says_it_was_cancelled() -> None:
+    client = _client(
+        poll=_task(status=ResearchStatus.FAILED, query="q", status_code=4, source_type=1)
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        await poll_importable_research(client, "nb_1", "run_1")
+    assert "cancelled" in str(excinfo.value)
+
+
+async def test_poll_importable_unnameable_failure_keeps_historical_message() -> None:
+    """A FAILED task carrying no status code keeps the original wording.
+
+    Defensive rather than observed: the parser only produces FAILED from a
+    non-null code, so this pairing should not arise from a real poll. It pins
+    the branch against a hand-built or future task that reaches it.
+    """
+    client = _client(poll=_task(status=ResearchStatus.FAILED, query="q"))
+    with pytest.raises(ValidationError) as excinfo:
+        await poll_importable_research(client, "nb_1", "run_1")
+    assert "start a new research session" in str(excinfo.value)
+
+
+async def test_poll_importable_unknown_code_keeps_terminal_guidance() -> None:
+    """An unrecognised code is coarsened to FAILED and treated as terminal, so
+    "it will not complete" is still the right advice — the first cut sent every
+    code-carrying failure down the differentiated path and silently dropped it
+    for genuinely-broken runs.
+    """
+    client = _client(
+        poll=_task(status=ResearchStatus.FAILED, query="q", status_code=7, source_type=1)
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        await poll_importable_research(client, "nb_1", "run_1")
+    message = str(excinfo.value)
+    assert "it will not complete" in message
+    assert "start a new research session" in message
+    # ...and it still reports what was actually observed.
+    assert "unrecognised backend status code (7)" in message
+
+
+async def test_poll_importable_cancelled_run_with_partial_sources_wording() -> None:
+    """A cancelled run can carry partially-discovered sources, so the refusal
+    must not assert it "has no sources"."""
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.FAILED,
+            query="q",
+            sources=[{"title": "Partial", "url": "http://example.com/1"}],
+            status_code=4,
+            source_type=1,
+        )
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        await poll_importable_research(client, "nb_1", "run_1")
+    message = str(excinfo.value)
+    assert "cannot be imported" in message
+    assert "has no sources" not in message
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_reason"),
+    [(1, "in_progress"), (2, "completed"), (3, "no_results"), (4, "cancelled"), (7, "unknown")],
+)
+async def test_poll_and_classify_converts_every_reason_to_its_string(
+    status_code: int, expected_reason: str
+) -> None:
+    """The enum→str narrowing at the _app boundary must hold for every reason,
+    not just the two the happy-path tests exercise."""
+    client = _client(
+        poll=_task(status=ResearchStatus.FAILED, query="q", status_code=status_code, source_type=1)
+    )
+    result = await poll_and_classify(client, "nb_1", "run_1")
+    assert result.termination_reason == expected_reason
+    assert isinstance(result.termination_reason, str)
 
 
 # ===========================================================================
@@ -500,3 +646,94 @@ async def test_import_research_sources_plain_list_return_has_empty_already_prese
     assert outcome.already_present == []
     _, kwargs = client.research.import_sources_with_verification.await_args
     assert kwargs == {"allow_duplicate": True}
+
+
+# ===========================================================================
+# Run metadata carried onto the shared MCP/REST view (#2122)
+# ===========================================================================
+
+_CREATED = datetime(2026, 8, 13, 11, 12, 58, tzinfo=timezone.utc)
+_UPDATED = datetime(2026, 8, 13, 11, 13, 5, tzinfo=timezone.utc)
+
+
+async def test_poll_projects_run_metadata_for_the_transports() -> None:
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.COMPLETED,
+            query="AI research",
+            discovery_mode=DiscoveryMode.DEEP_RESEARCH,
+            created_at=_CREATED,
+            updated_at=_UPDATED,
+        )
+    )
+    result = await poll_and_classify(client, "nb_1")
+
+    # The LABEL, not the raw 5 — an agent must not have to know the enum.
+    assert result.discovery_mode == "deep_research"
+    assert result.created_at == "2026-08-13T11:12:58+00:00"
+    assert result.updated_at == "2026-08-13T11:13:05+00:00"
+    assert result.duration_seconds == 7.0
+
+
+async def test_poll_reports_absent_run_metadata_as_none() -> None:
+    """Most of these are optional on the wire; absence must not fabricate."""
+    client = _client(poll=_task(status=ResearchStatus.IN_PROGRESS, query="q"))
+    result = await poll_and_classify(client, "nb_1")
+
+    assert result.discovery_mode is None
+    assert result.created_at is None
+    assert result.updated_at is None
+    assert result.duration_seconds is None
+
+
+async def test_run_metadata_stays_off_the_byte_stable_public_dict() -> None:
+    """``public_dict`` is the CLI ``--json`` payload emitted verbatim, so the
+    task-level additions deliberately do not appear there (matching
+    ``status_code`` / ``source_type``)."""
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.COMPLETED,
+            discovery_mode=DiscoveryMode.DEFAULT_LLM_SEARCH,
+            created_at=_CREATED,
+            updated_at=_UPDATED,
+        )
+    )
+    result = await poll_and_classify(client, "nb_1")
+
+    assert "discovery_mode" not in result.public_dict
+    assert "created_at" not in result.public_dict
+    assert "updated_at" not in result.public_dict
+
+
+async def test_source_hint_does_reach_the_public_source_dicts() -> None:
+    """Unlike the task-level fields, the per-source hint rides the existing
+    conditional-key convention (``source_ordinal`` / ``report_markdown``), so
+    it reaches the CLI, MCP and REST source payloads alike."""
+    client = _client(
+        poll=_task(
+            status=ResearchStatus.COMPLETED,
+            sources=[
+                {"url": "http://example.com/1", "title": "S1", "hint": "why this one"},
+                {"url": "http://example.com/2", "title": "S2"},
+            ],
+        )
+    )
+    result = await poll_and_classify(client, "nb_1")
+
+    assert result.sources[0]["hint"] == "why this one"
+    assert "hint" not in result.sources[1]
+
+
+async def test_unmappable_discovery_mode_reaches_the_transports_as_unknown() -> None:
+    """The adapter's UNKNOWN-vs-None distinction has to survive projection.
+
+    ``None`` means "the poll made no mode claim"; ``"unknown"`` means "the
+    backend named a mode this client cannot read" — i.e. Google added a mode
+    and the enum needs updating. If both projected to ``null`` the drift signal
+    would die at the transport boundary, one layer short of the operator.
+    """
+    client = _client(
+        poll=_task(status=ResearchStatus.COMPLETED, discovery_mode=DiscoveryMode.UNKNOWN)
+    )
+    result = await poll_and_classify(client, "nb_1")
+    assert result.discovery_mode == "unknown"

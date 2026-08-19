@@ -222,8 +222,21 @@ class TestSourceAddCommand:
             ),
         ],
     )
-    def test_source_add(self, runner, mock_auth_for_vcr, mock_context, cassette, args):
-        """Add source (URL or text) works with real client."""
+    def test_source_add(
+        self,
+        runner,
+        mock_auth_for_vcr,
+        mock_context,
+        cassette,
+        args,
+        legacy_vcr_add_url_baseline,
+    ):
+        """Add source (URL or text) works with real client.
+
+        ``legacy_vcr_add_url_baseline`` answers the pre-create source list
+        ``add_url`` now takes (#2204) and ``sources_add_url.yaml`` predates; it
+        is inert for the ``text`` parameter, which runs no probe at all.
+        """
         with notebooklm_vcr.use_cassette(cassette):
             result = runner.invoke(cli, args)
             assert_command_success(result)

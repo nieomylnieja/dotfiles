@@ -14,56 +14,21 @@ Example:
 
 from __future__ import annotations
 
-import os
 import re
 import reprlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
+from . import _logging
 from ._env import DEFAULT_BASE_URL, get_base_url
-from ._logging import scrub_secrets
+from ._logging import _truncate_response_preview, scrub_secrets
 
 if TYPE_CHECKING:
     from ._types.artifacts import GenerationStatus
 
 ArtifactStalledPhase = Literal["pending", "in_progress"]
-
-
-_PREVIEW_LIMIT = 80
-# Pre-slice cap for the truncated path: scrub at most this many chars before
-# cutting to ``_PREVIEW_LIMIT``. The 10x window gives a boundary-straddling
-# secret ample room to be neutralized before the 80-char cut (mirrors the
-# two-stage slice in ``AuthExtractionError`` below), while bounding the regex
-# sweep at O(800 chars) instead of O(len(raw)) for multi-MB error bodies.
-_PREVIEW_SCRUB_CAP = _PREVIEW_LIMIT * 10
-
-
-def _truncate_response_preview(raw: str | None) -> str | None:
-    """Truncate a raw RPC response preview for safe display in error contexts.
-
-    Default behavior keeps the preview compact (80 chars + ``"..."`` suffix) so
-    error logs and CLI output stay readable. Set ``NOTEBOOKLM_DEBUG=1`` to opt
-    into the full untruncated body for deep debugging.
-
-    Credential-shaped substrings (CSRF tokens, session cookies, etc.) are
-    scrubbed *before* truncation in both modes. ``raw_response`` is a public
-    attribute spliced into ``str()``/``repr()`` of RPC errors, so it escapes the
-    logging pipeline's ``RedactingFilter`` and must be sanitized at the source.
-
-    In the default (truncated) path the input is pre-sliced to
-    ``_PREVIEW_SCRUB_CAP`` before scrubbing so a multi-MB error body does not
-    pay for a full regex sweep just to discard all but the first 80 chars. The
-    ``NOTEBOOKLM_DEBUG=1`` path keeps the whole body, so it scrubs the full
-    string.
-    """
-    if raw is None:
-        return None
-    if os.environ.get("NOTEBOOKLM_DEBUG") == "1":
-        return scrub_secrets(raw)
-    scrubbed = scrub_secrets(raw[:_PREVIEW_SCRUB_CAP])
-    if len(scrubbed) > _PREVIEW_LIMIT:
-        return scrubbed[:_PREVIEW_LIMIT] + "..."
-    return scrubbed
+_PREVIEW_LIMIT = _logging._PREVIEW_LIMIT
+_PREVIEW_SCRUB_CAP = _logging._PREVIEW_SCRUB_CAP
 
 
 __all__ = [
@@ -268,7 +233,7 @@ class LockUnavailableError(NotebookLMError, TimeoutError):
     """The canonical ``storage_state.json`` lock could not be acquired.
 
     Raised by the fail-closed storage writers (account-metadata and master-token
-    persistence in :mod:`notebooklm._auth.storage_writer`) when the unified
+    persistence in :mod:`notebooklm._auth.storage`) when the unified
     storage-sentinel lock stays unavailable for the whole bounded acquire window
     (default 90 s) — either sustained contention or an infrastructure failure
     (read-only directory, NFS without flock support, fd exhaustion). See
@@ -786,6 +751,12 @@ class NotebookNotFoundError(NotFoundError, RPCError, NotebookError):
         method_id: The RPC method ID (inherited from :class:`RPCError`).
         raw_response: First 80 chars of the raw response, if any
             (``NOTEBOOKLM_DEBUG=1`` preserves the full body).
+        rpc_code / found_ids: Wire diagnostics, when the absence came from a
+            typed rejection rather than a degenerate payload (both inherited
+            from :class:`RPCError`).
+        detail: Appended to the message. A status-5 miss can mean "belongs to
+            another signed-in account" and adapters render only ``str(exc)``
+            (#114 / #294); callers pass text their layer already scrubbed.
     """
 
     def __init__(
@@ -794,12 +765,17 @@ class NotebookNotFoundError(NotFoundError, RPCError, NotebookError):
         *,
         method_id: str | None = None,
         raw_response: str | None = None,
+        rpc_code: str | int | None = None,
+        found_ids: list[str] | None = None,
+        detail: str | None = None,
     ):
         self.notebook_id = notebook_id
         super().__init__(
-            f"Notebook not found: {notebook_id}",
+            f"Notebook not found: {notebook_id}" + (f" — {detail}" if detail else ""),
             method_id=method_id,
             raw_response=raw_response,
+            rpc_code=rpc_code,
+            found_ids=found_ids,
         )
 
 

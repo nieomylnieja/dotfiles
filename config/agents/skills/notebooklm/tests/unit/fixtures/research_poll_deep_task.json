@@ -1,0 +1,112 @@
+{
+  "_source": "live POLL_RESEARCH capture, 2026-08-13 (#2122): one DEEP research run, polled after it settled. Committed so the DiscoveryMode.DEEP_RESEARCH decode is pinned against a real deep task_info rather than a hand-built one.",
+  "poll": [
+    [
+      [
+        "d278ca7e-f409-45e9-9dec-16e5233f9220",
+        [
+          "5c80afa3-6880-4019-8524-216585dc1ff8",
+          [
+            "history of the asyncio event loop design",
+            1
+          ],
+          5,
+          [
+            [
+              [
+                "https://peps.python.org/pep-3156/",
+                "PEP 3156 – Asynchronous IO Support Rebooted: the “asyncio” Module - Python Enhancement Proposals",
+                "You get the foundational specification for the asyncio module.",
+                1,
+                null,
+                null,
+                "SCRUBBED",
+                null,
+                1
+              ],
+              [
+                "https://asyncio-notes.readthedocs.io/en/latest/asyncio-history.html",
+                "History of asyncio — asyncio developer notes documentation - Read the Docs",
+                "Provides a comprehensive timeline of PEPs and releases.",
+                1,
+                null,
+                null,
+                "SCRUBBED",
+                null,
+                2
+              ],
+              [
+                null,
+                "Architectural History and Evolution of the Python Asyncio Event Loop",
+                null,
+                5,
+                null,
+                null,
+                "SCRUBBED"
+              ],
+              [
+                "https://pypi.org/project/asyncio/0.1.1/",
+                "asyncio · PyPI",
+                null,
+                1,
+                null,
+                null,
+                "SCRUBBED"
+              ]
+            ]
+          ],
+          2,
+          "SCRUBBED"
+        ],
+        [
+          1786624768,
+          188691000
+        ],
+        [
+          1786624404,
+          619825000
+        ],
+        "400237754469"
+      ],
+      [
+        "cae1e871-b218-4f46-8190-d94305da7aa4",
+        [
+          "5c80afa3-6880-4019-8524-216585dc1ff8",
+          [
+            "python asyncio event loop",
+            1
+          ],
+          1,
+          [
+            [
+              [
+                "https://docs.python.org/3/howto/a-conceptual-overview-of-asyncio.html",
+                "A Conceptual Overview of asyncio — Python 3.14.7 documentation",
+                "Build a sturdy mental model of the event loop's orchestration.",
+                1
+              ],
+              [
+                "https://paths.grasp.study/modules/07a7764f-3eba-4ed2-b57b-bc534d7666de/lessons/bfa753aa-ac3d-49a5-a25b-0b8bcfcc7937",
+                "Understanding the `asyncio` Event Loop - grasp.study",
+                "Visual metaphors explaining cooperative multitasking and the single-threaded scheduler.",
+                1
+              ]
+            ],
+            "SCRUBBED"
+          ],
+          2
+        ],
+        [
+          1786624401,
+          403942000
+        ],
+        [
+          1786624393,
+          606945000
+        ],
+        "400237754469"
+      ]
+    ]
+  ],
+  "_trimmed": "Trimmed for size; every retained byte is verbatim from the capture. Replaced with SCRUBBED: task_info[5] (the deep-only progress block — an opaque sessionId plus a ~200KB base64 blob), every source row's src[6] typed content block, and the summaries. The discovered sources are reduced to a few real rows per task, chosen to span the shapes (report row, web rows with and without a hint). Untouched: slots 0-4 of each task row, slots 0-4 of each task_info, and src[0]-src[3] of every kept source — which is what this fixture exists to pin. Content-block decoding is covered by tests/cassettes/research_deep_poll_long.yaml."
+}

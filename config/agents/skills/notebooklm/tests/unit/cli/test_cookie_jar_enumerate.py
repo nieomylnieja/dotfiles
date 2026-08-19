@@ -196,3 +196,15 @@ class TestSuccessPath:
         assert len(out) == 1
         assert out[0].browser_profile == "Profile 1"
         assert out[0].email == "a@gmail.com"
+
+
+class TestBrowserAliasMap:
+    def test_ie_and_octo_resolve_to_real_rookie_cookies_attribute_names(self):
+        # rookie_cookies only exports "internet_explorer" / "octo_browser"
+        # (Windows-only, gated in its __init__.py) -- there is no "ie" or
+        # "octo" attribute on the module at all. A stale "ie" -> "ie" /
+        # "octo" -> "octo" mapping means getattr(rookie_cookies, alias)
+        # always misses, so --browser-cookies ie/octo could never resolve.
+        aliases = cookie_jar._ROOKIE_COOKIES_BROWSER_ALIASES
+        assert aliases["ie"] == "internet_explorer"
+        assert aliases["octo"] == "octo_browser"

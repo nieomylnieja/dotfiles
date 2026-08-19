@@ -16,10 +16,9 @@ Specifically pinned here:
 * ``_bound_loop`` **mismatch raises ``RuntimeError``** — the cross-loop guard
   in :meth:`RuntimeTransport.perform_authed_post` reads ``_bound_loop`` through
   the lifecycle and raises actionably when the loops differ.
-* :meth:`ClientLifecycle.save_cookies` **invokes** the
-  :class:`CookiePersistence` collaborator's ``save`` method with the right
-  ``jar`` and ``path`` arguments AND with the ``save_cookies_to_storage``
-  value resolved from ``notebooklm._auth.storage`` at call time.
+* :meth:`ClientLifecycle.save_cookies` routes the untouched default through
+  :class:`CookiePersistence`'s typed canonical path and preserves the explicit
+  constructor-injected saver override.
 * The httpx ``AsyncClient`` **always uses httpx's default transport** —
   Tier-12 PR 12.6 lifted synthetic-error injection into the chain
   (:class:`notebooklm._middleware.error_injection.ErrorInjectionMiddleware`)
@@ -50,11 +49,12 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+from notebooklm._auth.storage import snapshot_cookie_jar
+from notebooklm._runtime.config import CORE_LOGGER_NAME
 from notebooklm._runtime.helpers import _resolve_keepalive_interval
 from notebooklm._runtime.lifecycle import (
     ClientLifecycle,
     _default_cookie_rotator,
-    _default_cookie_saver,
 )
 from notebooklm._transport_drain import TransportDrainTracker
 from notebooklm.auth import AuthTokens
@@ -85,8 +85,8 @@ class _StubHost:
       ``_drain_tracker._draining = False`` write) and ``set_bound_loop``
       on each of the three helpers (drain / reqid / auth_coord) from the
       open() path so cross-loop misuse can be caught.
-    * ``cookie_persistence`` — a ``MagicMock`` with an async ``save``
-      coroutine; assertions check it was called with the right args.
+    * ``cookie_persistence`` — a ``MagicMock`` with async canonical and explicit
+      v0 callback adapters; assertions check the selected route exactly.
     * ``_drain_tracker.run_drain_hooks`` — called by close(); set to an
       ``AsyncMock`` so tests can assert it ran and inspect call order.
 
@@ -132,7 +132,9 @@ class _StubHost:
         # directly (the lifecycle itself no longer reads it).
         self._auth_coord._refresh_task = None
         self._auth_coord.cancel_inflight_refresh = AsyncMock()
-        # ``_reqid`` is targeted by ``set_bound_loop`` from open() (P0-2).
+        # ``_reqid`` is targeted by ``set_bound_loop`` from open() (P0-2) and,
+        # like ``_auth_coord``, by ``reset_after_open`` (#2106) so their lazy
+        # loop-bound locks are discarded on close→reopen.
         self._reqid = MagicMock()
         # ``open()`` also propagates the bound loop into the composition
         # holder and resets the lazy RPC semaphore (issue #1169): it calls
@@ -160,8 +162,11 @@ class _StubHost:
         # ``test_open_captures_bound_loop_and_resets_drain``.
         self._chat = MagicMock()
         self.cookie_persistence = MagicMock()
-        self.cookie_persistence.save = AsyncMock()
+        self.cookie_persistence._save_canonical = AsyncMock()
+        self.cookie_persistence._save_v0_callback = AsyncMock()
+        self.cookie_persistence._prepare_open_baseline = AsyncMock()
         self.cookie_persistence.capture_open_snapshot = MagicMock()
+        self.cookie_persistence.loaded_cookie_snapshot = None
         # Stage B1 PR 2 dropped the close-time null on ``_rpc_executor``;
         # the slot is left as-set by the composition root. Set a stable
         # sentinel here in case future regression tests want to assert
@@ -174,6 +179,7 @@ def _make_lifecycle(
     *,
     keepalive_interval: float | None = None,
     keepalive_storage_path: Path | None = None,
+    auth: AuthTokens | None = None,
 ) -> ClientLifecycle:
     """Construct a :class:`ClientLifecycle` with defaults safe for unit tests.
 
@@ -187,6 +193,8 @@ def _make_lifecycle(
         limits=ConnectionLimits(),
         keepalive_interval=keepalive_interval,
         keepalive_storage_path=keepalive_storage_path,
+        auth=auth or AuthTokens(csrf_token="CSRF", session_id="SID", cookies={"SID": "v1"}),
+        cookie_persistence_path=keepalive_storage_path,
     )
 
 
@@ -295,6 +303,14 @@ async def test_open_captures_bound_loop_and_resets_drain() -> None:
     # rebind on close→reopen.
     host._chat.set_bound_loop.assert_called_once_with(asyncio.get_running_loop())
     host._chat.reset_after_open.assert_called_once_with()
+    # Issue #2106: the reqid counter and the auth refresh coordinator own
+    # lazily-built loop-bound locks too and must receive the same
+    # set_bound_loop / reset_after_open treatment so those locks rebind on
+    # close→reopen instead of surviving as stale cross-loop primitives.
+    host._reqid.set_bound_loop.assert_called_once_with(asyncio.get_running_loop())
+    host._reqid.reset_after_open.assert_called_once_with()
+    host._auth_coord.set_bound_loop.assert_called_once_with(asyncio.get_running_loop())
+    host._auth_coord.reset_after_open.assert_called_once_with()
 
     await _close(lifecycle, host)
 
@@ -330,8 +346,12 @@ async def test_open_captures_cookie_snapshot() -> None:
     the contract that the open-time baseline reflects httpx-normalized
     domains.
     """
-    lifecycle = _make_lifecycle()
+    auth = AuthTokens(csrf_token="CSRF", session_id="SID", cookies={"SID": "v1"})
+    lifecycle = _make_lifecycle(auth=auth)
     host = _StubHost()
+    host.auth = auth
+    mirrored = snapshot_cookie_jar(auth.cookie_jar)
+    host.cookie_persistence.loaded_cookie_snapshot = mirrored
 
     await _open(lifecycle, host)
     try:
@@ -339,6 +359,7 @@ async def test_open_captures_cookie_snapshot() -> None:
         passed_jar = host.cookie_persistence.capture_open_snapshot.call_args.args[0]
         # The jar passed to capture is the AsyncClient's live jar.
         assert passed_jar is lifecycle._http_client.cookies  # type: ignore[union-attr]
+        assert auth.cookie_snapshot is mirrored
     finally:
         await _close(lifecycle, host)
 
@@ -487,60 +508,104 @@ async def test_close_runs_drain_hooks_before_transport_teardown() -> None:
 
 
 # ---------------------------------------------------------------------------
-# save_cookies — invokes cookie_persistence with right args
+# save_cookies — typed default and compatibility override routing
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_save_cookies_invokes_cookie_persistence(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+async def test_save_cookies_uses_typed_default_and_mirrors_snapshot(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """``save_cookies(host, jar, path)`` delegates to
-    ``host.cookie_persistence.save(...)``, forwarding the lifecycle's
-    ``_cookie_saver`` wrapper as the storage writer.
-
-    Phase 2 PR 3 introduced an injectable ``cookie_saver`` seam; the
-    default ``_default_cookie_saver`` wrapper still late-binds at call
-    time so a swap of the canonical ``_auth.storage.save_cookies_to_storage``
-    attribute fires through. (Phase 4 retargeted the wrapper's late-bind
-    from ``notebooklm._core`` to ``notebooklm._auth.storage`` when the
-    ``_core`` compatibility shim was deleted.) This assertion is BEHAVIORAL
-    (invoke the wrapper, observe the sentinel was called) rather than
-    identity-based, because the wrapper indirection is the whole point of
-    the seam.
-    """
-    from notebooklm._auth import storage as storage_module
-
-    sentinel = MagicMock()
-    monkeypatch.setattr(storage_module, "save_cookies_to_storage", sentinel)
-
-    lifecycle = _make_lifecycle()
+    """An untouched default saver selects the private typed owner exactly once."""
+    auth = AuthTokens(csrf_token="CSRF", session_id="SID", cookies={"SID": "v1"})
+    lifecycle = _make_lifecycle(auth=auth, keepalive_storage_path=tmp_path / "storage.json")
     host = _StubHost()
-    jar = httpx.Cookies()
-    jar.set("SID", "v2", domain=".google.com")
-    target_path = tmp_path / "storage_state.json"
+    mirrored = snapshot_cookie_jar(httpx.Cookies({"SID": "v2"}))
+    host.cookie_persistence.loaded_cookie_snapshot = mirrored
+    cookie_secret = "canonical-cookie-secret-sentinel"
+    jar = httpx.Cookies({"SID": cookie_secret})
 
-    await lifecycle.save_cookies(host.cookie_persistence, jar, target_path)
+    with caplog.at_level("DEBUG", logger=CORE_LOGGER_NAME):
+        await lifecycle.save_cookies(host.cookie_persistence, jar)
 
-    host.cookie_persistence.save.assert_awaited_once()
-    call = host.cookie_persistence.save.call_args
-    assert call.args[0] is jar
-    assert call.args[1] == target_path
-    # The kwarg is the lifecycle's wrapper (not the raw sentinel), so the
-    # ``CookiePersistence._save`` worker-thread invocation goes through
-    # ``_default_cookie_saver``'s late-bound ``_auth.storage`` lookup.
-    forwarded_saver = call.kwargs["save_cookies_to_storage"]
-    assert forwarded_saver is lifecycle._cookie_saver, (
-        "lifecycle.save_cookies must forward self._cookie_saver as the "
-        "storage writer (the wrapper indirection is what preserves the "
-        "canonical monkeypatch surface)."
+    host.cookie_persistence._save_canonical.assert_awaited_once_with(
+        jar,
+        tmp_path / "storage.json",
+        to_thread=asyncio.to_thread,
     )
-    # Behavioral check: invoking the captured wrapper hits the monkeypatched
-    # sentinel via late-bound canonical-module resolution.
-    forwarded_saver(jar, target_path)
-    sentinel.assert_called_once_with(jar, target_path)
-    assert call.kwargs["to_thread"] is asyncio.to_thread
+    host.cookie_persistence._save_v0_callback.assert_not_awaited()
+    route_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Cookie persistence route:")
+    ]
+    storage_path = tmp_path / "storage.json"
+    assert route_messages == [
+        f"Cookie persistence route: type=canonical_store status=dispatch path={storage_path}"
+    ]
+    assert cookie_secret not in "\n".join(route_messages)
+    assert auth.cookie_snapshot is mirrored
+
+
+@pytest.mark.asyncio
+async def test_save_cookies_logs_explicit_callback_route_without_cookie_values(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    saver = MagicMock(return_value=True)
+    path = tmp_path / "storage.json"
+    lifecycle = ClientLifecycle(
+        timeout=30.0,
+        connect_timeout=10.0,
+        limits=ConnectionLimits(),
+        keepalive_interval=None,
+        keepalive_storage_path=path,
+        cookie_persistence_path=path,
+        cookie_saver=saver,
+    )
+    host = _StubHost()
+    cookie_secret = "explicit-cookie-secret-sentinel"
+    jar = httpx.Cookies({"SID": cookie_secret})
+
+    with caplog.at_level("DEBUG", logger=CORE_LOGGER_NAME):
+        await lifecycle.save_cookies(host.cookie_persistence, jar)
+
+    host.cookie_persistence._save_canonical.assert_not_awaited()
+    host.cookie_persistence._save_v0_callback.assert_awaited_once_with(
+        jar,
+        path,
+        save_cookies_to_storage=saver,
+        to_thread=asyncio.to_thread,
+    )
+    route_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Cookie persistence route:")
+    ]
+    assert route_messages == [
+        f"Cookie persistence route: type=explicit_v0_callback status=dispatch path={path}"
+    ]
+    assert cookie_secret not in "\n".join(route_messages)
+
+
+@pytest.mark.asyncio
+async def test_save_cookies_legacy_direct_defaults_skip_mirror_and_keep_no_target() -> None:
+    lifecycle = ClientLifecycle(
+        timeout=30.0,
+        connect_timeout=10.0,
+        limits=ConnectionLimits(),
+        keepalive_interval=None,
+        keepalive_storage_path=None,
+    )
+    host = _StubHost()
+    jar = httpx.Cookies({"SID": "v2"})
+
+    await lifecycle.save_cookies(host.cookie_persistence, jar)
+
+    host.cookie_persistence._save_canonical.assert_awaited_once_with(
+        jar,
+        None,
+        to_thread=asyncio.to_thread,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -673,71 +738,55 @@ def test_init_is_event_loop_agnostic() -> None:
     the ``httpx.AsyncClient`` and keepalive task are deferred to ``open()``.
     """
     # Outside ``asyncio.run`` — no running loop available.
+    auth = AuthTokens(csrf_token="CSRF", session_id="SID", cookies={"SID": "v1"})
     lifecycle = ClientLifecycle(
         timeout=30.0,
         connect_timeout=10.0,
         limits=ConnectionLimits(),
         keepalive_interval=60.0,
         keepalive_storage_path=Path("/tmp/storage.json"),
+        auth=auth,
+        cookie_persistence_path=Path("/tmp/storage.json"),
     )
     assert lifecycle._http_client is None
     assert lifecycle._bound_loop is None
     assert lifecycle._keepalive_task is None
     assert lifecycle._keepalive_interval == 60.0
     assert lifecycle._keepalive_storage_path == Path("/tmp/storage.json")
+    assert lifecycle._auth is auth
     assert lifecycle._timeout == 30.0
     assert lifecycle._connect_timeout == 10.0
     assert lifecycle.is_open() is False
     assert lifecycle.get_bound_loop() is None
 
 
+def test_init_preserves_legacy_direct_construction_defaults() -> None:
+    lifecycle = ClientLifecycle(
+        timeout=30.0,
+        connect_timeout=10.0,
+        limits=ConnectionLimits(),
+        keepalive_interval=None,
+        keepalive_storage_path=None,
+    )
+
+    assert lifecycle._auth is None
+    assert lifecycle._cookie_persistence_path is None
+
+
 # ---------------------------------------------------------------------------
 # Injectable seams
 #
-# Three load-bearing properties pinned here:
+# Two load-bearing properties pinned here:
 #
-# 1. ``_default_cookie_saver`` performs a late-bound
-#    ``_auth.storage.save_cookies_to_storage`` lookup inside its function body.
-#    Monkeypatching the canonical storage seam AFTER the wrapper exists must
-#    still affect the wrapper's behavior.
-#
-# 2. ``_default_cookie_rotator`` performs the same late-bound lookup for
+# 1. ``_default_cookie_rotator`` performs a late-bound lookup for
 #    ``_auth.keepalive._rotate_cookies``. The keepalive-loop equivalent of (1).
 #
-# 3. ``ClientLifecycle.__init__`` wires the defaults when ``cookie_saver`` /
+# 2. ``ClientLifecycle.__init__`` wires the defaults when ``cookie_saver`` /
 #    ``cookie_rotator`` are ``None`` (or omitted), and accepts custom
 #    callables when supplied. The ``or _default_*`` resolution pattern is what
 #    lets the production assembly path omit custom seam callables when no
 #    override is supplied.
 # ---------------------------------------------------------------------------
-
-
-def test_default_cookie_saver_late_binds_to_canonical_seam(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``_default_cookie_saver`` resolves
-    ``_auth.storage.save_cookies_to_storage`` at CALL time, not at
-    module-import time.
-
-    Establish a sentinel AFTER ``_default_cookie_saver`` already exists,
-    then invoke the wrapper and prove the sentinel was called. A non-late-
-    bound wrapper would have captured the original ``save_cookies_to_storage``
-    reference at module load and silently ignored the monkeypatch.
-    (Phase 4 retargeted the late-bind from ``notebooklm._core`` to
-    ``notebooklm._auth.storage`` when the ``_core`` compatibility shim
-    was deleted.)
-    """
-    from notebooklm._auth import storage as storage_module
-
-    sentinel = MagicMock(return_value=True)
-    monkeypatch.setattr(storage_module, "save_cookies_to_storage", sentinel)
-
-    jar = httpx.Cookies()
-    path = Path("/tmp/storage.json")
-    result = _default_cookie_saver(jar, path)
-
-    sentinel.assert_called_once_with(jar, path)
-    assert result is True
 
 
 @pytest.mark.asyncio
@@ -762,25 +811,28 @@ async def test_default_cookie_rotator_late_binds_to_canonical_seam(
     sentinel.assert_awaited_once_with(client, path)
 
 
-def test_init_wires_default_seams_when_none_supplied() -> None:
+def test_init_selects_canonical_saver_and_default_rotator_when_none_supplied() -> None:
     """When ``cookie_saver`` / ``cookie_rotator`` are omitted (or ``None``),
-    ``ClientLifecycle.__init__`` wires the module-level late-binding
-    defaults; supplying custom callables overrides them.
+    ``ClientLifecycle.__init__`` retains the canonical saver sentinel and wires
+    the module-level rotator default; supplied callables remain exact.
 
     This is what lets the production assembly path omit custom seam callables
     when no override is supplied: it constructs ``ClientLifecycle(...)``
-    without the new kwargs, and the ``or _default_*`` resolution preserves the
-    canonical late-bound seams.
+    without the new kwargs. The saver sentinel selects the typed store path;
+    the rotator preserves its historical late-bound default.
     """
-    # Defaults: omit the kwargs entirely.
+    auth = AuthTokens(csrf_token="CSRF", session_id="SID", cookies={"SID": "v1"})
+    # Defaults: omit the seam kwargs entirely.
     default_lifecycle = ClientLifecycle(
         timeout=30.0,
         connect_timeout=10.0,
         limits=ConnectionLimits(),
         keepalive_interval=None,
         keepalive_storage_path=None,
+        auth=auth,
+        cookie_persistence_path=None,
     )
-    assert default_lifecycle._cookie_saver is _default_cookie_saver
+    assert default_lifecycle._cookie_saver is None
     assert default_lifecycle._cookie_rotator is _default_cookie_rotator
 
     # Explicit ``None`` resolves the same way as omission.
@@ -790,10 +842,12 @@ def test_init_wires_default_seams_when_none_supplied() -> None:
         limits=ConnectionLimits(),
         keepalive_interval=None,
         keepalive_storage_path=None,
+        auth=auth,
+        cookie_persistence_path=None,
         cookie_saver=None,
         cookie_rotator=None,
     )
-    assert explicit_none_lifecycle._cookie_saver is _default_cookie_saver
+    assert explicit_none_lifecycle._cookie_saver is None
     assert explicit_none_lifecycle._cookie_rotator is _default_cookie_rotator
 
     # Custom callables override the defaults — pure pass-through, no
@@ -806,6 +860,8 @@ def test_init_wires_default_seams_when_none_supplied() -> None:
         limits=ConnectionLimits(),
         keepalive_interval=None,
         keepalive_storage_path=None,
+        auth=auth,
+        cookie_persistence_path=None,
         cookie_saver=custom_saver,
         cookie_rotator=custom_rotator,
     )

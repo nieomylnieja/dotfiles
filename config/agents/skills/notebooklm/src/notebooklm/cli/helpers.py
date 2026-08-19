@@ -223,6 +223,8 @@ def set_current_notebook(
     title: str | None = None,
     is_owner: bool | None = None,
     created_at: str | None = None,
+    *,
+    role: str | None = None,
 ):
     """Set the current notebook context."""
     context_helpers.set_current_notebook(
@@ -230,6 +232,7 @@ def set_current_notebook(
         title=title,
         is_owner=is_owner,
         created_at=created_at,
+        role=role,
         context_path_fn=get_context_path,
     )
 

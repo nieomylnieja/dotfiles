@@ -1,7 +1,7 @@
 # CLI Reference
 
 **Status:** Active
-**Last Updated:** 2026-06-11
+**Last Updated:** 2026-08-12
 
 Complete command reference for the `notebooklm` CLI—providing full programmatic access to all NotebookLM features, including capabilities not exposed in the web UI.
 
@@ -155,9 +155,10 @@ Supported source types: URLs, YouTube videos, files (PDF, text, Markdown, Word, 
 
 | Command | Arguments | Options | Example |
 |---------|-----------|---------|---------|
-| `list` | - | `--json`, `--limit N`, `--no-truncate` | `source list --limit 20 --no-truncate` |
+| `list` | - | `--json`, `--limit N`, `--no-truncate`, `--label`, `--status` | `source list --limit 20 --no-truncate` |
 | `add <content>` | URL/file/text (use `-` for stdin) | `--title`, `--type`, `--timeout`, `--follow-symlinks`, `--allow-internal` (URL sources only), `--json` (file-source `--mime-type` overrides extension inference — see [detailed section](#source-add-mime-type-file-sources)) | `source add "https://..." --timeout 90` |
 | `add-drive <id> <title>` | Drive file ID, title | `--mime-type [google-doc\|google-slides\|google-sheets\|pdf]`, `--json` | `source add-drive abc123 "Doc" --mime-type google-slides` |
+| `add-drive-file <id>` | Drive file ID or share URL | `--title`, `--wait`, `--json` | `source add-drive-file abc123 --title "Notes" --wait` |
 | `add-research [query]` | Search query (or `--prompt-file -` for stdin) | `--mode [fast\|deep]`, `--from [web\|drive]`, `--import-all`, `--cited-only`, `--no-wait`, `--timeout`, `--prompt-file PATH` | `source add-research "AI" --mode deep --no-wait` |
 | `get <id>` | Source ID | `--json` | `source get src123` |
 | `fulltext <id>` | Source ID | `--json`, `-o FILE`, `--force`, `--no-clobber`, `-f [text\|markdown]` | `source fulltext src123 -f markdown -o out.md` (`-f markdown` requires the `markdown` extra: `pip install "notebooklm-py[markdown]"` — full extras matrix: [docs/installation.md#optional-extras-matrix](installation.md#optional-extras-matrix)) |
@@ -181,6 +182,56 @@ All `source` subcommands also accept `-n/--notebook ID` (resolves via flag > `NO
 `source stale` reports whether a URL/Drive source needs a refresh. By default it follows the standard CLI exit convention (`0` on success, `1` on error); branch on the JSON `stale`/`fresh` fields (or stdout text) for the freshness verdict. Pass `--exit-on-stale` to opt into the back-compat inverted predicate (`0` = stale, `1` = fresh) for shell idioms like `if notebooklm source stale --exit-on-stale ID; then refresh; fi`.
 
 `source list` also accepts `--label <id|name>` to list only the sources in a given label (a saved selection). The selector resolves a label id (or partial prefix) **or** an exact label name; see [Label Commands](#label-commands-notebooklm-label-cmd).
+
+`source list --status <state>` restricts the listing to one ingestion status — `ready`, `processing`, `error`, `preparing`, or `unknown`. The choices are derived from `SourceStatus`, so they cannot drift from the labels the Status column renders, and the filter is applied inside the fetch, so `count` in `--json` always matches the rows shown. It composes with `--label`.
+
+#### Finding orphaned sources (`--status preparing`)
+
+A file add that fails *after* its source row is registered leaves that row in place deliberately — it is the evidence of what happened, and it still counts against the notebook's source quota. The row sits at `preparing`, **not** `error`, so the status a caller reaches for first finds nothing ([#2138](https://github.com/teng-lin/notebooklm-py/issues/2138)):
+
+```bash
+notebooklm source list --status preparing        # the reconciliation query
+notebooklm source delete <id>                    # once you have confirmed it is stuck
+```
+
+Rows that are genuinely mid-upload also report `preparing`, so this filter cannot by itself tell "abandoned" from "in flight" — re-run it a minute apart and act only on rows that persist. Nothing is deleted automatically; that posture is deliberate (see [#2110](https://github.com/teng-lin/notebooklm-py/issues/2110)).
+
+When the failing add raised in your own process, you do not need to search at all: the exception carries the retained row's id directly, via `getattr(exc, "source_id", None)`.
+
+#### Drive-backed sources in `source list` / `source get`
+
+Both commands emit the same `--json` source row:
+
+```json
+{
+  "id": "ef72c03c-…", "title": "Rubisco Research", "type": "google_docs", "url": null,
+  "status": "ready", "status_id": 2, "created_at": "2026-01-23T18:42:00",
+  "drive_document_id": "1oAk_INJ…", "drive_status": "deleted", "is_drive_degraded": true
+}
+```
+
+(`source list` prefixes each row with a 1-based `index`.)
+
+- **`drive_document_id`** — the Google Drive file id. A Drive source carries no `url`, so this is the only field tying it back to the file it was created from; `source add-drive` matches on it to stay idempotent.
+- **`drive_status`** — Drive-side health: `inaccessible` / `syncing` / `active` / `deleted` / `gen_ai_access_denied`, or `unknown` for a code this client cannot map. **`null` means the row made no Drive-health claim at all**, which is a different answer from `"unknown"`.
+- **`is_drive_degraded`** — `true` only when the backend explicitly reported a non-healthy Drive state. `false` means "nothing degraded was reported" — equally true for a non-Drive source, for `active`, and for an unreadable code — not "the file is confirmed present".
+
+All three keys are present on **every** row (null/false on non-Drive sources), so `jq '.sources[] | select(.drive_status == "deleted")'` needs no `// empty` guard.
+
+**Which rows are Drive-backed?** `drive_document_id` and `drive_status` are decoded from structurally independent parts of the response, so **either one being non-null** means the row is Drive-backed — neither alone is the authoritative test. In particular, the common case is an id with **no** health claim (`{"drive_document_id": "1oAk…", "drive_status": null}`), so filtering on `drive_status != null` will miss most Drive sources.
+
+Unlike the MCP/REST surfaces, the CLI ships **no raw Drive status code** beside the label. It would carry no extra information (an unmappable code is replaced by a client-side sentinel before it reaches output), and its code space collides adversarially with `status_id`'s — `2`/`3` mean `ready`/`error` for ingestion but `syncing`/`active` for Drive, so a consumer reasoning by analogy would select exactly the wrong rows.
+
+### `status` and `drive_status` are different axes
+
+`status` reports NotebookLM's own ingestion, which completes and **stays** complete after the Drive file is deleted or unshared. A source therefore reads `"status": "ready"` while `"drive_status": "deleted"` — answers grounded on it may be stale.
+
+Human (non-`--json`) output reflects this without adding a column:
+
+- **`source list`** appends the Drive verdict to the Status cell — `ready (drive: deleted)` — but only for a row the backend reports as degraded (`is_drive_degraded`), whatever that row's ingestion status is. An unreadable code (`unknown`) is not flagged here; it is not evidence of degradation, and the table should not cry wolf on protocol drift. Note that Rich sizes columns table-wide, so a single annotated row does re-flow the whole table; that cost is only paid when something is actually wrong.
+- **`source get`** adds `Drive File ID:` and `Drive Status:` lines, each shown only when that field is present.
+
+> **Cross-surface naming.** MCP and REST spell this axis `drive_status` (raw code) + `drive_status_label` (string); the CLI uses `drive_status` for the **string**, matching its own long-standing `status` (label) / `status_id` (code) pairing. So `select(.drive_status == "deleted")` is right for the CLI and wrong for MCP/REST, where that key holds an integer. Both surfaces resolve the label through the same mapping helper, so the vocabulary never diverges — only the key name.
 
 ### Label Commands (`notebooklm label <cmd>`)
 
@@ -224,6 +275,7 @@ Collections are account-level, so — unlike `label` — the `collection` comman
 |---------|-----------|---------|---------|
 | `status` | - | `-n/--notebook`, `--json` | `research status` |
 | `wait` | - | `-n/--notebook`, `--timeout`, `--interval`, `--import-all`, `--cited-only`, `--json` | `research wait --import-all --cited-only` |
+| `import` | - | `-n/--notebook`, `--run-id`, `--cited-only`, `--timeout`, `--max-sources`, `--allow-duplicate`, `--json` | `research import` |
 | `cancel` | `RUN_ID` | `-n/--notebook`, `--json` | `research cancel <run_id>` |
 
 ### Generate Commands (`notebooklm generate <type>`)
@@ -263,7 +315,7 @@ Language-aware generate commands (`audio`, `video`, `cinematic-video`, `report`,
 
 | Command | Arguments | Options | Example |
 |---------|-----------|---------|---------|
-| `list` | - | `--type [all\|audio\|video\|slide-deck\|quiz\|flashcard\|infographic\|data-table\|mind-map\|report]`, `--limit N`, `--no-truncate`, `--json` | `artifact list --type audio --limit 5` |
+| `list` | - | `--type [all\|audio\|video\|slide-deck\|quiz\|flashcard\|infographic\|data-table\|mind-map\|report\|fantasy-map\|file]`, `--limit N`, `--no-truncate`, `--json` | `artifact list --type audio --limit 5` |
 | `get <id>` | Artifact ID | `--json` | `artifact get art123` |
 | `get-prompt <id>` | Artifact ID | `--json` | `artifact get-prompt art123` |
 | `rename <id> <title>` | Artifact ID, title | `--json` | `artifact rename art123 "Title"` |
@@ -412,20 +464,22 @@ These CLI capabilities are not available in NotebookLM's web interface:
 
 Authenticate with Google NotebookLM via browser.
 
-> **Python equivalent:** load saved credentials with [`AuthTokens.from_storage()` / `NotebookLMClient.from_storage(...)`](python-api.md#authentication). The CLI's interactive browser-login flow has no Python counterpart — run `notebooklm login` once to seed `storage_state.json`, then drive the API from Python.
+> **Python equivalent:** load saved credentials with [`NotebookLMClient.from_storage(...)`](python-api.md#authentication) and use it as an async context manager. The CLI's interactive browser-login flow has no Python counterpart — run `notebooklm login` once to seed `storage_state.json`, then drive the API from Python.
 
 ```bash
 notebooklm login [OPTIONS]
 ```
 
-By default, opens a Chromium browser with a persistent profile. Complete the Google login in the browser window — the CLI detects the redirect back to either personal host (`notebook.google.com` or `notebooklm.google.com`) and saves the session automatically (no terminal keystroke required). The wait window is 5 minutes; if login is not detected before then, the command exits with a retry hint. Use `--browser msedge` for Microsoft Edge, or `--browser-cookies <browser>` to import cookies from an already-logged-in browser without launching Playwright.
+By default, opens a Chromium browser with a persistent profile. Complete the Google login in the browser window — the CLI detects the redirect back to either personal host (`notebook.google.com` or `notebooklm.google.com`) and saves the session automatically (no terminal keystroke required). The wait window is 5 minutes by default; if login is not detected before then, the command exits with a retry hint. Use `--browser-timeout` to extend that human-interaction window, `--browser msedge` for Microsoft Edge, or `--browser-cookies <browser>` to import cookies from an already-logged-in browser without launching Playwright.
 
 **Options:**
 - `--storage PATH` - Where to save storage_state.json (default: `$NOTEBOOKLM_HOME/profiles/<profile>/storage_state.json`)
 - `--browser [chromium|msedge|chrome]` - Browser to use for login (default: `chromium`). Use `chrome` for system Google Chrome (workaround when bundled Chromium crashes, e.g. macOS 15+); use `msedge` for Microsoft Edge. **Note:** only `chromium` is auto-installed by the CLI on first login (~170 MB Chromium download); `--browser msedge` and `--browser chrome` require the corresponding browser to be already installed on your system.
+- `--browser-timeout SECONDS` - Human-interaction window for ordinary headed login and browser-assisted master-token bootstrap (default: `300`).
 - `--browser-cookies <auto|chrome|edge|firefox|safari|brave|arc|...>` - Read cookies from an installed browser instead of launching Playwright. Pass an explicit browser name, or `auto` to let rookiepy auto-detect. For Chromium-family user profiles, use `chrome::<profile-name-or-directory>` (for example `chrome::Profile 1` or `brave::Work`) to extract from one profile explicitly. For Firefox Multi-Account Containers, use `firefox::<container-name>` to extract from a single container, or `firefox::none` for the no-container default — unscoped `firefox` merges every container's cookies (and emits a warning when that's happening). Requires `pip install "notebooklm-py[cookies]"` (full extras matrix: [docs/installation.md#optional-extras-matrix](installation.md#optional-extras-matrix)).
 - `--account EMAIL` - Pick a signed-in Google account by email when several are present in the browser. Saves to the active profile by default; use `--profile-name` for a separate named profile or `--storage` for an exact path. Only valid with `--browser-cookies`.
 - `--all-accounts` - Extract every Google account signed in to the browser into separate profiles named from each account email. Only valid with `--browser-cookies`.
+- `--update` - With `--all-accounts`: when an account's natural profile name (e.g. `alice` for `alice@gmail.com`) already exists but has no account metadata, update that profile in place instead of creating a suffixed `alice-2`. Profiles that already bind a different email still get a suffix to avoid clobbering. Only valid with `--all-accounts`.
 - `--profile-name NAME` - Write a targeted `--account` import to this named profile instead of the active profile. Only valid with `--browser-cookies`.
 - `--fresh` - Start with a clean browser session (deletes the cached browser profile). Use to switch Google accounts. With explicit `--storage`, a pre-existing browser sidecar is deleted only when it carries NotebookLM's ownership marker or is the canonical legacy/named-profile layout; arbitrary unowned directories are refused. Has no effect with `--browser-cookies`.
 - `--include-domains LABEL[,LABEL...]` - Opt in to extracting sibling-product cookies (default: required Google auth/Drive cookies only). Supported labels: `youtube`, `docs`, `myaccount`, `mail`, `all`. Pass labels comma-separated or repeat the flag.
@@ -773,7 +827,7 @@ notebooklm auth refresh [OPTIONS]
 ```
 
 **Options:**
-- `--browser-cookies <browser>`, `--browser-cookie <browser>` - Re-extract cookies from an installed browser and match the current profile's account from `context.json`. This repairs account routing when browser account order changes after another account logs out. Accepts the same scoped syntax as `login`: `chrome::<profile-name-or-directory>` for one Chromium profile, and `firefox::<container-name>` or `firefox::none` for one Firefox container.
+- `--browser-cookies <browser>`, `--browser-cookie <browser>` - Re-extract cookies from an installed browser and match the current profile's account (the unified in-band `storage_state.json` record — a pre-v0.5.0 profile's account, if it's still only in the legacy sibling `context.json`, is promoted in-band automatically on read). This repairs account routing when browser account order changes after another account logs out. Accepts the same scoped syntax as `login`: `chrome::<profile-name-or-directory>` for one Chromium profile, and `firefox::<container-name>` or `firefox::none` for one Firefox container.
 - `--include-domains LABEL[,LABEL...]` - Forward to the browser-cookie reader (only meaningful with `--browser-cookies`). Same syntax as `notebooklm login --include-domains`.
 - `--quiet`, `-q` - Suppress success output; print only on error (cron-friendly)
 - `--verify` - After refreshing, run a read-only passive token fetch to confirm the resulting cookies actually authenticate; exit non-zero if they still fail. A missing-storage master-token bootstrap always performs this validation and `--verify` reuses its result. Especially valuable with `--browser-cookies`, which rewrites the cookie jar but does not otherwise verify it.
@@ -885,6 +939,40 @@ Note: commands that take a positional source / artifact / notebook ID (e.g. `sou
 For `-s` and `-a` the active notebook is resolved with the same precedence the command body uses: `-n/--notebook` flag value already on the line > `NOTEBOOKLM_NOTEBOOK` env var > the persisted `notebooklm use` context. With no resolvable notebook (and on any auth / network failure), the completer returns no suggestions silently — it never prints a traceback into your terminal.
 
 **Print-only by design:** the command never writes to your shell config; you decide where the script lands. This keeps the install path discoverable and avoids surprising shutdowns of existing completion setups.
+
+### Source: `add` — how an argument is classified
+
+With no `--type`, `source add` decides in this order:
+
+1. **URL-shaped** (contains `://`) → a `url` or `youtube` source.
+2. **The path exists on disk** → a `file` source, uploaded. This is an existence
+   check, not an extension check, so a real file is uploaded whatever it is
+   named — `deck.pptx`, `./deck.pptx` and `notes` all work.
+3. **Otherwise** → a `text` source, ingesting the argument itself as content.
+
+Step 3 is where a typo bites: `source add dekc.pptx` adds a source whose entire
+content is the string `dekc.pptx`. To make that visible, an argument that *looks*
+like a file but does not exist is added with a warning:
+
+```console
+$ notebooklm source add dekc.pptx
+warning: 'dekc.pptx' looks like a path but does not exist; ingesting as inline
+text. Pass --type text to suppress this warning, or check the path for typos.
+```
+
+An argument looks like a file when it contains a slash, or when its extension is
+one the upload accepts — `.pdf` `.txt` `.md` `.markdown` `.doc` `.docx` `.pptx`
+`.rtf` `.odt` `.csv` `.tsv` `.epub` — or is HTML-family (`.html` `.htm` `.xhtml`
+`.xht`, which the upload endpoint rejects with convert-first guidance), or is
+`.ppt` (file-shaped, but legacy PowerPoint has never been proven uploadable, so
+it earns the warning without being routed to the uploader). That list is derived
+from the single upload-support declaration the Drive download-and-upload router
+also reads, so a newly supported file type earns its warning at the same time it
+becomes uploadable, rather than drifting behind it (#2202).
+
+Pass `--type text` to opt out of detection entirely, or `--type file` to require
+the upload path (which then fails loudly on a missing file instead of falling
+back to text).
 
 ### Source: `add` — `--follow-symlinks` security gate
 
@@ -1023,7 +1111,7 @@ notebooklm research wait [OPTIONS]
 
 **Options:**
 - `-n, --notebook ID` - Notebook ID (uses current if not set)
-- `--timeout SECONDS` - Maximum seconds to wait (default: 300)
+- `--timeout SECONDS` - Per-phase budget (default: 1800, matching `source add-research`). Deep runs regularly exceed the former 300s default — 374s live, 358s in the `research_deep_poll_long` cassette; fast runs settle in seconds, so the cap only ever binds on deep. With `--import-all` the poll loop and the import-retry loop each get the full budget independently, so worst-case wall time is up to 2× this value.
 - `--interval SECONDS` - Seconds between status checks (default: 5)
 - `--import-all` - Import all found sources when done
 - `--cited-only` - With `--import-all`, import only cited sources
@@ -1048,6 +1136,51 @@ notebooklm research wait --json --import-all
 ```
 
 **Use case:** Primarily for LLM agents that need to wait for non-blocking deep research started with `source add-research --no-wait`.
+
+### Research: `import`
+
+Import a completed research run's sources — without blocking.
+
+> **Python equivalent:** [`client.research.import_sources_with_verification(nb_id, run_id, sources)`](python-api.md#researchapi-clientresearch), after polling the run to `completed` yourself.
+
+```bash
+notebooklm research import [OPTIONS]
+```
+
+**Options:**
+- `-n, --notebook ID` - Notebook ID (uses current if not set)
+- `--run-id ID` - Run to import. Omit it and the notebook's single research run is used; when a
+  notebook has **more than one** run this errors rather than guessing which you meant, so pass
+  the id (`research status` shows it)
+- `--cited-only` - Import only report-cited sources (all of them, if no citation resolves — `cited_only_fallback` says which happened)
+- `--timeout SECONDS` - Seconds budget for the import retry loop (default: 1800)
+- `--max-sources N` - Import at most N sources (applied *after* `--cited-only` narrows)
+- `--allow-duplicate` - Re-add sources whose URL is already in the notebook
+- `--json` - Output as JSON
+
+**Never waits for the run.** This is the counterpart to `research wait --import-all`: if the run is still in progress (or failed, or found nothing), the command exits 1 with an explanation instead of polling. The import RPC itself is not instant — `IMPORT_RESEARCH` commonly outlives a single client timeout on deep payloads and is retried with reconciliation, bounded by `--timeout` (default 1800s, same vocabulary as `research wait --timeout`). That makes the fully composable flow expressible for the first time — you own the cadence:
+
+```bash
+notebooklm source add-research "AI safety" --mode deep --no-wait   # returns immediately
+notebooklm research status                                         # your loop, your interval
+notebooklm research import                                         # imports, returns
+```
+
+**Idempotent — with two documented limits.** A source whose URL is already in the notebook is reported as already-present rather than duplicated, so a repeat import reads as "0 new, N already present" instead of looking like a no-op. Under `--json` that split is `imported` / `imported_sources` versus `already_present` / `already_present_sources`, and `status` is `already_imported` when nothing new landed.
+
+The dedupe is by URL against a snapshot taken just before the import, so: a deep run's **report row has no URL** and is re-imported on every run, and if the snapshot call itself fails the filter is **skipped entirely** (the import still proceeds). Both are properties of `import_sources_with_verification`, shared with `research wait --import-all` and the MCP tool. If you interrupt an import, check `source list` before re-running it rather than assuming the re-run is a no-op.
+
+**Examples:**
+```bash
+# Import the notebook's current completed run
+notebooklm research import
+
+# Pin a specific run and take only the cited sources
+notebooklm research import --run-id <run_id> --cited-only
+
+# Cap the import, JSON output for agent workflows
+notebooklm research import --max-sources 10 --json
+```
 
 ### Research: `cancel`
 
@@ -1264,7 +1397,7 @@ notebooklm artifact <list|get|get-prompt|rename|delete|export|poll|wait|retry|su
 
 | Subcommand | Required arguments | Options |
 |---|---|---|
-| `list` | (none) | `--type [all\|audio\|video\|slide-deck\|quiz\|flashcard\|infographic\|data-table\|mind-map\|report]`, `--limit N` (default: unlimited), `--no-truncate`, `--json` |
+| `list` | (none) | `--type [all\|audio\|video\|slide-deck\|quiz\|flashcard\|infographic\|data-table\|mind-map\|report\|fantasy-map\|file]`, `--limit N` (default: unlimited), `--no-truncate`, `--json` |
 | `get` | `ARTIFACT_ID` | `--json` |
 | `get-prompt` | `ARTIFACT_ID` | `--json` |
 | `rename` | `ARTIFACT_ID NEW_TITLE` | `--json` |
@@ -1474,10 +1607,10 @@ notebooklm profile <list|create|switch|delete|rename> [OPTIONS]
 | Subcommand | Required arguments | Options |
 |---|---|---|
 | `list` | (none) | `--json` |
-| `create` | `NAME` | — |
-| `switch` | `NAME` | — |
-| `delete` | `NAME` | `--yes`/`-y` (skip prompt; `--confirm` is a deprecated alias; the active default profile cannot be deleted) |
-| `rename` | `OLD_NAME NEW_NAME` | — |
+| `create` | `NAME` | `--json` |
+| `switch` | `NAME` | `--json` |
+| `delete` | `NAME` | `--yes`/`-y` (skip prompt; `--confirm` is a deprecated alias; the active default profile cannot be deleted), `--json` |
+| `rename` | `OLD_NAME NEW_NAME` | `--json` |
 
 **Examples:**
 ```bash
@@ -1574,7 +1707,7 @@ Codex does not consume the `skill` subcommand. In this repository it reads the r
 
 Add a Google Drive document, slide deck, sheet, or PDF as a source. The Drive `--mime-type` selects which Drive document type to import (Google Doc / Slides / Sheets / PDF). This is distinct from the file-source `--mime-type` documented above, which sets the resumable-upload content-type for a locally-uploaded file.
 
-> **By-reference vs upload-only:** NotebookLM's Drive import only ingests Google-native Docs/Slides/Sheets + PDF by reference — the four `--mime-type` choices above. An upload-only file that merely *lives* in Drive (e.g. `epub`/`docx`/`txt`/`md`/`rtf`/`odt`/`csv`) cannot be imported this way; download it and add it with `source add <path> --type file` instead.
+> **By-reference vs upload-only:** NotebookLM's Drive import only ingests Google-native Docs/Slides/Sheets + PDF by reference — the four `--mime-type` choices above. An upload-only file that merely *lives* in Drive (e.g. `epub`/`docx`/`txt`/`md`/`rtf`/`odt`/`csv`/`tsv`) cannot be imported this way; use `source add-drive-file <id>` instead, which downloads it server-side (using your session) and uploads it — no local download step needed.
 >
 > **Python equivalent:** [`client.sources.add_drive(nb_id, file_id, title, mime_type=...)`](python-api.md#sourcesapi-clientsources).
 
@@ -1597,6 +1730,29 @@ notebooklm source add-drive 1AbcD...XyZ "Quarterly Deck" --mime-type google-slid
 
 # Import a Drive-hosted PDF
 notebooklm source add-drive 1AbcD...XyZ "Whitepaper" --mime-type pdf --json
+```
+
+### Source: `add-drive-file`
+
+Add an upload-only Google Drive file (`epub`/`docx`/`pptx`/`txt`/`md`/`rtf`/`odt`/`csv`/`tsv`/`pdf`) by id or share URL. NotebookLM's native Drive import (`source add-drive`) only ingests Google-native Docs/Slides/Sheets + PDF by reference; for every other Drive-hosted file type, this command downloads the file server-side (using your session) and uploads it through the resumable-upload path — a Drive PDF can go either way.
+
+```bash
+notebooklm source add-drive-file [OPTIONS] DOCUMENT_ID
+```
+
+**Options:**
+- `-n, --notebook ID` - Notebook ID (uses current if not set; supports partial IDs)
+- `--title TEXT` - Custom title (default: the file's Drive name)
+- `--wait` - Wait for processing to finish
+- `--json` - Output as JSON
+
+**Examples:**
+```bash
+# Download + upload an upload-only Drive file (e.g. a .docx)
+notebooklm source add-drive-file 1AbcD...XyZ
+
+# Custom title, wait for processing to complete
+notebooklm source add-drive-file 1AbcD...XyZ --title "Meeting Notes" --wait
 ```
 
 ### Source: `stale`, `clean`
@@ -1680,7 +1836,7 @@ notebooklm source add-research "climate change policy 2024" --mode deep --no-wai
 # Returns immediately
 
 # 4. In a subagent, wait for research and import
-notebooklm research wait --import-all --timeout 300
+notebooklm research wait --import-all
 # Blocks until complete, then imports sources
 
 # 5. Continue with podcast generation...

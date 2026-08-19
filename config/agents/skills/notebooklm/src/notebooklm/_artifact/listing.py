@@ -13,6 +13,7 @@ from .._row_adapters.notes import NoteRow
 from .._runtime.contracts import RpcCaller
 from ..exceptions import DecodingError
 from ..rpc import (
+    ARTIFACT_STATUS_SUGGESTED_WIRE_NAME,
     FLASHCARDS_VARIANT,
     INTERACTIVE_MIND_MAP_VARIANT,
     QUIZ_VARIANT,
@@ -36,6 +37,8 @@ _ARTIFACT_TYPE_CODES_BY_KIND = {
     ArtifactType.INFOGRAPHIC: ArtifactTypeCode.INFOGRAPHIC.value,
     ArtifactType.SLIDE_DECK: ArtifactTypeCode.SLIDE_DECK.value,
     ArtifactType.DATA_TABLE: ArtifactTypeCode.DATA_TABLE.value,
+    ArtifactType.FANTASY_MAP: ArtifactTypeCode.FANTASY_MAP.value,
+    ArtifactType.FILE: ArtifactTypeCode.FILE.value,
 }
 _KNOWN_ARTIFACT_TYPE_CODES = frozenset(_ARTIFACT_TYPE_CODES_BY_KIND.values())
 
@@ -69,7 +72,7 @@ def _matches_artifact_type(artifact: Artifact, artifact_type: ArtifactType | Non
             and artifact._variant == FLASHCARDS_VARIANT
         )
     if artifact_type == ArtifactType.MIND_MAP:
-        # Two backings: note-backed (synthetic type 5) and interactive
+        # Two backings: note-backed (adapted as genuine mind-map type 5) and interactive
         # (studio artifact, type 4 / variant 4). Match either.
         return (
             artifact._artifact_type == ArtifactTypeCode.MIND_MAP.value
@@ -96,7 +99,13 @@ class ArtifactListingService:
 
     async def list_raw(self, notebook_id: str, *, rpc: RpcCaller) -> list[Any]:
         """Get raw studio artifact rows from NotebookLM."""
-        params = [[2], notebook_id, 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"']
+        # Server-side filter: drop suggestion rows (``ArtifactStatus.SUGGESTED``,
+        # code 5) so the listing only carries real artifacts.
+        params = [
+            [2],
+            notebook_id,
+            f'NOT artifact.status = "{ARTIFACT_STATUS_SUGGESTED_WIRE_NAME}"',
+        ]
         result = await rpc.rpc_call(
             RPCMethod.LIST_ARTIFACTS,
             params,

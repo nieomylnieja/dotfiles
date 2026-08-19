@@ -26,6 +26,8 @@ from ._types.research import (
     ResearchStatus,
     ResearchTask,
     parse_result_type,
+    status_from_termination_reason,
+    termination_reason_from_code,
 )
 from .rpc import RPCMethod, safe_index
 
@@ -47,14 +49,9 @@ _POLL_SOURCE = "_research.poll"
 _POLL_METHOD_ID = RPCMethod.POLL_RESEARCH.value
 
 
-def extract_legacy_report_chunks(src: list[Any]) -> str:
-    """Join legacy deep-research report chunks stored in ``src[6]``."""
-    chunks = [
-        chunk
-        for chunk in ResearchResultRow(src).legacy_report_chunks
-        if isinstance(chunk, str) and chunk
-    ]
-    return "\n\n".join(chunks)
+def extract_report_markdown(src: list[Any]) -> str:
+    """Return markdown from the kind-3 content block stored in ``src[6]``."""
+    return ResearchResultRow(src).report_markdown
 
 
 def _extract_task_id(task_data: Any) -> str | None:
@@ -113,6 +110,39 @@ def _extract_query_text(task_info: Any) -> str | None:
     return None
 
 
+def _extract_source_type(task_info: Any) -> int | None:
+    """Return the search-source tag at ``task_info[1][1]`` (1=web, 2=drive), else ``None``.
+
+    Read for issue #1964 so a terminal run can carry source-specific
+    remediation guidance. The TAG is purely advisory: absent, non-int, or
+    drifted, it degrades to ``None`` and the hint falls back to its
+    source-agnostic wording.
+
+    The enclosing ``task_info[1]`` block is not advisory, though — it is the
+    same guaranteed descent :func:`_extract_query_text` makes, so an absent
+    slot raises ``UnknownRPCMethodError`` from :func:`safe_index` exactly as it
+    does there. In the parse loop that is unreachable in practice, since
+    ``_extract_query_text`` runs first on the same ``task_info`` and raises for
+    the identical input.
+    """
+    query_info = safe_index(task_info, 1, method_id=_POLL_METHOD_ID, source=_POLL_SOURCE)
+    if not isinstance(query_info, list):
+        return None
+    value = ResearchTaskInfoRow.query_source_type(query_info)
+    # ``bool`` is an ``int`` subclass; reject it so a drifted flag slot cannot
+    # masquerade as the web (1) / drive (2) tag.
+    if isinstance(value, bool) or not isinstance(value, int):
+        if value is not None:
+            logger.warning(
+                "task_info[1][1] is not an int source tag (method_id=%r, source=%r): %r",
+                _POLL_METHOD_ID,
+                _POLL_SOURCE,
+                type(value).__name__,
+            )
+        return None
+    return value
+
+
 def _extract_status_code(task_info: Any) -> int | None:
     """Return ``task_info[4]`` as an int status code, else ``None``."""
     value = safe_index(task_info, 4, method_id=_POLL_METHOD_ID, source=_POLL_SOURCE)
@@ -167,14 +197,16 @@ def _extract_sources_and_summary(task_info: Any) -> tuple[list[Any], str | None]
 
 
 def _status_from_code(status_code: int | None) -> ResearchStatus:
-    # Research: 1=in_progress, 2=completed, 6=completed (deep research).
-    # Unknown non-null codes are terminal failures so wait loops do not spin
-    # until timeout after the backend rejects a task.
-    if status_code in (2, 6):
-        return ResearchStatus.COMPLETED
-    if status_code == 1 or status_code is None:
-        return ResearchStatus.IN_PROGRESS
-    return ResearchStatus.FAILED
+    """Coarsen a raw ``task_info[4]`` code into the lifecycle status.
+
+    Derived from the SAME code table that produces the termination reason
+    (``_types/research.py``) rather than restating it in literals: a second
+    hand-written copy could drift and emit a task whose ``status`` and
+    ``termination_reason`` disagree (e.g. ``completed`` alongside a "retry the
+    run" hint). Behavior is unchanged — 1 → in_progress, 2/6 → completed,
+    every other non-null code → failed, ``None`` → in_progress.
+    """
+    return status_from_termination_reason(termination_reason_from_code(status_code))
 
 
 def _parse_source_row(
@@ -189,14 +221,14 @@ def _parse_source_row(
     source_report = ""
 
     # Fast research: [url, title, desc, type, ...]
-    # Deep research (legacy): [None, title, None, type, ..., [report_markdown]]
-    # Deep research (current): [None, [title, report_markdown], None, type, ...]
+    # Deep research (captured): [None, title, None, type, ..., content_block]
+    # Deep research (compat): [None, [title, report_markdown], None, type, ...]
     # src[3] is the authoritative result_type when present.
     result_type = (
         parse_result_type(row.result_type_slot) if row.has_result_type else RESEARCH_RESULT_TYPE_WEB
     )
     if row.url_slot is None and row.length > 1:
-        # Deep-research (current) packs ``[title, report_markdown]`` at ``src[1]``;
+        # A compatibility shape packs ``[title, report_markdown]`` at ``src[1]``;
         # ``ResearchResultRow.deep_payload`` unpacks that exact shape (a 2+-length
         # list of two strings) and returns ``None`` for the legitimate
         # alternatives (bare-string title, or neither), which fall through to the
@@ -224,11 +256,13 @@ def _parse_source_row(
             title=title,
             result_type=result_type,
             research_task_id=task_id,
+            source_ordinal=row.source_ordinal,
+            hint=row.hint,
         )
 
     report = source_report
     if not report and not report_found:
-        report = extract_legacy_report_chunks(src)
+        report = extract_report_markdown(src)
     if report and parsed_source is not None:
         parsed_source = parsed_source.with_report_markdown(report)
 
@@ -258,6 +292,9 @@ def parse_research_task_models(result: Any) -> list[ResearchTask]:
         query_text = _extract_query_text(task_info) or ""
         sources_data, summary_opt = _extract_sources_and_summary(task_info)
         status_code = _extract_status_code(task_info)
+        source_type = _extract_source_type(task_info)
+        discovery_mode = ResearchTaskInfoRow.discovery_mode(task_info)
+        task_row = ResearchTaskRow(task_data)
 
         parsed_sources: list[ResearchSource] = []
         report = ""
@@ -282,6 +319,17 @@ def parse_research_task_models(result: Any) -> list[ResearchTask]:
                 # ``status`` enum (issue #1922, F10) so a caller can distinguish
                 # failure sub-codes the enum flattens into ``FAILED``.
                 status_code=status_code,
+                # Search source (1=web, 2=drive) backing the source-specific
+                # remediation hint on a terminal run (issue #1964).
+                source_type=source_type,
+                # Always-populated task metadata recovered by #2122: the mode
+                # the run is executing under, its create/update times, and the
+                # account it belongs to. Every one of these is a soft read —
+                # a poll that omits them still yields a usable task.
+                discovery_mode=discovery_mode,
+                created_at=task_row.created_at,
+                updated_at=task_row.updated_at,
+                account_id=task_row.account_id,
             )
         )
 

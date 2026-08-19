@@ -314,6 +314,9 @@ _ARTIFACT_TYPE_VALUES = frozenset(member.value for member in ArtifactType)
 _SOURCE_STATUS_STR_VALUES = frozenset(
     source_status_to_str(member.value) for member in SourceStatus
 ) | {source_status_to_str(0)}
+# ``ArtifactStatus`` models code 0 as a member since #2127, so the enum alone
+# already covers the "unknown" degrade string; the explicit union keeps this
+# symmetrical with ``_SOURCE_STATUS_STR_VALUES``, whose enum still omits 0.
 _ARTIFACT_STATUS_STR_VALUES = frozenset(
     artifact_status_to_str(member.value) for member in ArtifactStatus
 ) | {artifact_status_to_str(0)}

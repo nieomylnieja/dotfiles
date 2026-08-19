@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
 import importlib
 import importlib.util
 import inspect
@@ -17,12 +18,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import pytest
 
+from notebooklm import ConversationTurnKey, MagicArtifactType
 from notebooklm._chat.wire import (
     StreamingChatParseResult,
     build_streaming_chat_request,
-    collect_texts_from_nested,
     extract_answer_and_refs_from_chunk,
-    extract_answer_range,
+    extract_fragment_range,
     extract_score,
     extract_text_passages,
     extract_uuid_from_nested,
@@ -63,13 +64,30 @@ def _chunk(
     text: str,
     *,
     marked: bool = True,
+    response_doc: bool = True,
     conversation_id: str | None = None,
     citations: list[Any] | None = None,
+    is_final: bool = True,
+    turn_key: list[Any] | None = None,
+    suggestions: list[list[Any]] | None = None,
 ) -> str:
+    """Build one ``wrb.fr`` frame around a ``GenerateFreeFormStreamedResponse``.
+
+    ``is_final`` fills ``inner_data[4]`` (``isFinalResponse``). It defaults to
+    ``True`` because a single-chunk fixture stands in for a *complete* stream,
+    and every live stream marks its last chunk — a helper defaulting to
+    ``False`` would build a shape the backend never sends and would put every
+    fixture on the parser's truncated-stream fallback path.
+    """
     marker = 1 if marked else 0
-    type_info = [[], None, None, citations or [], marker]
-    conv = [conversation_id, 123] if conversation_id is not None else None
-    inner_json = json.dumps([[text, None, conv, None, type_info]])
+    type_info = [[], None, None, citations or [], marker] if response_doc else None
+    if turn_key is None and conversation_id is not None:
+        turn_key = [conversation_id, 123]
+    answer_row: list[Any] = [text, None, turn_key, None, type_info]
+    inner_data: list[Any] = [answer_row, None, None, None, is_final]
+    if suggestions is not None:
+        inner_data.append([suggestions])
+    inner_json = json.dumps(inner_data)
     return json.dumps([["wrb.fr", None, inner_json]])
 
 
@@ -89,17 +107,35 @@ def _citation(
     start: int = 10,
     end: int = 20,
     score: float | None = 0.9,
-    answer_start: int | None = None,
-    answer_end: int | None = None,
+    fragment_start: int | None = None,
+    fragment_end: int | None = None,
 ) -> list[Any]:
+    """Build one ``DocumentObject`` citation entry in the shape the wire sends.
+
+    The nesting is the live one, level for level (see
+    ``tests/unit/fixtures/chat_answer_row_with_citations.json`` for the capture
+    this mirrors): ``Citation.fragment`` is a *message* whose ``elements`` list
+    sits one level below it, each element is a ``StructuralElement``
+    ``[startIndex, endIndex, paragraph]``, and the leaf ``TextRun`` wraps its
+    content in a list rather than being a bare string.
+
+    That last detail is not pedantry: this helper used to place a bare string
+    where the wire places ``[content]``, and the resulting fixture agreed with
+    a decoder that also read it wrongly (#2120).
+    """
+    text_run = [text]
+    paragraph_element = [start, end, text_run]
+    paragraph = [[paragraph_element]]
+    structural_element = [start, end, paragraph]
+    fragment = [[structural_element]]
     return [
         [chunk_id],
         [
             None,
             None,
             score,
-            [[None, answer_start, answer_end]] if answer_start is not None else [[None]],
-            [[[start, end, [[[start, end, text]]]]]],
+            [[None, fragment_start, fragment_end]] if fragment_start is not None else [[None]],
+            fragment,
             [[[source_id]]],
             [chunk_id],
         ],
@@ -115,9 +151,8 @@ def test_module_signatures_are_stable() -> None:
         "parse_citations": inspect.signature(parse_citations),
         "parse_single_citation": inspect.signature(parse_single_citation),
         "extract_text_passages": inspect.signature(extract_text_passages),
-        "extract_answer_range": inspect.signature(extract_answer_range),
+        "extract_fragment_range": inspect.signature(extract_fragment_range),
         "extract_score": inspect.signature(extract_score),
-        "collect_texts_from_nested": inspect.signature(collect_texts_from_nested),
         "extract_uuid_from_nested": inspect.signature(extract_uuid_from_nested),
     }
 
@@ -136,12 +171,15 @@ def test_module_signatures_are_stable() -> None:
     assert list(signatures["parse_streaming_chat_response"].parameters) == ["response_text"]
     assert list(signatures["extract_answer_and_refs_from_chunk"].parameters) == ["json_str"]
     assert list(signatures["raise_if_rate_limited"].parameters) == ["error_payload"]
-    assert list(signatures["parse_citations"].parameters) == ["first"]
+    # ``document`` is optional and defaults to ``None`` (#2120): the stream
+    # parser passes the answer document it has already built, and a direct
+    # single-argument call still works exactly as before.
+    assert list(signatures["parse_citations"].parameters) == ["first", "document"]
+    assert signatures["parse_citations"].parameters["document"].default is None
     assert list(signatures["parse_single_citation"].parameters) == ["cite"]
     assert list(signatures["extract_text_passages"].parameters) == ["cite_inner"]
-    assert list(signatures["extract_answer_range"].parameters) == ["cite_inner"]
+    assert list(signatures["extract_fragment_range"].parameters) == ["cite_inner"]
     assert list(signatures["extract_score"].parameters) == ["cite_inner"]
-    assert list(signatures["collect_texts_from_nested"].parameters) == ["nested", "texts"]
     assert list(signatures["extract_uuid_from_nested"].parameters) == ["data", "max_depth"]
     assert signatures["extract_uuid_from_nested"].parameters["max_depth"].default == 10
     assert StreamingChatParseResult("a", [], None).answer == "a"
@@ -255,6 +293,9 @@ def test_build_request_passes_through_caller_conversation_id_for_follow_ups() ->
 
 
 def test_parse_response_handles_xssi_length_prefix_raw_json_and_server_conversation_id() -> None:
+    # Both chunks are marked final, so the winner here is the LAST final chunk
+    # rather than the longest — the two coincide, and the point of this test is
+    # the XSSI/length-prefix/raw-JSON mix, not the selection policy (#2122).
     first = _chunk("First answer.", conversation_id="server-conv")
     second = _chunk("Raw JSON answer.", conversation_id="server-conv-2")
     response = _length_prefixed(first) + second
@@ -312,6 +353,45 @@ def test_marked_answer_beats_longer_unmarked_text() -> None:
     assert result.answer == "Marked."
 
 
+def test_next_step_suggestions_decode_and_preserve_unknown_codes() -> None:
+    result = parse_streaming_chat_response(
+        _length_prefixed(
+            _chunk(
+                "Answer.",
+                suggestions=[
+                    ["What happens next?", 9],
+                    ["A future suggestion", 99],
+                    ["missing code"],
+                ],
+            )
+        )
+    )
+
+    assert [(step.question, step.type_code) for step in result.next_steps] == [
+        ("What happens next?", 9),
+        ("A future suggestion", 99),
+    ]
+    assert result.next_steps[0].kind is MagicArtifactType.CONVERSATIONAL_TEXT_CHIP
+    assert result.next_steps[1].kind is None
+
+
+def test_next_steps_are_collected_from_a_textless_chunk() -> None:
+    body = _length_prefixed(
+        _chunk(
+            "",
+            response_doc=False,
+            is_final=False,
+            suggestions=[["Try this follow-up", 9]],
+        ),
+        _chunk("Final answer.", suggestions=None),
+    )
+
+    result = parse_streaming_chat_response(body)
+
+    assert result.answer == "Final answer."
+    assert [step.question for step in result.next_steps] == ["Try this follow-up"]
+
+
 def test_unmarked_fallback_logs_under_chat_logger(caplog) -> None:
     response = _length_prefixed(_chunk("Only unmarked answer.", marked=False))
 
@@ -323,6 +403,59 @@ def test_unmarked_fallback_logs_under_chat_logger(caplog) -> None:
         record.name == "notebooklm._chat" and "No marked answer found" in record.message
         for record in caplog.records
     )
+
+
+def test_no_answer_without_response_doc_does_not_log_drift_warning(caplog) -> None:
+    response = _length_prefixed(
+        _chunk("The sources do not contain enough information.", response_doc=False)
+    )
+
+    with caplog.at_level(logging.WARNING, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(response)
+
+    assert result.answer == "The sources do not contain enough information."
+    assert not any("No marked answer found" in record.message for record in caplog.records)
+
+
+def test_row_truncated_before_the_reason_slot_still_warns(caplog) -> None:
+    """A row too short to carry ``emptyAnswerReason`` is drift, not a clean no-answer.
+
+    "No ``responseDoc``" only means "deliberate empty answer" for a row that COULD
+    have said so. A single-element row cannot, so silencing it here would spend the
+    one drift signal on a genuinely malformed payload.
+    """
+    inner_json = json.dumps([["No supported answer."]])
+    response = _length_prefixed(json.dumps([["wrb.fr", None, inner_json]]))
+
+    with caplog.at_level(logging.WARNING, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(response)
+
+    assert result.answer == "No supported answer."
+    assert any("No marked answer found" in record.message for record in caplog.records)
+
+
+def test_present_unmarked_doc_warns_even_when_absent_doc_text_is_longer(caplog) -> None:
+    response = _length_prefixed(
+        _chunk("Drift.", marked=False),
+        _chunk("The sources do not contain enough information.", response_doc=False),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(response)
+
+    assert result.answer == "The sources do not contain enough information."
+    assert any("No marked answer found" in record.message for record in caplog.records)
+
+
+def test_malformed_present_response_doc_still_logs_drift_warning(caplog) -> None:
+    inner_json = json.dumps([["Fallback text.", None, None, None, {}]])
+    response = _length_prefixed(json.dumps([["wrb.fr", None, inner_json]]))
+
+    with caplog.at_level(logging.WARNING, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(response)
+
+    assert result.answer == "Fallback text."
+    assert any("No marked answer found" in record.message for record in caplog.records)
 
 
 def test_empty_response_raises_chat_response_parse_error() -> None:
@@ -350,8 +483,8 @@ def test_parse_citations_extracts_multiple_references_and_assigns_numbers() -> N
             start=1,
             end=11,
             score=0.85,
-            answer_start=100,
-            answer_end=200,
+            fragment_start=100,
+            fragment_end=200,
         ),
         _citation(
             source_id="11111111-2222-3333-4444-555555555555",
@@ -360,8 +493,8 @@ def test_parse_citations_extracts_multiple_references_and_assigns_numbers() -> N
             start=12,
             end=27,
             score=0.7,
-            answer_start=200,
-            answer_end=350,
+            fragment_start=200,
+            fragment_end=350,
         ),
     ]
 
@@ -375,6 +508,11 @@ def test_parse_citations_extracts_multiple_references_and_assigns_numbers() -> N
     assert [ref.chunk_id for ref in result.references] == ["chunk-1", "chunk-2"]
     assert [ref.cited_text for ref in result.references] == ["first citation", "second citation"]
     assert [(ref.start_char, ref.end_char) for ref in result.references] == [(1, 11), (12, 27)]
+    assert [(ref.fragment_start_char, ref.fragment_end_char) for ref in result.references] == [
+        (100, 200),
+        (200, 350),
+    ]
+    # The deprecated aliases keep reporting the same values (#2120).
     assert [(ref.answer_start_char, ref.answer_end_char) for ref in result.references] == [
         (100, 200),
         (200, 350),
@@ -382,30 +520,30 @@ def test_parse_citations_extracts_multiple_references_and_assigns_numbers() -> N
     assert [ref.score for ref in result.references] == [0.85, 0.7]
 
 
-def test_extract_answer_range_handles_well_formed_and_malformed_shapes() -> None:
+def test_extract_fragment_range_handles_well_formed_and_malformed_shapes() -> None:
     # Well-formed: [[None, start, end]]
-    assert extract_answer_range([None, None, None, [[None, 10, 20]]]) == (10, 20)
+    assert extract_fragment_range([None, None, None, [[None, 10, 20]]]) == (10, 20)
     # Zero-length but valid: end == start
-    assert extract_answer_range([None, None, None, [[None, 5, 5]]]) == (5, 5)
+    assert extract_fragment_range([None, None, None, [[None, 5, 5]]]) == (5, 5)
     # Missing outer: too short
-    assert extract_answer_range([None, None, None]) == (None, None)
+    assert extract_fragment_range([None, None, None]) == (None, None)
     # Inner [None] only (server omitted positions)
-    assert extract_answer_range([None, None, None, [[None]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None]]]) == (None, None)
     # Non-int positions
-    assert extract_answer_range([None, None, None, [[None, "10", "20"]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, "10", "20"]]]) == (None, None)
     # Empty outer
-    assert extract_answer_range([None, None, None, []]) == (None, None)
+    assert extract_fragment_range([None, None, None, []]) == (None, None)
     # Outer[0] not a list
-    assert extract_answer_range([None, None, None, ["bad"]]) == (None, None)
+    assert extract_fragment_range([None, None, None, ["bad"]]) == (None, None)
     # bool positions rejected (bool is int subclass in Python)
-    assert extract_answer_range([None, None, None, [[None, True, False]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, True, False]]]) == (None, None)
     # Partial range: end is None — paired check returns (None, None) not (10, None)
-    assert extract_answer_range([None, None, None, [[None, 10, None]]]) == (None, None)
-    assert extract_answer_range([None, None, None, [[None, None, 20]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, 10, None]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, None, 20]]]) == (None, None)
     # Negative start rejected
-    assert extract_answer_range([None, None, None, [[None, -1, 10]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, -1, 10]]]) == (None, None)
     # end < start rejected
-    assert extract_answer_range([None, None, None, [[None, 20, 10]]]) == (None, None)
+    assert extract_fragment_range([None, None, None, [[None, 20, 10]]]) == (None, None)
 
 
 def test_extract_score_accepts_float_and_int_rejects_bool_and_out_of_range() -> None:
@@ -575,10 +713,12 @@ def test_row_level_citation_helpers_keep_soft_contracts() -> None:
         None,
         None,
     )
-
-    texts: list[str] = []
-    collect_texts_from_nested([["malformed"]], texts)
-    assert texts == []
+    # A fragment whose elements carry no usable range degrades the same way.
+    assert extract_text_passages([None, None, None, None, [["malformed"]]]) == (
+        None,
+        None,
+        None,
+    )
 
 
 def test_parse_single_citation_chunk_id_absent_keeps_citation_with_none_chunk() -> None:
@@ -653,6 +793,31 @@ def test_user_displayable_error_payload_raises_same_chat_error_message() -> None
         ),
     ):
         raise_if_rate_limited(payload)
+
+
+def test_user_displayable_error_payload_surfaces_server_message_when_present() -> None:
+    """``google.rpc.Status.message`` is surfaced ALONGSIDE the client guidance (#2188).
+
+    No captured chat rejection has ever populated index 1 — the test above pins
+    the wording users actually see. This one pins that a server-authored reason
+    is appended rather than discarded, and that appending it does not cost the
+    client's remedy.
+    """
+    payload = [
+        8,
+        "You have reached your daily chat limit",
+        [["type.googleapis.com/google.rpc.UserDisplayableError", "details"]],
+    ]
+
+    with pytest.raises(ChatError) as exc_info:
+        raise_if_rate_limited(payload)
+
+    message = str(exc_info.value)
+    assert "You have reached your daily chat limit" in message
+    # APPENDED, not substituted: nobody has ever seen this slot populated, so
+    # there is no evidence a server message would be as actionable as the
+    # remedy it would displace (#2188).
+    assert "Wait a few seconds and try again" in message
 
 
 def _wrb_envelope(inner: Any) -> str:
@@ -737,6 +902,41 @@ def test_oversized_request_rejection_surfaces_status_not_parse_error() -> None:
 
     with pytest.raises(ChatError, match=r"rejected by the server \(status 3\)"):
         parse_streaming_chat_response(wire)
+
+
+def test_bare_rejection_surfaces_a_server_message_when_present() -> None:
+    """A request-level rejection echoes the server's own reason (#2188).
+
+    The captured #1472 rejection is a bare ``[3]`` with no message, so the
+    generic guidance above is what users see; this pins the alternative.
+    """
+    wire = _length_prefixed(
+        json.dumps([["wrb.fr", None, None, None, None, [3, "Question exceeds 100000 characters"]]])
+    )
+
+    with pytest.raises(ChatError) as exc_info:
+        parse_streaming_chat_response(wire)
+
+    message = str(exc_info.value)
+    assert "Question exceeds 100000 characters" in message
+    assert "status 3" in message
+    # The client's guidance is kept alongside the server's words, not replaced.
+    assert "shorten it and" in message
+
+
+def test_message_without_a_status_is_still_surfaced() -> None:
+    """``[None, "text"]`` — a reason with no code. The reason still reaches the user."""
+    wire = _length_prefixed(
+        json.dumps([["wrb.fr", None, None, None, None, [None, "Try a shorter question"]]])
+    )
+
+    with pytest.raises(ChatError) as exc_info:
+        parse_streaming_chat_response(wire)
+
+    message = str(exc_info.value)
+    assert "Try a shorter question" in message
+    # No code, so no "(status …)" detail is fabricated.
+    assert "status" not in message.split("The server said:")[0].lower()
 
 
 def test_null_inner_frame_with_empty_payload_still_raises_without_status() -> None:
@@ -856,7 +1056,6 @@ def test_chat_module_keeps_only_delegating_stream_parser_wrappers() -> None:
         "_parse_citations",
         "_parse_single_citation",
         "_extract_text_passages",
-        "_collect_texts_from_nested",
         "_extract_uuid_from_nested",
     }
     expected_delegate = {
@@ -866,7 +1065,6 @@ def test_chat_module_keeps_only_delegating_stream_parser_wrappers() -> None:
         "_parse_citations": "parse_citations",
         "_parse_single_citation": "parse_single_citation",
         "_extract_text_passages": "extract_text_passages",
-        "_collect_texts_from_nested": "collect_texts_from_nested",
         "_extract_uuid_from_nested": "extract_uuid_from_nested",
     }
 
@@ -907,3 +1105,281 @@ def test_chat_module_keeps_only_delegating_stream_parser_wrappers() -> None:
                 and child.func.value.id == "self"
                 and child.func.attr == "_extract_uuid_from_nested"
             ), "_chat.py owns local UUID recursion"
+
+
+# ---------------------------------------------------------------------------
+# isFinalResponse-driven answer selection + ConversationTurnKey (#2122)
+# ---------------------------------------------------------------------------
+
+#: Live five-chunk ``GenerateFreeFormStreamedResponse`` capture, re-serialized
+#: into the length-prefixed stream body the parser is fed. Built from the same
+#: fixture ``test_chat_row_adapter.py`` pins the adapters against, so the
+#: end-to-end assertions below are made against a real backend stream rather
+#: than the ``_chunk`` builder's idea of one.
+_CAPTURED_CHUNKS: list[Any] = json.loads(
+    (Path(__file__).parent / "fixtures" / "chat_stream_final_response.json").read_text(
+        encoding="utf-8"
+    )
+)["chunks"]
+
+
+def _captured_stream_body() -> str:
+    return _length_prefixed(
+        *(json.dumps([["wrb.fr", None, json.dumps(chunk)]]) for chunk in _CAPTURED_CHUNKS)
+    )
+
+
+def test_captured_stream_selects_the_final_chunk_and_carries_its_turn_key(caplog) -> None:
+    """End-to-end against the live capture: the answer parses, the turn key is
+    decoded, and no fallback diagnostic fires."""
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(_captured_stream_body())
+
+    assert result.answer == "A task wraps a **coroutine** [1]."
+    assert result.turn_key == ConversationTurnKey(
+        session_id="3afea005-7d13-41d0-9257-6a9e28597818",
+        turn_id="b38d4003-5be1-487d-a121-5c5958709021",
+        turn_code=2187103311,
+    )
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
+def test_final_marker_beats_a_longer_earlier_chunk() -> None:
+    """The failure #2122 describes: a corrected/truncated final chunk that is
+    SHORTER than an earlier one. Longest-wins returns the stale mid-stream text;
+    the server's own marker returns the answer it ended on."""
+    body = _length_prefixed(
+        _chunk("A long provisional answer that the model later cut down.", is_final=False),
+        _chunk("Short corrected answer.", is_final=True),
+    )
+    assert parse_streaming_chat_response(body).answer == "Short corrected answer."
+
+
+def test_final_marker_selection_is_logged_when_it_changes_the_outcome(caplog) -> None:
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        parse_streaming_chat_response(
+            _length_prefixed(
+                _chunk("A long provisional answer that was later cut down.", is_final=False),
+                _chunk("Short corrected answer.", is_final=True),
+            )
+        )
+    assert any("differs from the longest marked chunk" in r.message for r in caplog.records)
+
+
+def test_final_marker_agreeing_with_longest_logs_nothing(caplog) -> None:
+    """The ordinary stream — final chunk IS the longest — stays silent."""
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        parse_streaming_chat_response(
+            _length_prefixed(
+                _chunk("Partial", is_final=False),
+                _chunk("Partial answer, complete.", is_final=True),
+            )
+        )
+    assert [r for r in caplog.records if r.name.startswith("notebooklm")] == []
+
+
+def test_no_final_marker_falls_back_to_longest_and_warns(caplog) -> None:
+    """A stream that never marks a final chunk (truncated, or the flag moved)
+    still answers — from the heuristic — but says so at WARNING."""
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(
+            _length_prefixed(
+                _chunk("Short", is_final=False),
+                _chunk("The longest chunk in this stream.", is_final=False),
+            )
+        )
+    assert result.answer == "The longest chunk in this stream."
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "isFinalResponse" in warnings[0].message
+
+
+def test_final_chunk_without_text_falls_back_to_longest_and_warns(caplog) -> None:
+    """ "The final chunk carried no answer" must not return an empty answer.
+
+    And it must be diagnosed as ITSELF, not as the truncated-stream case: a
+    stream that completed and said nothing in its last chunk is a different
+    operator problem from one whose final marker never arrived. This is the
+    only consumer of ``is_final_response`` on a text-less chunk, so without it
+    that propagation would be dead code the docstrings claim is live.
+    """
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(
+            _length_prefixed(
+                _chunk("The only chunk with text.", is_final=False),
+                _chunk("", is_final=True),
+            )
+        )
+    assert result.answer == "The only chunk with text."
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "carried no answer text" in warnings[0].message
+
+
+def test_the_two_fallback_causes_are_diagnosed_differently(caplog) -> None:
+    """A truncated stream and an empty final chunk must not share a message."""
+    with caplog.at_level(logging.WARNING, logger="notebooklm._chat"):
+        parse_streaming_chat_response(
+            _length_prefixed(
+                _chunk("Short", is_final=False),
+                _chunk("The longest chunk in this stream.", is_final=False),
+            )
+        )
+    truncated = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(truncated) == 1
+    assert "No chunk carried isFinalResponse" in truncated[0]
+    assert "carried no answer text" not in truncated[0]
+
+
+def test_final_unmarked_chunk_does_not_beat_a_marked_answer() -> None:
+    """``isFinalResponse`` says "last chunk", not "this is an answer" — the
+    answer marker still decides what counts as an answer at all."""
+    body = _length_prefixed(
+        _chunk("The marked answer.", marked=True, is_final=False),
+        _chunk("Unmarked trailing text.", marked=False, is_final=True),
+    )
+    assert parse_streaming_chat_response(body).answer == "The marked answer."
+
+
+def test_last_final_marked_chunk_wins_when_two_claim_finality() -> None:
+    """Not an observed shape; the tie has to break somewhere, and "final" is a
+    position claim, so the later chunk is the later position."""
+    body = _length_prefixed(
+        _chunk("First claim of finality.", is_final=True),
+        _chunk("Second claim of finality.", is_final=True),
+    )
+    assert parse_streaming_chat_response(body).answer == "Second claim of finality."
+
+
+def test_stream_without_a_turn_key_reports_none() -> None:
+    """Most hand-built and legacy shapes carry no key; that is absence, not
+    an error."""
+    result = parse_streaming_chat_response(_length_prefixed(_chunk("Answer.")))
+    assert result.turn_key is None
+    assert result.answer == "Answer."
+
+
+def test_turn_key_survives_a_losing_chunk() -> None:
+    """The key is collected independently of which chunk wins the answer.
+
+    Only the LOSING chunk carries a key here, so this fails if collection is
+    ever gated on the winning chunk (or on a chunk bearing text). That is the
+    live shape: chunk 1 of every observed stream carries the full key and no
+    answer text.
+    """
+    body = _length_prefixed(
+        _chunk("Partial", turn_key=["conv-uuid", "turn-uuid", 42], is_final=False),
+        _chunk("Partial answer, complete.", turn_key=None),
+    )
+    assert parse_streaming_chat_response(body).turn_key == ConversationTurnKey(
+        "conv-uuid", "turn-uuid", 42
+    )
+
+
+def test_last_chunk_to_carry_a_turn_key_wins() -> None:
+    """Two DIFFERENT keys pins the collector's last-wins rule.
+
+    Not an observed shape — the key was identical on every chunk of every
+    observed turn — but the rule has to be pinned or a future first-wins edit
+    is invisible.
+    """
+    body = _length_prefixed(
+        _chunk("Partial", turn_key=["conv-uuid", "turn-EARLY", 1], is_final=False),
+        _chunk("Partial answer, complete.", turn_key=["conv-uuid", "turn-LATE", 2]),
+    )
+    assert parse_streaming_chat_response(body).turn_key == ConversationTurnKey(
+        "conv-uuid", "turn-LATE", 2
+    )
+
+
+def test_empty_answer_stream_still_reports_no_answer(caplog) -> None:
+    """A genuinely empty answer stays an empty answer (not a parse failure) —
+    the final-marker path must not change that contract."""
+    with caplog.at_level(logging.DEBUG, logger="notebooklm._chat"):
+        result = parse_streaming_chat_response(_length_prefixed(_chunk("", is_final=True)))
+    assert result.answer == ""
+    assert any("No answer extracted" in r.message for r in caplog.records)
+
+
+def test_answer_document_follows_the_same_chunk_as_the_answer() -> None:
+    """The answer and its document must come from ONE chunk (#2120 + #2122).
+
+    Built from the live capture: the final chunk is kept verbatim (33 chars,
+    one decodable block) while an earlier, longer chunk is stripped of its
+    document. If the selection ever took the answer from one chunk and the
+    document from another, the annotation offsets would index a string the
+    caller never receives.
+    """
+    final_chunk = copy.deepcopy(_CAPTURED_CHUNKS[-1])
+    longer_chunk = copy.deepcopy(final_chunk)
+    longer_chunk[4] = False  # isFinalResponse
+    longer_chunk[0][0] = "A much longer provisional answer the model later cut down."
+    longer_chunk[0][4][0] = None  # drop the responseDoc body
+
+    result = parse_streaming_chat_response(
+        _length_prefixed(
+            *(
+                json.dumps([["wrb.fr", None, json.dumps(chunk)]])
+                for chunk in (longer_chunk, final_chunk)
+            )
+        )
+    )
+
+    assert result.answer == "A task wraps a **coroutine** [1]."
+    assert result.answer_document.text == "A task wraps a coroutine."
+
+
+def _multi_item_chunk(*items: tuple[str, bool]) -> str:
+    """One stream line carrying SEVERAL ``wrb.fr`` frames.
+
+    ``items`` is ``(text, is_final)`` per frame; ``text=""`` builds the real
+    text-less shape the backend sends (a populated answer row whose text slot
+    is the empty string — chunk 1 of every observed stream), NOT an empty row.
+    Real streams put one frame per LINE, so the multi-frame line itself is
+    unobserved — which is why the parser's behaviour on it needs pinning
+    rather than assuming.
+    """
+    frames = []
+    for text, is_final in items:
+        row = [text, None, ["conv-uuid", "turn-uuid", 7], None, [[], None, None, [], 1]]
+        inner = [row, None, None, None, is_final]
+        frames.append(["wrb.fr", None, json.dumps(inner)])
+    return json.dumps(frames)
+
+
+def test_final_flag_is_read_from_the_envelope_that_carried_the_answer() -> None:
+    """A later frame's ``isFinalResponse`` must not be attributed to an earlier
+    frame's answer.
+
+    The parser returns at the first frame that yields text, so a `true` on a
+    LATER frame is never seen — and a `true` on an EARLIER, text-less frame
+    must not be borrowed by this one either. Both directions land on the
+    fallback here, which is the conservative outcome.
+    """
+    body = _length_prefixed(_multi_item_chunk(("The answer.", False), ("", True)))
+    result = parse_streaming_chat_response(body)
+    assert result.answer == "The answer."
+
+
+def test_turn_key_is_kept_from_a_chunk_that_carried_no_answer_text() -> None:
+    """An empty answer still belongs to a turn (#2122).
+
+    The key is read above the text gate, so a stream whose only chunks are
+    text-less still yields it — otherwise the turn a caller most wants to give
+    feedback on would be the one turn they could not address.
+    """
+    result = parse_streaming_chat_response(_length_prefixed(_multi_item_chunk(("", True))))
+    assert result.answer == ""
+    assert result.turn_key == ConversationTurnKey("conv-uuid", "turn-uuid", 7)
+
+
+def test_empty_answer_stream_from_the_capture_still_reports_its_turn_key() -> None:
+    """Same property against the live capture: chunk 1 has no text but does
+    carry the key, so truncating the stream to it must not lose the key."""
+    first_only = copy.deepcopy(_CAPTURED_CHUNKS[0])
+    result = parse_streaming_chat_response(
+        _length_prefixed(json.dumps([["wrb.fr", None, json.dumps(first_only)]]))
+    )
+    assert result.answer == ""
+    assert result.turn_key is not None
+    assert result.turn_key.session_id == "3afea005-7d13-41d0-9257-6a9e28597818"

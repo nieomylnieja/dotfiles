@@ -196,7 +196,7 @@ class TestSourcesAPI:
     @pytest.mark.vcr
     @pytest.mark.asyncio
     @notebooklm_vcr.use_cassette("sources_add_url.yaml")
-    async def test_add_url(self):
+    async def test_add_url(self, legacy_vcr_add_url_baseline):
         """Add a URL source."""
         async with vcr_client() as client:
             source = await client.sources.add_url(
@@ -394,6 +394,39 @@ class TestArtifactsListAPI:
             )
             # The .kind property is a str-enum so equality holds both ways.
             assert art.kind == expected_kind.value
+
+    @pytest.mark.vcr
+    @pytest.mark.asyncio
+    @notebooklm_vcr.use_cassette("artifacts_list_slide_decks.yaml")
+    async def test_listing_decodes_recorded_content_metadata(self):
+        """Real rows expose media duration/URLs and visual accessibility text."""
+        async with vcr_client() as client:
+            rows = await client.artifacts._list_raw(READONLY_NOTEBOOK_ID)
+        artifacts = [Artifact.from_api_response(row) for row in rows]
+
+        audio = next(art for art in artifacts if art.kind is ArtifactType.AUDIO)
+        video = next(art for art in artifacts if art.kind is ArtifactType.VIDEO)
+        infographic = next(art for art in artifacts if art.kind is ArtifactType.INFOGRAPHIC)
+        slides = next(art for art in artifacts if art.kind is ArtifactType.SLIDE_DECK)
+        report = next(art for art in artifacts if art.kind is ArtifactType.REPORT)
+
+        assert audio.duration_seconds == 734.0
+        assert {media.type_code for media in audio.media_urls} == {1, 2, 3, 4}
+        assert video.duration_seconds is not None and video.duration_seconds > 400
+        assert {media.type_code for media in video.media_urls} == {1, 2, 3, 4}
+        assert infographic.infographics[0].alt_text
+        assert infographic.infographics[0].text
+        assert len(slides.slides) == 14
+        assert all(slide.alt_text and slide.text for slide in slides.slides)
+        # The VCR response scrubber replaces person-like/title-like values with
+        # SCRUBBED_NAME on some replay paths; either way the raw kind survives.
+        assert report.report_kind in {"Study Guide", "SCRUBBED_NAME"}
+        expected_report_format = (
+            ReportFormat.STUDY_GUIDE if report.report_kind == "Study Guide" else None
+        )
+        assert report.report_format is expected_report_format
+        assert all(art.source_ids for art in artifacts)
+        assert all(art.last_modified_at is not None for art in artifacts)
 
     @pytest.mark.vcr
     @pytest.mark.asyncio
@@ -595,7 +628,16 @@ class TestArtifactsGenerateAPI:
     @pytest.mark.asyncio
     @notebooklm_vcr.use_cassette("artifacts_generate_flashcards.yaml")
     async def test_generate_flashcards(self):
-        """Generate flashcards."""
+        """Generate flashcards.
+
+        Note: this tier cannot pin the quantity/difficulty pair. The ``freq``
+        matcher compares request bodies *shape-only* (see ``_shape_only`` in
+        ``tests/vcr_config.py``), so ``[1, 3]``, ``[3, 1]`` and the ``[null,
+        null]`` this cassette actually recorded are indistinguishable to it.
+        The transposition in #2116 was therefore invisible here and would be
+        again — the ordering is pinned by the unit golden payloads in
+        ``tests/unit/test_rpc_golden_payloads.py`` instead.
+        """
         async with vcr_client() as client:
             result = await client.artifacts.generate_flashcards(MUTABLE_NOTEBOOK_ID)
         assert result is not None
@@ -604,12 +646,17 @@ class TestArtifactsGenerateAPI:
     @pytest.mark.asyncio
     @notebooklm_vcr.use_cassette("artifacts_retry_failed.yaml")
     async def test_retry_failed(self):
-        """Retry a failed artifact in place — the same id comes back in_progress."""
+        """Retry a failed artifact in place — the same id comes back re-queued.
+
+        The recorded row carries status code 1 (``ARTIFACT_STATUS_INITIALIZED``),
+        which decodes to ``"pending"`` since #2127 corrected the transposed
+        1/2 codes.
+        """
         artifact_id = "11111111-2222-3333-4444-555555555555"
         async with vcr_client() as client:
             result = await client.artifacts.retry_failed(MUTABLE_NOTEBOOK_ID, artifact_id)
         assert result.task_id == artifact_id
-        assert result.status == "in_progress"
+        assert result.status == "pending"
 
 
 # =============================================================================

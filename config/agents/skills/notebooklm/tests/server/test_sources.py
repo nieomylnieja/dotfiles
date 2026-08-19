@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from notebooklm._types.notebooks import Notebook
 from notebooklm._types.sources import Source
-from notebooklm.rpc.types import SourceStatus
+from notebooklm.rpc.types import DriveSourceStatus, SourceStatus
 from notebooklm.server._pagination import MAX_LIMIT
 from notebooklm.server.routes.sources import (
     MAX_BATCH_URLS,
@@ -328,6 +328,40 @@ def test_get_source_carries_kind_and_status_label(
     assert "kind" in body
 
 
+def test_get_source_carries_drive_health(
+    authed_client: TestClient, fake_client: FakeClient
+) -> None:
+    """The REST source view projects Drive-side health, not just ingestion (#2111).
+
+    ``_app/views.py`` claims REST and MCP emit the identical enriched shape; without
+    this the whole Drive axis could vanish from every ``/v1`` source response with
+    the server suite still green.
+    """
+    fake_client.sources_store["nb-1"] = {
+        "src-d": Source(
+            id="src-d",
+            title="Shared Doc",
+            status=SourceStatus.READY,
+            drive_document_id="1AbC",
+            drive_status=DriveSourceStatus.INACCESSIBLE,
+        ),
+        "src-w": Source(id="src-w", title="Page", status=SourceStatus.READY),
+    }
+
+    degraded = authed_client.get("/v1/notebooks/nb-1/sources/src-d").json()
+    # Ingestion finished, so status_label still reads ready — that is the bug
+    # #2111 is about, and the Drive axis is what disambiguates it.
+    assert degraded["status_label"] == "ready"
+    assert degraded["drive_status"] == DriveSourceStatus.INACCESSIBLE.value
+    assert degraded["drive_status_label"] == "inaccessible"
+    assert degraded["is_drive_degraded"] is True
+
+    plain = authed_client.get("/v1/notebooks/nb-1/sources/src-w").json()
+    assert plain["drive_status"] is None
+    assert plain["drive_status_label"] is None
+    assert plain["is_drive_degraded"] is False
+
+
 def test_source_list_pagination_slices_and_adds_meta(
     authed_client: TestClient, fake_client: FakeClient
 ) -> None:
@@ -596,10 +630,12 @@ def test_add_batch_mid_item_auth_is_top_level_401(
     assert "results" not in resp.json()
 
 
-def test_add_batch_mid_item_rate_limit_is_top_level_429(
+def test_add_batch_transport_rate_limit_is_unconfirmed_502(
     authed_client: TestClient, fake_client: FakeClient, monkeypatch: object
 ) -> None:
-    # A RATE_LIMIT failure mid-batch is fatal too (429), not a per-item error.
+    # The typed RateLimitError still reaches Python callers, but this batch write
+    # may have committed before the response failed. REST must prevent a blind
+    # retry by projecting it as an unconfirmed, non-retriable RPC failure.
     import pytest
 
     from notebooklm.exceptions import RateLimitError
@@ -614,8 +650,12 @@ def test_add_batch_mid_item_rate_limit_is_top_level_429(
     resp = authed_client.post(
         "/v1/notebooks/nb-1/sources/batch", json={"urls": ["https://a.example.com"]}
     )
-    assert resp.status_code == 429
-    assert resp.json()["error"]["category"] == "rate_limited"
+    assert resp.status_code == 502
+    error = resp.json()["error"]
+    assert error["category"] == "rpc"
+    assert error["unconfirmed"] is True
+    assert error["retriable"] is False
+    assert "reconcile" in error["hint"].lower()
     assert "results" not in resp.json()
 
 

@@ -113,6 +113,7 @@ def set_current_notebook(
     is_owner: bool | None = None,
     created_at: str | None = None,
     *,
+    role: str | None = None,
     context_path_fn: ContextPathFn | None = None,
 ) -> None:
     """Set the current notebook context."""
@@ -128,6 +129,8 @@ def set_current_notebook(
             data["title"] = title
         if is_owner is not None:
             data["is_owner"] = is_owner
+        if role:
+            data["role"] = role
         if created_at:
             data["created_at"] = created_at
         return data

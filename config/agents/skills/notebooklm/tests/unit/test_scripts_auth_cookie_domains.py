@@ -43,6 +43,7 @@ import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
+import notebooklm.auth as public_auth
 from notebooklm._auth.tokens import AuthTokens
 from notebooklm._env import get_base_url
 from scripts import capture_rpc_registry, check_rpc_health
@@ -326,6 +327,56 @@ def test_capture_rpc_registry_sends_domain_scoped_cookie_jar(
     cdn_requests = [r for r in httpx_mock.get_requests() if r.url.host == "www.gstatic.com"]
     assert cdn_requests
     assert all("cookie" not in r.headers for r in cdn_requests)
+
+
+def test_capture_rpc_registry_classifies_access_gate_as_auth_failure(
+    monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+) -> None:
+    """A #2175 access gate must stop before bundle parsing can allege RPC drift."""
+    monkeypatch.setenv("NOTEBOOKLM_AUTH_JSON", json.dumps(_storage_state()))
+
+    start_url = f"{get_base_url()}/?authuser=0"
+    gate_url = "https://notebooklm.google/?location=unsupported"
+    fake_bundle_url = (
+        f"https://www.gstatic.com/_/mss/{capture_rpc_registry._APP}/_/js/k=boq.en.fake.js"
+    )
+    httpx_mock.add_response(url=start_url, status_code=302, headers={"location": gate_url})
+    # Even a gate page containing a bundle-shaped URL must be classified from
+    # the redirect URL before HTML discovery. Otherwise it can yield a blank or
+    # unrelated registry and recreate #2174.
+    httpx_mock.add_response(
+        url=gate_url,
+        status_code=200,
+        text=f'<html><script src="{fake_bundle_url}"></script></html>',
+    )
+
+    with pytest.raises(capture_rpc_registry._BundleAuthenticationError) as raised:
+        capture_rpc_registry.fetch_bundle()
+
+    message = str(raised.value)
+    assert "region / anti-abuse access gate" in message
+    assert "location=unsupported" in message
+    assert "not a library bug or an expired login" in message
+    assert not any(request.url.host == "www.gstatic.com" for request in httpx_mock.get_requests())
+
+
+def test_capture_rpc_registry_classifies_storage_load_failure_as_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed/missing profile cannot become a process exit-1 drift alarm."""
+
+    def fail_storage() -> httpx.Cookies:
+        raise ValueError("test credential detail must not be echoed")
+
+    monkeypatch.setattr(public_auth, "build_httpx_cookies_from_storage", fail_storage)
+
+    with pytest.raises(capture_rpc_registry._BundleAuthenticationError) as raised:
+        capture_rpc_registry.fetch_bundle()
+
+    message = str(raised.value)
+    assert "Stored authentication could not be loaded (ValueError)" in message
+    assert "notebooklm login" in message
+    assert "test credential detail" not in message
 
 
 def _auth_tokens_with_collision() -> AuthTokens:

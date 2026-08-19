@@ -5,7 +5,7 @@ Re-exports the typed row views; importers may also reach submodules directly
 (``from .._row_adapters.sources import SourceRow``).
 """
 
-from . import artifacts, chat, labels, notebooks, notes, research, sources
+from . import artifacts, chat, documents, labels, notebooks, notes, research, sources
 from .artifacts import ArtifactRow, ReportSuggestionRow
 from .chat import (
     AnswerRow,
@@ -13,10 +13,18 @@ from .chat import (
     CitationRow,
     ConversationTurnRow,
     ErrorPayloadRow,
-    PassageRow,
     StreamFrameRow,
-    TextLeafRow,
     unwrap_conversation_turns,
+)
+from .documents import (
+    AnnotationEntryRow,
+    DocumentBodyRow,
+    ParagraphElementRow,
+    ParagraphRow,
+    StructuralElementRow,
+    TextRunRow,
+    build_blocks,
+    build_document,
 )
 from .labels import LabelRow
 from .notes import NoteRow
@@ -34,21 +42,25 @@ from .sources import SourceRow, SourceRowShape
 __all__ = [
     "artifacts",
     "chat",
+    "documents",
     "labels",
     "notebooks",
     "notes",
     "research",
     "sources",
+    "AnnotationEntryRow",
     "AnswerRow",
     "ArtifactRow",
     "CitationDetail",
     "CitationRow",
     "ConversationTurnRow",
+    "DocumentBodyRow",
     "ErrorPayloadRow",
     "ImportedSourceRow",
     "LabelRow",
     "NoteRow",
-    "PassageRow",
+    "ParagraphElementRow",
+    "ParagraphRow",
     "ReportSuggestionRow",
     "ResearchResultRow",
     "ResearchStartRow",
@@ -57,7 +69,10 @@ __all__ = [
     "SourceRow",
     "SourceRowShape",
     "StreamFrameRow",
-    "TextLeafRow",
+    "StructuralElementRow",
+    "TextRunRow",
+    "build_blocks",
+    "build_document",
     "unwrap_conversation_turns",
     "unwrap_import_rows",
     "unwrap_poll_tasks",

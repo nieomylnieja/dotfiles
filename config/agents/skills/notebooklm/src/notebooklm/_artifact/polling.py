@@ -38,7 +38,6 @@ ListRawCallback = Callable[[str], Awaitable[builtins.list[Any]]]
 PollStatusCallback = Callable[[str, str], Awaitable[GenerationStatus]]
 MediaReadyCallback = Callable[[builtins.list[Any], int], bool]
 ArtifactTypeNameCallback = Callable[[int], str]
-ArtifactErrorCallback = Callable[[builtins.list[Any]], str | None]
 StatusChangeCallback = Callable[[GenerationStatus], object]
 
 
@@ -103,7 +102,6 @@ class ArtifactPollingService:
         list_raw: ListRawCallback,
         is_media_ready: MediaReadyCallback,
         get_artifact_type_name: ArtifactTypeNameCallback,
-        extract_artifact_error: ArtifactErrorCallback,
     ) -> GenerationStatus:
         """Poll the status of a generation task."""
         # List all artifacts and find by ID (no poll-by-ID RPC exists).
@@ -136,18 +134,12 @@ class ArtifactPollingService:
                     # Downgrade to PROCESSING to continue polling.
                     status_code = ArtifactStatus.PROCESSING
 
-            status = artifact_status_to_str(status_code)
-
-            error_msg: str | None = None
-            if status == "failed":
-                error_msg = extract_artifact_error(row.raw)
             url = row.artifact_url(artifact_type, suppress_drift=True)
 
             return GenerationStatus(
                 task_id=task_id,
                 status=_status_from_code(status_code),
                 url=url,
-                error=error_msg,
                 metadata=metadata,
             )
 
@@ -480,22 +472,6 @@ def _artifact_timeout_error(
         status_history=history,
         status_transitions=transitions,
     )
-
-
-def _extract_artifact_error(art: builtins.list[Any]) -> str | None:
-    """Try to extract a human-readable error from a failed artifact."""
-    try:
-        if not isinstance(art, list):
-            return None
-        return ArtifactRow(art).failed_error_text
-    except Exception:
-        preview = art[:6] if isinstance(art, list) else art
-        logger.warning(
-            "Failed to extract error from artifact data: %r",
-            preview,
-            exc_info=True,
-        )
-        return None
 
 
 def _get_artifact_type_name(artifact_type: int) -> str:

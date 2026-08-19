@@ -70,7 +70,7 @@ def get_notebook(decoded: Any) -> Notebook:
     Mirrors ``NotebooksAPI.get`` (``_notebooks.py``): ``decoded[0]`` is the
     notebook-info row passed to :meth:`Notebook.from_api_response`.
     """
-    return Notebook.from_api_response(decoded[0])
+    return Notebook.from_api_response(decoded[0], include_chat_settings=True)
 
 
 def add_source(decoded: Any) -> Source:

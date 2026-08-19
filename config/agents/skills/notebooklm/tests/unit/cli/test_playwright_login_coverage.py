@@ -27,7 +27,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import notebooklm.auth as auth_module
+from notebooklm._auth import account as _auth_account
+from notebooklm._auth import cookies as _auth_cookies
+from notebooklm._auth.account import _select_playwright_account
 from notebooklm._env import get_base_host
 from notebooklm.cli.playwright_login_io import make_login_io
 from notebooklm.cli.services import playwright_login
@@ -38,7 +40,6 @@ from notebooklm.cli.services.playwright_login import (
     Conflict,
     PathError,
     PreparedPaths,
-    _select_playwright_account,
     ensure_chromium_installed,
     prepare_login_paths,
     recover_page,
@@ -145,18 +146,19 @@ def test_repair_metadata_clear_failure_is_logged(tmp_path, caplog) -> None:
     import logging
 
     storage_path = tmp_path / "storage.json"
+    storage_path.write_bytes(b"\xff")
 
     def _boom_build(_path):
         raise ValueError("bad storage state")
 
-    def _boom_clear(_path):
-        raise OSError("cannot clear")
-
     with (
-        patch.object(auth_module, "build_httpx_cookies_from_storage", side_effect=_boom_build),
-        patch.object(auth_module, "clear_account_metadata", side_effect=_boom_clear),
-        patch.object(auth_module, "extract_email_from_html", return_value=None),
-        caplog.at_level(logging.WARNING, logger="notebooklm.cli.services.playwright_login"),
+        patch.object(
+            _auth_cookies,
+            "build_httpx_cookies_from_storage",
+            side_effect=_boom_build,
+        ),
+        patch.object(_auth_account, "extract_email_from_html", return_value=None),
+        caplog.at_level(logging.WARNING, logger="notebooklm.auth"),
     ):
         result = repair_playwright_account_metadata(
             storage_path, _FakeLoginIO(), page_html=None, quiet=True
@@ -164,6 +166,30 @@ def test_repair_metadata_clear_failure_is_logged(tmp_path, caplog) -> None:
     assert result is False
     assert any(
         "Failed to clear stale account metadata" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_repair_metadata_degrades_on_run_async_runtime_error(tmp_path) -> None:
+    """A ``RuntimeError`` from ``io.run_async`` itself (e.g. the nested-event-loop
+    guard) must degrade to the same best-effort warning as an error from inside
+    the coroutine, not abort the caller (review finding on PR #2139: the
+    consolidation moved the try/except inside the coroutine, which does not
+    cover a ``run_async`` scheduling failure happening outside it)."""
+
+    class _RaisingRunAsyncIO(_FakeLoginIO):
+        def run_async(self, coro: Any) -> Any:
+            coro.close()
+            raise RuntimeError("cannot run_async from a running event loop")
+
+    storage_path = tmp_path / "storage.json"
+    io = _RaisingRunAsyncIO()
+
+    result = repair_playwright_account_metadata(storage_path, io, page_html=None, quiet=False)
+
+    assert result is False
+    assert any(
+        "account metadata was not written" in str(args) and "Details:" in str(args)
+        for args, _ in io.emitted
     )
 
 
@@ -305,9 +331,10 @@ def test_missing_marker_from_failed_probe_does_not_install(monkeypatch, capsys) 
     assert capsys.readouterr().out == ""
 
 
+@pytest.mark.reality
 @pytest.mark.requires_playwright
 def test_probe_source_detects_both_states_against_real_playwright(tmp_path, monkeypatch) -> None:
-    """The probe answers correctly against a REAL Playwright install (#2031).
+    """The probe source answers correctly against REAL Playwright (#2031).
 
     Regression guard for the class of bug this replaced: the previous
     pre-flight scraped ``playwright install --dry-run chromium`` for a
@@ -343,6 +370,22 @@ def test_probe_source_detects_both_states_against_real_playwright(tmp_path, monk
     resolved.touch()
 
     assert run_source(CHROMIUM_PROBE_SOURCE) == CHROMIUM_PRESENT_MARKER
+
+
+@pytest.mark.reality
+@pytest.mark.requires_chromium
+def test_chromium_launches_headless_against_real_playwright() -> None:
+    """A package import and executable path are not proof that Chromium launches."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.set_content("<title>reality probe</title>")
+            assert page.title() == "reality probe"
+        finally:
+            browser.close()
 
 
 # ---------------------------------------------------------------------------

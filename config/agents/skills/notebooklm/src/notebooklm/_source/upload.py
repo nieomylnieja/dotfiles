@@ -15,7 +15,12 @@ import httpx
 
 from .._auth.account import authuser_query, format_authuser_value
 from .._callbacks import maybe_await_callback
-from .._idempotency import _coerce_create_result, _IdempotentCreateResult, idempotent_create
+from .._idempotency import (
+    _coerce_create_result,
+    _IdempotentCreateResult,
+    idempotent_create,
+)
+from .._idempotency import mark_unconfirmed as _unconfirmed
 from .._loop_bound import LoopBoundPrimitive
 from .._runtime.config import (
     DEFAULT_MAX_CONCURRENT_UPLOADS,
@@ -57,6 +62,7 @@ from ._upload_decode import (  # noqa: F401
     _STRICT_TRANSIENT_ERROR_TYPES,
     _TIER_SOURCE_LIMITS_SUMMARY,
     GetSourceLimit,
+    SourceAddStage,
     _build_invalid_argument_source_limit_hint,
     _coerce_filename_candidate,
     _coerce_source_id_candidate,
@@ -80,6 +86,7 @@ from ._upload_decode import (  # noqa: F401
     _validate_resumable_upload_url,
     _validate_upload_file_supported,
     raise_for_upload_status,
+    raise_partial_upload_failure,
 )
 from .listing import SourceLister
 from .polling import SourcePoller
@@ -401,21 +408,28 @@ class SourceUploadPipeline(LoopBoundPrimitive):
                         notebook_id, filename
                     )
                     source_id = registration.value
-                    upload_url = await self.start_resumable_upload(
-                        notebook_id,
-                        filename,
-                        file_size,
-                        source_id,
-                        content_type,
-                    )
-                    handed_off = True
-                    await self.upload_file_streaming(
-                        upload_url,
-                        file_obj,
-                        filename=filename,
-                        on_progress=on_progress,
-                        total_bytes=file_size,
-                    )
+                    stage: SourceAddStage = "start_session"
+                    try:
+                        upload_url = await self.start_resumable_upload(
+                            notebook_id,
+                            filename,
+                            file_size,
+                            source_id,
+                            content_type,
+                        )
+                        stage = "upload_finalize"
+                        handed_off = True
+                        await self.upload_file_streaming(
+                            upload_url,
+                            file_obj,
+                            filename=filename,
+                            on_progress=on_progress,
+                            total_bytes=file_size,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - preserve all post-register failures
+                        raise_partial_upload_failure(
+                            exc, filename, source_id=source_id, stage=stage
+                        )
                 finally:
                     if not handed_off:
                         file_obj.close()
@@ -537,13 +551,33 @@ class SourceUploadPipeline(LoopBoundPrimitive):
         # stream to the wrong source.
         baseline_ids: set[str] | None
         baseline_source_count: int | None
+        # Retained so the ambiguity raise below can name what went wrong, the
+        # same way ``add_url`` and ``add_drive`` do: the caller reads "baseline
+        # snapshot was unavailable" long after this line ran, and without the
+        # cause nothing left in the process can explain it.
+        baseline_error: Exception | None = None
         try:
             baseline_sources = await list_sources(notebook_id)
             baseline_ids = {source.id for source in baseline_sources}
             baseline_source_count = len(baseline_sources)
-        except Exception:
-            logger.debug(
-                "register_file_source: baseline list() failed; baseline unavailable",
+        except Exception as exc:
+            baseline_error = exc
+            # WARNING, not DEBUG (#2220 parity with ``add_url`` / ``add_drive``,
+            # #2204): the ``notebooklm`` logger defaults to WARNING, so a DEBUG
+            # record here is discarded before any handler sees it and the call
+            # silently proceeds with its idempotency probe degraded.
+            #
+            # This one still swallows, unlike the probe below, and the asymmetry
+            # is deliberate: nothing has been written yet at baseline time, so
+            # degrading is safe and failing here would break adds that would
+            # otherwise have succeeded. The probe runs *after* a create that may
+            # already have committed, so it has no such freedom.
+            logger.warning(
+                "register_file_source: baseline list() failed (%s); the idempotency probe "
+                "can no longer tell a source this call created from one that was already "
+                "there, so a transport failure will surface as an ambiguity error instead "
+                "of recovering",
+                type(exc).__name__,
                 exc_info=True,
             )
             baseline_ids = None
@@ -552,18 +586,57 @@ class SourceUploadPipeline(LoopBoundPrimitive):
         async def _probe() -> str | None:
             try:
                 sources = await list_sources(notebook_id)
-            except (AuthError, RateLimitError, ServerError, NetworkError):
+            except (AuthError, RateLimitError, ServerError, NetworkError) as exc:
                 # Transport- and auth-level probe failures must propagate
                 # — otherwise idempotent_create would retry the
                 # register on top of a broken probe.
+                # Mark it UNCONFIRMED before it goes (#2220 review): the create
+                # may already have committed and this probe could not say, which
+                # is the same predicament as the decode branch below. Without the
+                # marker a ServerError/RateLimitError here classifies as the
+                # *retriable* SERVER/RATE_LIMITED with the hint "retry after a
+                # short delay" — and the caller retries the ADD, not the probe.
+                # The underlying type is left intact, so "re-authenticate" /
+                # "connectivity" remain readable in the message.
+                _unconfirmed(exc)
                 raise
-            except Exception:
-                logger.debug(
-                    "register_file_source: probe list() failed with "
-                    "non-transport error; treating as no match",
+            except Exception as exc:
+                # Propagate, do not retry (#2220) — see the full rationale on
+                # ``SourceAddService.add_url._probe``. Sharper here than on the
+                # URL paths: a wrong answer does not merely duplicate a row, it
+                # picks the source id the *file bytes* are then streamed into,
+                # so an unconfirmed guess can direct an upload at the wrong
+                # source. This branch is also reached from ``_create`` below,
+                # where the register RPC already returned and the probe is the
+                # only way to learn the id — "no match" there is a claim this
+                # failure cannot support either.
+                logger.warning(
+                    "register_file_source: probe list() failed with a non-transport error "
+                    "(%s); the registration cannot be confirmed, so it will not be retried",
+                    type(exc).__name__,
                     exc_info=True,
                 )
-                return None
+                raise _unconfirmed(
+                    SourceAddError(
+                        filename,
+                        cause=exc,
+                        message=(
+                            # Action first — see the note on ``add_url``'s copy.
+                            # "may or may not have committed" rather than "did not
+                            # complete": this branch is also reached from ``_create``
+                            # below, where the register RPC returned 200 and only the
+                            # SOURCE_ID was untrustworthy.
+                            "UNRESOLVED — do not blindly retry; check the notebook "
+                            "source list first. Cannot confirm file source "
+                            f"{filename!r}: the registration may or may not have "
+                            "committed, and the idempotency probe that would settle "
+                            f"it failed too ({type(exc).__name__}). No FURTHER attempt was "
+                            "made, because retrying on an unanswered probe is how "
+                            "duplicates happen — but an earlier attempt in this call "
+                            "may also have committed."
+                        ),
+                    )
+                ) from exc
             matches = [source for source in sources if source.title == filename]
             if baseline_ids is not None:
                 matches = [source for source in matches if source.id not in baseline_ids]
@@ -573,25 +646,32 @@ class SourceUploadPipeline(LoopBoundPrimitive):
                 # Surface this as an ambiguity rather than guessing — see
                 # the ``baseline_ids`` comment above for the failure mode
                 # this guards against.
-                raise SourceAddError(
-                    filename,
-                    message=(
-                        f"Cannot disambiguate file source with title {filename!r}: "
-                        "baseline snapshot was unavailable, so a matching title may "
-                        "predate this upload. Resolve manually before retrying."
-                    ),
+                raise _unconfirmed(
+                    SourceAddError(
+                        filename,
+                        cause=baseline_error,
+                        message=(
+                            f"Cannot disambiguate file source with title {filename!r}: the "
+                            f"pre-create baseline snapshot failed "
+                            f"({type(baseline_error).__name__}), so a matching title may "
+                            "either predate this upload or be the source it just "
+                            "registered. Resolve manually before retrying."
+                        ),
+                    )
                 )
             if len(matches) == 1:
                 (match,) = matches  # exactly one (len==1 guard); unpack, not matches[0]
                 return match.id
             if len(matches) > 1:
-                raise SourceAddError(
-                    filename,
-                    message=(
-                        f"Cannot disambiguate file source with title {filename!r}: "
-                        f"probe found {len(matches)} new sources with this title "
-                        "after a transport failure. Resolve manually before retrying."
-                    ),
+                raise _unconfirmed(
+                    SourceAddError(
+                        filename,
+                        message=(
+                            f"Cannot disambiguate file source with title {filename!r}: "
+                            f"probe found {len(matches)} new sources with this title "
+                            "after a transport failure. Resolve manually before retrying."
+                        ),
+                    )
                 )
             return None
 
@@ -646,15 +726,17 @@ class SourceUploadPipeline(LoopBoundPrimitive):
                 # The create RPC already returned successfully, so do not
                 # let idempotent_create treat probe failure here as a
                 # retryable create failure and re-POST the file source.
-                raise SourceAddError(
-                    filename,
-                    cause=exc,
-                    message=(
-                        f"Cannot confirm registered file source for {filename!r}: "
-                        "the register response did not provide a trustworthy "
-                        f"SOURCE_ID and the source-list probe failed ({type(exc).__name__}). "
-                        "Check the notebook source list before retrying."
-                    ),
+                raise _unconfirmed(
+                    SourceAddError(
+                        filename,
+                        cause=exc,
+                        message=(
+                            f"Cannot confirm registered file source for {filename!r}: "
+                            "the register response did not provide a trustworthy "
+                            f"SOURCE_ID and the source-list probe failed ({type(exc).__name__}). "
+                            "Check the notebook source list before retrying."
+                        ),
+                    )
                 ) from exc
             if probed_source_id is not None:
                 logger.info(
@@ -664,14 +746,16 @@ class SourceUploadPipeline(LoopBoundPrimitive):
                 )
                 return probed_source_id
 
-            raise SourceAddError(
-                filename,
-                message=(
-                    "Failed to get SOURCE_ID: no trustworthy SOURCE_ID found in "
-                    f"{_register_response_shape_label(result)} registration response, "
-                    "and the source-list probe found no "
-                    "unambiguous new source. Check the notebook source list before retrying."
-                ),
+            raise _unconfirmed(
+                SourceAddError(
+                    filename,
+                    message=(
+                        "Failed to get SOURCE_ID: no trustworthy SOURCE_ID found in "
+                        f"{_register_response_shape_label(result)} registration response, "
+                        "and the source-list probe found no "
+                        "unambiguous new source. Check the notebook source list before retrying."
+                    ),
+                )
             )
 
         return await idempotent_create(
