@@ -51,9 +51,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/mattpocock/skills.git",
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
-      "skillFolderHash": "bce229692e60dff3462e49bc5e774e83bef348e6",
+      "skillFolderHash": "3d35cd438f4067b03c8b3792e038960e4ac11526",
       "installedAt": "2026-05-14T20:29:51.308Z",
-      "updatedAt": "2026-07-23T08:37:39.773Z"
+      "updatedAt": "2026-08-19T11:45:19.686Z"
     },
     "excalidraw-diagram-generator": {
       "source": "github/awesome-copilot",
@@ -78,18 +78,18 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/teng-lin/notebooklm-py.git",
       "skillPath": "SKILL.md",
-      "skillFolderHash": "614d6288ab51e508c41c7bea481729c50d14d309",
+      "skillFolderHash": "3bb0c1850ac4e85378a831581a0cf1e82fa80272",
       "installedAt": "2026-07-25T11:15:59.576Z",
-      "updatedAt": "2026-08-06T13:09:36.014Z"
+      "updatedAt": "2026-08-19T11:45:28.592Z"
     },
     "yt-dlp": {
       "source": "lwmxiaobei/yt-dlp-skill",
       "sourceType": "github",
       "sourceUrl": "https://github.com/lwmxiaobei/yt-dlp-skill.git",
       "skillPath": "SKILL.md",
-      "skillFolderHash": "a28cf2585bbac8cc5ba8318e872c9e79ec88b6fe",
+      "skillFolderHash": "7ea92082e15ea19dc3f82e7fa24e155ebe4f44d3",
       "installedAt": "2026-08-06T21:03:45.809Z",
-      "updatedAt": "2026-08-06T21:03:45.809Z"
+      "updatedAt": "2026-08-19T11:45:33.781Z"
     }
   },
   "dismissed": {}
