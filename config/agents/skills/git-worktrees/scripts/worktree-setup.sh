@@ -4,282 +4,198 @@ set -euo pipefail
 readonly PROG="${0##*/}"
 
 usage() {
-  cat << EOF
-Usage: ${PROG} [OPTION]... [BRANCH]
-Create or update a git worktree at .worktrees/BRANCH.
-
-Auto-detects whether BRANCH exists (locally or on origin).
-  - Existing branch: fetches latest and checks it out.
-  - New branch: fetches the base branch, then creates BRANCH from it.
-  - No BRANCH: select from available local/origin branches, or create a new one.
-
-Copies local untracked and ignored hidden files into the worktree.
+  cat <<EOF
+Usage: ${PROG} [OPTION]... BRANCH
+Create or reuse .worktrees/BRANCH without changing existing work.
 
 Options:
-  -b, --base BRANCH  base branch to create from (default: remote default branch)
-  -h, --help         display this help and exit
+  -b, --base BRANCH       base for a new branch (default: cached remote default)
+      --commit COMMIT     create or verify a detached checkout at COMMIT
+      --fetch             fetch the selected branch or base before creation
+  -h, --help              display this help and exit
+
+The command prints JSON metadata for the resolved worktree.
 
 Exit status:
   0  success
-  1  general error
+  1  operational error
   2  usage error
 EOF
 }
 
-log() { echo "${PROG}: $*" >&2; }
 fatal() {
-  echo "${PROG}: ERROR: $1" >&2
-  exit "${2:-1}"
+  local message="$1"
+  local status="${2:-1}"
+
+  printf '%s: ERROR: %s\n' "${PROG}" "${message}" >&2
+  exit "${status}"
 }
 
-require_command() {
-  local cmd="$1"
+detect_cached_default_branch() {
+  local remote_head
 
-  if ! command -v "${cmd}" > /dev/null 2>&1; then
-    fatal "missing required command: ${cmd}"
-  fi
-}
-
-detect_default_branch() {
-  local advertised_head
-  local cached_head
-
-  advertised_head="$(git ls-remote --symref origin HEAD 2> /dev/null || true)"
-  advertised_head="$(awk '$1 == "ref:" && $3 == "HEAD" { print $2; exit }' <<< "${advertised_head}")"
-  if [[ "${advertised_head}" == refs/heads/* ]]; then
-    echo "${advertised_head#refs/heads/}"
-    return
-  fi
-
-  cached_head="$(git symbolic-ref refs/remotes/origin/HEAD 2> /dev/null || true)"
-  if [[ -n "${cached_head}" ]]; then
-    echo "${cached_head#refs/remotes/origin/}"
-    return
-  fi
-
-  fatal "cannot detect default branch; use --base to specify"
-}
-
-branch_exists_on_remote() {
-  git ls-remote --exit-code --heads origin "$1" &> /dev/null
-}
-
-branch_exists_locally() {
-  git rev-parse --verify "refs/heads/$1" &> /dev/null
-}
-
-occupied_worktree_branches() {
-  git worktree list --porcelain | awk '
-    /^branch refs\/heads\// {
-      branch = substr($0, 19)
-      if (branch != "") {
-        print branch
-      }
-    }
-  '
-}
-
-list_available_branches() {
-  local occupied
-  occupied="$(occupied_worktree_branches)"
-
-  {
-    git for-each-ref --sort=refname --format='%(refname:short)' refs/heads
-    git for-each-ref --sort=refname --format='%(refname:short)' refs/remotes/origin
-  } | awk -v occupied="${occupied}" '
-    BEGIN {
-      split(occupied, occupied_lines, "\n")
-      for (i in occupied_lines) {
-        if (occupied_lines[i] != "") {
-          occupied_branch[occupied_lines[i]] = 1
-        }
-      }
-    }
-
-    $1 == "origin/HEAD" {
-      next
-    }
-
-    /^origin\// {
-      sub(/^origin\//, "")
-    }
-
-    $0 == "" || occupied_branch[$0] {
-      next
-    }
-
-    seen[$0] {
-      next
-    }
-
-    {
-      seen[$0] = 1
-      branch[++count] = $0
-    }
-
-    END {
-      for (i = 1; i <= count; i++) {
-        print branch[i]
-      }
-    }
-  '
-}
-
-select_branch() {
-  local entries
-  local selected
-  local branch
-
-  require_command fzf
-
-  entries="$(
-    {
-      printf '<new>\n'
-      list_available_branches
-    }
-  )"
-
-  selected="$(
-    printf '%s\n' "${entries}" | fzf \
-      --ansi \
-      --prompt='Worktree branch > ' \
-      --header='Select an unoccupied branch, or choose "new" to type a branch name.' \
-      --preview="branch={}; format='%C(yellow)%h%Creset %C(cyan)%an%Creset %C(green)(%ar)%Creset %C(auto)%d%Creset %s'; if [ \"\${branch}\" = \"<new>\" ]; then printf \"%s\\n\" \"Type the new branch name after selecting <new>.\"; elif git rev-parse --verify \"refs/remotes/origin/\${branch}\" > /dev/null 2>&1; then git log --color=always --pretty=format:\"\${format}\" -n 20 \"origin/\${branch}\"; else git log --color=always --pretty=format:\"\${format}\" -n 20 \"\${branch}\"; fi" \
-      --preview-window='right:70%' \
-      --select-1 \
-      --exit-0
-  )"
-
-  if [[ -z "${selected}" ]]; then
-    return 1
-  fi
-
-  branch="${selected%%$'\t'*}"
-  if [[ "${branch}" != "<new>" ]]; then
-    printf '%s\n' "${branch}"
-    return
-  fi
-
-  printf 'New branch name: ' >&2
-  IFS= read -r branch
-  [[ -n "${branch}" ]] || fatal "new branch name is required" 2
-  printf '%s\n' "${branch}"
-}
-
-copy_hidden_file_set() {
-  local repo_root="$1"
-  local worktree_path="$2"
-  local relative_path
-  local destination_path
-  shift 2
-
-  git -C "${repo_root}" ls-files "$@" -z -- \
-    '.*' \
-    ':(exclude).git' \
-    ':(exclude).git/**' \
-    ':(exclude).worktrees' \
-    ':(exclude).worktrees/**' \
-    | while IFS= read -r -d '' relative_path; do
-      case "${relative_path}" in
-        .git | .git/* | .worktrees | .worktrees/*) continue ;;
-        *) ;;
-      esac
-
-      destination_path="${worktree_path}/${relative_path}"
-      mkdir -p -- "${destination_path%/*}"
-      cp -a -- "${repo_root}/${relative_path}" "${destination_path}"
-    done
-}
-
-copy_hidden_files() {
-  local repo_root="$1"
-  local worktree_path="$2"
-
-  log "Copying local hidden files into ${worktree_path}..."
-  copy_hidden_file_set "${repo_root}" "${worktree_path}" --others --exclude-standard
-  copy_hidden_file_set "${repo_root}" "${worktree_path}" --others --ignored --exclude-standard
+  remote_head="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true)"
+  [[ "${remote_head}" == refs/remotes/origin/* ]] ||
+    fatal "cannot detect the cached remote default branch; use --base"
+  printf '%s\n' "${remote_head#refs/remotes/origin/}"
 }
 
 main() {
   local base=""
   local branch=""
+  local commit=""
+  local fetch=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      -b | --base)
-        [[ $# -lt 2 ]] && fatal "--base requires an argument" 2
-        base="$2"
-        shift 2
-        ;;
-      --base=*)
-        base="${1#*=}"
-        shift
-        ;;
-      --)
-        shift
-        break
-        ;;
-      -*) fatal "Unknown option: $1" 2 ;;
-      *) break ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -b | --base)
+      [[ $# -ge 2 ]] || fatal "--base requires an argument" 2
+      base="$2"
+      shift 2
+      ;;
+    --base=*)
+      base="${1#*=}"
+      shift
+      ;;
+    --fetch)
+      fetch=true
+      shift
+      ;;
+    --commit)
+      [[ $# -ge 2 ]] || fatal "--commit requires an argument" 2
+      commit="$2"
+      shift 2
+      ;;
+    --commit=*)
+      commit="${1#*=}"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*) fatal "unknown option: $1" 2 ;;
+    *) break ;;
     esac
   done
 
-  if [[ $# -eq 0 ]]; then
-    branch="$(select_branch)"
-  fi
-
-  [[ $# -gt 1 ]] && fatal "expected exactly one BRANCH argument, got $#" 2
-  if [[ $# -eq 1 ]]; then
-    branch="$1"
+  [[ $# -eq 1 ]] || fatal "expected one BRANCH argument" 2
+  branch="$1"
+  git check-ref-format --branch "${branch}" >/dev/null || fatal "invalid branch name: ${branch}" 2
+  if [[ -n "${commit}" && "${fetch}" == true ]]; then
+    fatal "--commit and --fetch cannot be combined; fetch the exact object before setup" 2
   fi
 
   local repo_root
+  local worktree_path
+  local created=false
+  local branch_ref="refs/heads/${branch}"
+  local resolved_commit=""
   repo_root="$(git rev-parse --show-toplevel)"
-  local worktree_path="${repo_root}/.worktrees/${branch}"
+  worktree_path="${repo_root}/.worktrees/${branch}"
+  if [[ -n "${commit}" ]]; then
+    resolved_commit="$(git rev-parse --verify --end-of-options "${commit}^{commit}")" ||
+      fatal "commit is not available locally: ${commit}"
+  fi
 
-  if branch_exists_on_remote "${branch}" || branch_exists_locally "${branch}"; then
-    local on_remote
-    on_remote=$(branch_exists_on_remote "${branch}" && echo true || echo false)
-
-    if [[ "${on_remote}" == "true" ]]; then
-      log "Branch '${branch}' exists on remote, fetching latest..."
-      git fetch origin "${branch}"
+  local branch_is_checked_out=false
+  if [[ ! -e "${worktree_path}/.git" && -z "${resolved_commit}" ]]; then
+    local worktree_list
+    local command_status
+    if worktree_list="$(git worktree list --porcelain)"; then
+      :
     else
-      log "Branch '${branch}' exists locally (not on remote)..."
+      command_status=$?
+      return "${command_status}"
     fi
+    if rg -Fxq "branch ${branch_ref}" <<<"${worktree_list}"; then
+      branch_is_checked_out=true
+    else
+      command_status=$?
+      [[ "${command_status}" -eq 1 ]] || return "${command_status}"
+    fi
+  fi
 
-    if [[ ! -d "${worktree_path}" ]]; then
-      log "Creating worktree at ${worktree_path}..."
-      if branch_exists_locally "${branch}"; then
-        git worktree add "${worktree_path}" "${branch}"
+  if [[ -e "${worktree_path}/.git" ]]; then
+    if [[ -n "${resolved_commit}" ]]; then
+      local existing_head
+      local existing_branch
+      existing_head="$(git -C "${worktree_path}" rev-parse HEAD)"
+      [[ "${existing_head}" == "${resolved_commit}" ]] ||
+        fatal "${worktree_path} is at ${existing_head}, expected ${resolved_commit}"
+      existing_branch="$(git -C "${worktree_path}" branch --show-current)"
+      [[ -z "${existing_branch}" ]] ||
+        fatal "${worktree_path} is attached to branch '${existing_branch}', expected a detached checkout"
+    else
+      local existing_branch
+      existing_branch="$(git -C "${worktree_path}" branch --show-current)"
+      [[ "${existing_branch}" == "${branch}" ]] ||
+        fatal "${worktree_path} contains branch '${existing_branch}', expected '${branch}'"
+    fi
+  elif [[ "${branch_is_checked_out}" == true ]]; then
+    fatal "branch '${branch}' is already checked out in another worktree"
+  else
+    mkdir -p -- "${worktree_path%/*}"
+
+    if "${fetch}"; then
+      if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+        git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
       else
-        git worktree add --track -b "${branch}" "${worktree_path}" "origin/${branch}"
+        local remote_probe
+        local remote_status
+        if remote_probe="$(git ls-remote --exit-code --heads origin "${branch}" 2>&1)"; then
+          git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+        else
+          remote_status=$?
+          [[ "${remote_status}" -eq 2 ]] ||
+            fatal "cannot probe remote branch '${branch}': ${remote_probe}"
+          if [[ -z "${base}" ]]; then
+            base="$(detect_cached_default_branch)"
+          fi
+          git fetch origin "refs/heads/${base}:refs/remotes/origin/${base}"
+        fi
       fi
     fi
 
-    if [[ "${on_remote}" == "true" ]]; then
-      log "Resetting to origin/${branch}..."
-      git -C "${worktree_path}" reset --hard "origin/${branch}"
+    if [[ -n "${resolved_commit}" ]]; then
+      git worktree add --quiet --detach "${worktree_path}" "${resolved_commit}"
+    elif git show-ref --verify --quiet "${branch_ref}"; then
+      git worktree add --quiet "${worktree_path}" "${branch}"
+    elif git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+      git worktree add --quiet --track -b "${branch}" "${worktree_path}" "origin/${branch}"
+    else
+      [[ -n "${base}" ]] || base="$(detect_cached_default_branch)"
+      local base_ref="${base}"
+      if git show-ref --verify --quiet "refs/remotes/origin/${base}"; then
+        base_ref="origin/${base}"
+      elif ! git show-ref --verify --quiet "refs/heads/${base}"; then
+        fatal "base branch '${base}' is not available locally; rerun with --fetch"
+      fi
+      git worktree add --quiet -b "${branch}" "${worktree_path}" "${base_ref}"
     fi
-  else
-    if [[ -z "${base}" ]]; then
-      base="$(detect_default_branch)"
-    fi
-
-    log "Branch '${branch}' is new, branching off '${base}'..."
-    log "Fetching '${base}' from origin..."
-    git fetch origin "${base}"
-
-    log "Creating worktree at ${worktree_path}..."
-    git worktree add -b "${branch}" "${worktree_path}" "origin/${base}"
+    created=true
   fi
 
-  copy_hidden_files "${repo_root}" "${worktree_path}"
-  echo "${worktree_path}"
+  local head
+  local checked_out_branch
+  local status
+  head="$(git -C "${worktree_path}" rev-parse HEAD)"
+  checked_out_branch="$(git -C "${worktree_path}" branch --show-current)"
+  status="$(git -C "${worktree_path}" status --short)"
+
+  jq -n \
+    --arg repo_root "${repo_root}" \
+    --arg worktree_path "${worktree_path}" \
+    --arg label "${branch}" \
+    --arg branch "${checked_out_branch}" \
+    --arg head "${head}" \
+    --arg status "${status}" \
+    --argjson created "${created}" \
+    '{repo_root: $repo_root, worktree_path: $worktree_path, label: $label, branch: ($branch | if . == "" then null else . end), head: $head, created: $created, dirty: ($status != ""), status: $status}'
 }
 
 main "$@"

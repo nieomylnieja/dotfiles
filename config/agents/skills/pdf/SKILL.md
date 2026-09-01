@@ -8,7 +8,31 @@ license: Proprietary. LICENSE.txt has complete terms
 
 ## Overview
 
-This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see REFERENCE.md. If you need to fill out a PDF form, read FORMS.md and follow its instructions.
+This guide covers essential PDF processing operations with Python libraries and
+command-line tools. For advanced features, JavaScript libraries, and detailed
+examples, see [reference.md](reference.md). To fill out a PDF form, read
+[forms.md](forms.md) and follow its instructions.
+
+## Select an Available Tool
+
+Check a tool with `command -v` before you depend on it. Do not assume that
+`python`, `python3`, or Poppler commands are installed.
+
+On NixOS, use the exact package name `poppler-utils` when `pdftotext`,
+`pdfinfo`, or `pdfimages` is unavailable:
+
+```sh
+nix-shell -p poppler-utils --run 'pdftotext -layout input.pdf output.txt'
+```
+
+Do not use the obsolete attribute name `poppler_utils`. If a sandbox blocks
+the Nix cache or package download, request approval to rerun the same command
+outside the sandbox. Do not treat that failure as a missing or invalid PDF.
+
+For tax, medical, identity, or other sensitive documents, keep extracted text
+in a timestamped, permission-restricted temporary file. Inspect only the
+relevant fields with bounded output. Do not print the complete document or
+persist personal identifiers unless the user explicitly requests it.
 
 ## Quick Start
 
@@ -304,11 +328,11 @@ with open("encrypted.pdf", "wb") as output:
 | Create PDFs | reportlab | Canvas or Platypus |
 | Command line merge | qpdf | `qpdf --empty --pages ...` |
 | OCR scanned PDFs | pytesseract | Convert to image first |
-| Fill PDF forms | pdf-lib or pypdf (see FORMS.md) | See FORMS.md |
+| Fill PDF forms | pdf-lib or pypdf (see [forms.md](forms.md)) | See [forms.md](forms.md) |
 
 ## Next Steps
 
-- For advanced pypdfium2 usage, see REFERENCE.md
-- For JavaScript libraries (pdf-lib), see REFERENCE.md
-- If you need to fill out a PDF form, follow the instructions in FORMS.md
-- For troubleshooting guides, see REFERENCE.md
+- For advanced pypdfium2 usage, see [reference.md](reference.md)
+- For JavaScript libraries (pdf-lib), see [reference.md](reference.md)
+- If you need to fill out a PDF form, follow [forms.md](forms.md)
+- For troubleshooting guides, see [reference.md](reference.md)

@@ -1,5 +1,1 @@
-interface:
-  display_name: "Improve Codebase Architecture"
-  short_description: "Find and grill architecture improvements"
-policy:
-  allow_implicit_invocation: false
+/nix/store/4869hhi3ppzhbz489qhsq16xmgmcskrw-home-manager-files/.claude/skills/improve-codebase-architecture/agents/openai.yaml

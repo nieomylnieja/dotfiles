@@ -1,33 +1,52 @@
 # Memory Optimization
 
-Allocation reduction is the single highest-ROI optimization in most Go programs. Every allocation eventually requires garbage collection — reducing allocation count and size directly reduces GC pauses and CPU overhead.
+<!-- markdownlint-disable MD013 -->
+
+Use allocation and heap profiles to determine whether allocation rate or
+retained memory is a material cost. Allocation reduction can reduce garbage
+collector work, but it is not the highest-value change for every program.
+
+Use the repository-supported pprof frontend. Check that its executable or task
+is available before profile inspection. Do not assume that `go tool pprof`
+exists. If no supported frontend is available, report the missing tool and stop
+the profile analysis.
 
 ## Allocation Patterns
 
-**Diagnose:** 1- `go tool pprof -alloc_objects` — rank functions by number of heap allocations; expect hot-path functions (request handlers, serializers) near the top with thousands of alloc/op 2- `go build -gcflags="-m -m"` — verbose escape analysis showing _why_ variables escape; look for `"leaking param"`, `"too large for stack"`, or `"captured by closure"` on variables you expect to stay on the stack 3- `go test -bench -benchmem` — measure allocs/op and B/op per benchmark; expect the target function to show >0 allocs/op that can be eliminated
+**Diagnose:**
 
-### Reuse slices via append(s[:0], ...)
+1. Use the verified pprof frontend to rank allocation sites by object count.
+2. Use `go build -gcflags="-m -m"` to inspect escape decisions.
+3. Use `go test -bench -benchmem` to measure allocations and bytes per
+   operation.
 
-Reslicing to zero length retains the backing array, turning what would be a new allocation into a no-op:
+### Reuse slices with `append(s[:0], ...)`
+
+Reslicing to zero length can reuse the backing array when it has enough
+capacity. It also retains that array, so do not use it when retention is the
+problem.
 
 ```go
 // Bad — allocates new slice, old one becomes garbage
 mode = []T{item}
 
-// Good — reuses existing backing array (0 allocations)
+// Can reuse the existing backing array
 mode = append(mode[:0], item)
 ```
 
 ### Direct indexing vs append
 
-When the output size equals the input size, use `make([]T, len(input))` with direct assignment instead of `make([]T, 0, len(input))` with `append`. Direct assignment avoids per-element bounds checking and length increment:
+When the output size equals the input size, indexed assignment expresses the
+result length directly. Both forms can allocate one backing array, and compiler
+optimizations can remove much of their loop overhead. Benchmark only when this
+loop is measured as hot:
 
 ```go
-// Slower — append overhead per element
+// Useful when result length can vary
 result := make([]T, 0, len(input))
 for i := range input { result = append(result, transform(input[i])) }
 
-// Faster — direct assignment
+// Clear when result length is fixed
 result := make([]T, len(input))
 for i := range input { result[i] = transform(input[i]) }
 ```
@@ -36,10 +55,11 @@ Use append when the result might be smaller (filtering) or when early error retu
 
 ### Eliminate redundant map lookups
 
-`for k := range m { use(m[k]) }` does two lookups per iteration. Capture the value from range:
+`for k := range m { use(m[k]) }` performs an additional lookup for each key.
+Capture the value from `range`:
 
 ```go
-// Bad — two lookups per iteration
+// Additional lookup for each key
 for k := range in { result[k] = fn(in[k]) }
 
 // Good — single lookup
@@ -48,80 +68,91 @@ for k, v := range in { result[k] = fn(v) }
 
 ### Map size hints
 
-`make(map[K]V)` starts with a small number of buckets and rehashes as it grows. Providing a size hint avoids rehashing:
+`make(map[K]V, n)` gives an initial capacity hint. It can reduce growth work,
+but it does not guarantee one allocation or no growth:
 
 ```go
-m := make(map[string]int, len(items)) // single allocation, no rehashing
+m := make(map[string]int, len(items))
 ```
 
 ### Sentinel errors vs fmt.Errorf
 
-`fmt.Errorf` allocates on every call. For predictable errors in hot paths, use preallocated sentinels:
+A sentinel can preserve stable error identity and can avoid repeated error
+construction. Use one when the API contract calls for it, not only from an
+unverified allocation assumption:
 
 ```go
 var ErrNegative = errors.New("value is negative") // allocated once
 
 func validate(x int) error {
-    if x < 0 { return ErrNegative } // zero allocation
+    if x < 0 { return ErrNegative }
     return nil
 }
 ```
 
-Only use `fmt.Errorf` when you need dynamic context (field names, values).
+Use `fmt.Errorf` for dynamic context or `%w` wrapping. Preserve error identity
+when callers use `errors.Is` or `errors.As`.
 
-### Interface boxing
+### Interface values
 
-Passing concrete types through `any`/`interface{}` forces heap allocation for boxing. In hot paths, use typed parameters or generics:
+An interface value stores type and value information. Conversion does not
+always force a heap allocation. Escape behavior depends on the concrete value,
+compiler, and use. If profiles attribute allocation or dispatch cost to an
+interface-heavy path, compare a typed or generic API:
 
 ```go
-// Bad — boxes each int, allocates
+// Dynamic representation
 func sum(values []any) int { ... }
 
-// Good — no boxing, no allocation
+// Typed representation
 func sum(values []int) int { ... }
 
-// Good — generic, still no boxing
+// Generic representation
 func sum[T ~int | ~int64](values []T) T { ... }
 ```
 
 ## Backing Array Leaks
 
-**Diagnose:** 1- `go tool pprof -inuse_space` — show currently live heap memory by allocation site; look for unexpectedly large live objects (MB-sized) that should have been GC'd — a sign of backing array retention 2- `go tool pprof -alloc_space` — show cumulative bytes allocated over time; look for allocation sites producing far more bytes than the final data they hold (e.g., 100MB allocated for 16-byte results)
+**Diagnose:**
 
-### Slice reslicing retains the entire backing array
+1. Inspect live-space data with the verified pprof frontend.
+2. Compare allocated-space data with final retained data.
 
-A small reslice of a large slice keeps the entire original array in memory:
+### Slice reslicing can retain a backing array
+
+A small reslice can keep a large original array reachable. Check the input
+length before slicing, and copy when the result must not retain the input:
 
 ```go
-// Bad — retains entire megabyte-sized backing array
-func getHeader(data []byte) []byte { return data[:16] }
-
-// Good — independent copy, original can be GC'd
-func getHeader(data []byte) []byte {
-    header := make([]byte, 16)
-    copy(header, data[:16])
-    return header
+func getHeader(data []byte) ([]byte, bool) {
+    if len(data) < 16 {
+        return nil, false
+    }
+    return append([]byte(nil), data[:16]...), true
 }
 ```
 
-### Substring memory leaks
+### Substring retention
 
-Substrings share the backing array of the original string:
+A substring can keep the original string data reachable. Check byte-length
+requirements before slicing:
 
 ```go
-// Bad — keeps entire longMsg in memory
-func extractID(msg string) string { return msg[:8] }
-
-// Good — independent copy (Go 1.20+)
-func extractID(msg string) string { return strings.Clone(msg[:8]) }
+func extractID(msg string) (string, bool) {
+    if len(msg) < 8 {
+        return "", false
+    }
+    return strings.Clone(msg[:8]), true
+}
 ```
 
-### Map never shrinks
+### Map capacity retention
 
-Go maps grow but never release bucket memory when entries are deleted. A map that once held millions of entries retains its allocation forever:
+Deleting entries does not guarantee that a map returns its allocated storage.
+If a heap profile shows material retained capacity after a high-water mark,
+compare rebuilding the map with keeping it:
 
 ```go
-// Recreate periodically to reclaim memory
 func compact(old map[string]Data) map[string]Data {
     m := make(map[string]Data, len(old))
     for k, v := range old { m[k] = v }
@@ -131,17 +162,25 @@ func compact(old map[string]Data) map[string]Data {
 
 ## String and Byte Optimization
 
-**Diagnose:** 1- `go tool pprof -alloc_objects` — look for string/byte conversion functions (`runtime.stringtoslicebyte`, `runtime.slicebytetostring`) appearing as top allocators 2- `go test -bench -benchmem` — measure allocs/op; expect repeated conversions to show 1+ alloc/op per conversion that can be reduced to zero by caching
+**Diagnose:**
 
-**Cache string-to-byte conversions** — converting between `string` and `[]byte` allocates a copy each time. Convert once and reuse the result.
+1. Use an allocation profile to find hot string and byte conversions.
+2. Use `go test -bench -benchmem` to compare measured alternatives.
+
+**Cache measured string-to-byte conversions** — ordinary conversions usually
+copy data, but the compiler can optimize some non-escaping conversions. Use
+profiles and benchmarks before adding retained state.
 
 **Use `bytes` package directly** — `bytes.Contains`, `bytes.HasPrefix`, `bytes.Split`, `bytes.ToUpper` etc. operate on `[]byte` without string conversion. The `bytes` package mirrors most of `strings`.
 
 ## sync.Pool Hot-Path Patterns
 
-**Diagnose:** 1- `go tool pprof -alloc_objects` — identify hot allocation sites creating the same object type repeatedly (e.g., `[]byte` buffers, temp structs); expect one site with thousands of allocs/s that can be pooled
+**Diagnose:** Use an allocation profile to find repeated allocation of the same
+temporary object type.
 
-`sync.Pool` recycles objects across GC cycles, reducing allocation pressure. Use it for frequently allocated, short-lived objects in hot paths (HTTP handlers, serialization, logging):
+`sync.Pool` can reuse temporary objects and reduce allocation pressure. The
+runtime can remove pooled items at any time. Use it only for a measured,
+concurrent hot path:
 
 ```go
 var bufPool = sync.Pool{
@@ -151,10 +190,15 @@ var bufPool = sync.Pool{
     },
 }
 
-func handleRequest(data []byte) []byte {
+func handleRequest(data []byte, maxPooledCapacity int) []byte {
     bp := bufPool.Get().(*[]byte)
     buf := (*bp)[:0] // reset length, keep capacity
-    defer func() { *bp = buf; bufPool.Put(bp) }()
+    defer func() {
+        if cap(buf) <= maxPooledCapacity {
+            *bp = buf[:0]
+            bufPool.Put(bp)
+        }
+    }()
 
     // ... process data into buf ...
 
@@ -168,8 +212,10 @@ func handleRequest(data []byte) []byte {
 
 - Reset state before `Put()` — clear references to avoid retaining large object graphs across GC cycles
 - Return copies, not pooled buffers — callers must not hold references to pooled memory
-- Don't pool objects >32KB — large allocations bypass the pool's size classes and GC already handles them efficiently
-- Don't pool infrequently used objects — pool overhead exceeds benefit when allocations are rare
+- Bound retained capacity from workload measurements. Do not return rare,
+  oversized objects to a pool that would retain excessive memory.
+- Do not pool infrequently used objects — pool overhead can exceed the benefit
+  when allocations are rare
 
 Review the current `sync.Pool` package documentation
 and the project's concurrency guidance before introducing a pool.
@@ -177,11 +223,18 @@ A pool is a runtime optimization, not an ownership mechanism.
 
 ## Memory Layout
 
-**Diagnose:** 1- `fieldalignment ./...` — detect structs with wasted padding bytes; expect warnings like `"struct of size 40 could be 24"` listing which structs benefit from reordering 2- `unsafe.Sizeof`/`Alignof`/`Offsetof` — measure exact byte sizes and field offsets; use to confirm savings before/after and document them in code comments
+**Diagnose:**
+
+1. Use `fieldalignment ./...` to identify candidates with excess padding.
+2. Use `unsafe.Sizeof`, `unsafe.Alignof`, and `unsafe.Offsetof` to compare exact
+   layouts.
 
 ### Struct field alignment
 
-Go adds padding between fields to satisfy alignment requirements. Reorder fields from largest to smallest:
+Go adds padding between fields to meet target-architecture alignment. Grouping
+fields by alignment can reduce size. Measure the actual type because field
+order also affects readability and API compatibility. It can also affect
+atomic alignment:
 
 ```go
 // Bad — 24 bytes (7 + 3 bytes padding)
@@ -201,13 +254,15 @@ type Good struct {
 }
 ```
 
-**Alignment requirements:** `bool`/`byte` = 1, `int16` = 2, `int32`/`float32` = 4, `int64`/`float64`/`string`/`[]T`/`*T` = 8.
+The example sizes assume a 64-bit target. Use `unsafe.Sizeof`,
+`unsafe.Alignof`, and `unsafe.Offsetof` for the supported architectures.
 
 **Inspect layout:** `unsafe.Sizeof(T{})`, `unsafe.Alignof(T{})`, `unsafe.Offsetof(T{}.field)`
 
 ### Zero-size field at end of struct
 
-If the last field has zero size (`struct{}`), the compiler adds word-sized padding to prevent a pointer to that field from overlapping the next memory block:
+If the last field has zero size (`struct{}`), the compiler can add word-sized
+padding. This prevents its address from overlapping the next memory block:
 
 ```go
 // Bad — 16 bytes (8 for Value + 8 padding for Flag)
@@ -217,11 +272,15 @@ type Entry struct { Value int64; Flag struct{} }
 type Entry struct { Flag struct{}; Value int64 }
 ```
 
-Having a `struct{}` field in a struct is rare and almost useless.
+A zero-size field can carry type-level meaning. Move it only when measured
+layout matters and field order is not part of a compatibility contract.
 
-### Pointer receivers for large structs
+### Receiver choice
 
-Value receivers copy the entire struct on every method call. Use pointer receivers for structs larger than ~128 bytes. If any method uses a pointer receiver, all methods should for consistency.
+Choose pointer receivers for mutation, identity, synchronization, or when
+copying a measured large value is costly. The compiler can inline methods and
+elide some copies, so there is no universal size threshold. Keep a type's method
+set coherent.
 
 ### Map of pointers for large, frequently updated structs
 
@@ -232,4 +291,6 @@ players := map[string]*Player{"alice": {Score: 100}}
 players["alice"].Score += 10 // direct modification, no copy
 ```
 
-Trade-off: each pointer is a separate heap allocation, adding GC pressure. For small, mostly-read structs, `map[K]V` (value) is better.
+Trade-off: pointer values add indirection and can increase allocation count and
+GC scanning. Value maps can be better for small, mostly-read structs. Measure
+the real construction and update pattern.

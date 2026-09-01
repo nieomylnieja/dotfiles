@@ -1,115 +1,56 @@
 ---
 name: github-post-pr-review
 description: |
-  Post PR review findings as a GitHub pending review via the API.
-  Use after completing a PR review when the user wants to publish findings to GitHub.
-  Reads the most recent review from $XDG_DATA_HOME/agents/pr-review/.
-allowed-tools: Bash(*scripts/find-review-file.sh) Bash(*scripts/post-findings.sh*) Bash(*scripts/pr-meta.sh) Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Edit(/tmp/**) Write(/tmp/**)
+  Publish an already completed, verified review as a pending GitHub review when the user explicitly asks to post it.
+  Accept an exact review file and reject stale PR-head metadata.
+allowed-tools: Bash(*scripts/find-review-file.sh*) Bash(*scripts/post-findings.sh*) Bash(*scripts/pr-meta.sh*) Bash(gh api *) Bash(gh pr *) Bash(gh repo *) Edit(/tmp/**) Write(/tmp/**)
+compatibility: Requires authenticated gh CLI.
 ---
 
-# GitHub Post PR Review
+# Post a GitHub pull request review
 
-Post the review findings as a GitHub pending review.
+This workflow writes to GitHub and can notify people.
+Use it only after explicit publication authority.
+Do not request another generic confirmation when the caller already obtained that authority.
 
-Ask the user:
+## Preflight
 
-> Post these findings as a GitHub PR review? [yes/no]
+1. Use the exact review file supplied by the caller. If none was supplied, use
+   [`scripts/find-review-file.sh`](scripts/find-review-file.sh). Pass
+   `--branch` when the current checkout is detached or differs from the PR head.
+2. Parse the file and require valid review schema, repository identity, PR number,
+   `base_commit_id`, and `commit_id`.
+3. Run [`scripts/pr-meta.sh`](scripts/pr-meta.sh).
+4. Require the review repository and PR number to match the target.
+5. Require review `base_commit_id` and `commit_id` to equal the current PR base
+   and head OIDs. Stop when either side of the reviewed diff is stale.
+6. Compare findings with all existing review comments.
+   Build a fingerprint from the repository-relative path, current RIGHT-side
+   line, and description. Remove a leading `./` from the path, use `/`
+   separators, preserve path case, trim the description, collapse its internal
+   whitespace, and remove one rendered `**[severity]**` prefix from an existing
+   comment. Ignore severity so a relabel does not repost the same defect.
+   Do not use fuzzy wording as proof; manually suppress a differently worded
+   comment only after confirming that it describes the same defect.
+7. Remove only confirmed duplicates and report them.
 
-If **no**, stop.
+An inline comment needs a location on the current PR diff.
+Preflight every candidate location.
+Move a valid finding with no current diff position into the review body.
+Do not let one invalid position fail the whole batch.
 
-If **yes**:
+## Post
 
-## Step 1 — Load the review file
+Write the final inline and body findings to timestamped temporary JSON files.
+Run [`scripts/post-findings.sh`](scripts/post-findings.sh) with the exact repository,
+PR number, base and head commits, pending review ID, and those files.
 
-Find the most recent review for the current branch:
+Never delete, submit, or replace another pending review.
+If an incompatible pending review exists, stop and report its ID.
+Leave the created review pending so the user can inspect and submit it on GitHub.
 
-```bash
-$DOTFILES/config/agents/skills/github-post-pr-review/scripts/find-review-file.sh
-```
+## Report
 
-Read the path from the tool result as `REVIEW_FILE`.
-
-If the script exits with an error, inform the user that no local review exists for this
-branch and suggest running `review-pr` first, then stop.
-
-Read and parse the file. Only findings with a non-null `file` and `line` can
-be posted as inline comments — collect those separately. Findings without a
-position will be included in the review body instead.
-
-## Step 2 — Fetch current PR metadata
-
-```bash
-$DOTFILES/config/agents/skills/github-post-pr-review/scripts/pr-meta.sh
-```
-
-If the script exits with an error, inform the user that no PR exists and stop.
-
-Read the JSON output directly from the tool result:
-`pr_number`, `commit_id`, `repo`, `review_id` (`null` when no pending review
-for the authenticated user), and `comments_file`.
-
-Read `comments_file` with the Read tool and parse it as `EXISTING_COMMENTS`.
-
-## Step 2b — Deduplicate against existing comments
-
-Compare each inline finding (those with `file` and `line`) against the existing
-comments. A finding is a **duplicate** if an existing comment is on the same
-`path` (== `file`) and the bodies describe substantially the same issue.
-Use line numbers as a heuristic: exact line matches are strong duplicates,
-and nearby shifted lines can still be duplicates after rebases.
-
-- Remove duplicate findings from the inline comment list before posting.
-- If any duplicates were found, inform the user **before posting**, listing each
-  one (file, line, description).
-  Do **not** include them in the pending review.
-
-## Step 3 — Post the findings
-
-After deduplication in step 2b,
-write the final findings to temporary JSON files under `/tmp/`:
-
-- Use timestamped names (UTC) such as `github-post-pr-review-<timestamp>-*.json`
-  where timestamp format is `YYYYMMDDTHHMMSSZ`.
-
-- `INLINE_FINDINGS_FILE`: array of findings with `file` and `line`
-- `NON_INLINE_FINDINGS_FILE`: array of findings without a position
-
-Run the posting script:
-
-```bash
-$DOTFILES/config/agents/skills/github-post-pr-review/scripts/post-findings.sh \
-  --repo "$REPO" \
-  --pr-number "$PR_NUMBER" \
-  --commit-id "$COMMIT_ID" \
-  --review-id "$REVIEW_ID" \
-  --inline-findings "$INLINE_FINDINGS_FILE" \
-  --non-inline-findings "$NON_INLINE_FINDINGS_FILE"
-```
-
-Read the JSON result directly from the tool output.
-The script returns:
-
-- `mode`: `new`, `updated_existing_pending`, `blocked_existing_pending`, or `nothing_to_post`
-- `review_id`
-- `state`
-- `inline_comments_posted`
-- `non_inline_findings_included`
-- `non_inline_findings_skipped`
-
-## Step 4 — Report
-
-Report `review_id`, `state`, and how many findings were posted.
-If `mode` is `blocked_existing_pending`, explicitly tell the user that an
-older pending review already exists and must be submitted or deleted before
-posting new findings. This includes pending reviews not created by this skill.
-If `mode` is `updated_existing_pending`, explicitly tell the user that
-non-inline findings were added to the pending review body and inline findings
-were skipped when present. This mode only applies to pending reviews created
-by this skill.
-If `mode` is `nothing_to_post`, report that all findings were removed during
-deduplication and nothing was posted.
-Remind the user the review is **pending** and must be submitted manually on GitHub.
-
-## What not to do
-
-Never remove pending reviews, even if you experience problems posting your own findings.
+Report the review ID, state, target PR head, posted inline count,
+body count, duplicates removed, and relocated findings.
+Preserve exact API failures.

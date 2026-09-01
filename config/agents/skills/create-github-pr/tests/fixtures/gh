@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${GH_FAIL:-false}" == true ]]; then
+  printf 'gh: pull request lookup failed\n' >&2
+  exit 1
+fi
+
+expected_base="${GH_EXPECTED_BASE:-main}"
+[[ "$*" == "pr list --head feature --base ${expected_base} --state open --json number,url,baseRefName,headRefName --limit 100" ]] || {
+  printf 'unexpected gh command: %s\n' "$*" >&2
+  exit 2
+}
+printf '%s\n' "${GH_PR_LIST:-[]}"

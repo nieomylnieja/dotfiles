@@ -1,59 +1,35 @@
 ---
-name: github
-description: Use this skill when addressing GitHub PR comments.
-allowed-tools: Bash(*scripts/get-unresolved-comments.sh)
-compatibility: Requires gh CLI to work
+name: github-pr-comments
+description: |
+  Address unresolved GitHub pull request review comments.
+  Verify feedback, implement supported changes, and write replies or resolve threads only when explicitly requested.
+allowed-tools: Bash(*scripts/get-unresolved-comments.sh*)
+compatibility: Requires authenticated gh CLI.
 ---
 
-# Addressing review comments
+# Address pull request comments
 
-**DO NOT resolve review threads. The user will resolve them manually.**
+Load `feedback-reception` before evaluating comments.
+Default to address-only mode: inspect and implement, but do not reply or resolve threads.
 
-## Commit gate
+## Workflow
 
-Do not post a PR reply for changes that exist only in the working tree.
-Before replying, verify that the relevant changes are committed and that the
-commit is visible on the PR branch. A reply must describe code the reviewer can
-actually inspect in the PR.
+1. Identify the PR and record its `headRefOid`.
+2. Verify the checkout path, branch, and `HEAD` against that PR head.
+3. Fetch all unresolved threads with [`scripts/get-unresolved-comments.sh`](scripts/get-unresolved-comments.sh).
+4. Read each full thread, including author, replies, reactions, outdated state, and thread ID.
+5. Classify the feedback through `feedback-reception`.
+6. Implement only supported, in-scope changes and run relevant checks.
+7. Report addressed, rejected, outdated, discussion-only, and blocked threads.
 
-If the changes are not committed and pushed, or the user has not authorized
-those actions, stop after implementing and verifying the changes. Report the
-local state to the user, but do not add a GitHub reply.
+## GitHub writes
 
-When addressing review feedback:
+A local edit does not authorize a reply or resolution.
+Before any write, require both:
 
-1. Address only **UNRESOLVED** comments
-2. Be critical, don't just accept the feedback, but ponder upon it
-3. Make the requested code changes only if they really contribute value
-4. After the commit gate passes, add a reply comment explaining what was done
-5. Leave the thread unresolved for the user to manually resolve
+- explicit user intent to reply or resolve; and
+- a commit visible at the current PR head that contains the relevant change.
 
-The user maintains control over comment resolution to ensure proper review workflow.
-
-## GitHub CLI Commands
-
-### Get Unresolved comments on Current PR
-
-Run the [script](./scripts/get-unresolved-comments.sh) to fetch unresolved
-review comments for the current branch's PR:
-
-This script automatically:
-
-- Detects the current repo and branch
-- Finds the associated PR
-- Fetches only unresolved review comments via GraphQL
-- Returns JSON with path, line, body, and outdated status
-
-### Other Useful Commands
-
-#### Get All Review Comments (Resolved and Unresolved)
-
-```bash
-gh api repos/OWNER/REPO/pulls/PR_NUMBER/comments --jq '.[] | {path, line, body}'
-```
-
-#### View PR Details
-
-```bash
-gh pr view PR_NUMBER --json title,body,comments,reviews
-```
+Reply with a concise description of what reviewers can inspect.
+Resolve only threads verified as addressed or explicitly retracted.
+Do not resolve an unclear, rejected, or discussion-only thread merely to reduce the open count.

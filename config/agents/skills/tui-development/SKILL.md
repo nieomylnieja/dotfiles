@@ -24,10 +24,15 @@ real TTY when they matter to the task.
    An image artifact is better evidence than copied ANSI text.
 5. Run the project verification target before reporting completion.
 
+Opening a terminal, changing focus, dispatching a compositor command, or taking
+a screenshot is a GUI or user-session action. Obtain explicit user
+authorization before the first such action. Read-only PTY tests inside the
+current terminal do not grant permission to manipulate the desktop session.
+
 ## Hyprland Capture
 
-Keep preview and screenshot terminals on the same Hyprland workspace as the
-agent terminal.
+After the user authorizes GUI actions, keep preview and screenshot terminals on
+the same Hyprland workspace as the agent terminal.
 Record the workspace before any command that can change focus.
 
 Use `hyprctl activewindow -j` or `hyprctl activeworkspace -j` to identify the

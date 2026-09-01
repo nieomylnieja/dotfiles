@@ -5,7 +5,7 @@ update/flakes:
 	nix flake update --flake ./config/home-manager --commit-lock-file
 
 update/skills:
-	npx skills update
+	npx skills update --global
 
 update/agents:
 	./config/agents/scripts/sync-agents.sh

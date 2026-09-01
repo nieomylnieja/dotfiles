@@ -4,7 +4,7 @@ description: |
   Create drawn and programmatic animated GIFs through Manim: diagrams, math,
   algorithm visualizations, and explainers. Use this skill for animated
   diagrams, visual explanations, and Manim source persistence after accepting
-  a GIF. Do not use it for terminal or CLI demo recordings; use
+  a GIF. Do not use it for terminal or CLI demo recordings. Use
   vhs-gif-creator for those.
 ---
 
@@ -40,7 +40,7 @@ requires a combined deliverable.
 3. Write the scene in a scratch directory, using the dark Nord default below
    unless the user or subject requires another palette.
 4. Render a low-quality draft GIF.
-5. Run the verification loop below; fix and re-render until correct.
+5. Run the verification loop below. Fix and re-render until correct.
 6. Only then adjust resolution or size for the target.
 7. Report the render settings and file size.
 8. Present the result for user review.
@@ -68,7 +68,7 @@ Output lands at
 | `-qm`          | 1280x720 @ 30 fps — larger files, rarely needed     |
 | `-r W,H`       | custom resolution, e.g. `-r 480,270`                |
 | `-o name`      | output basename (`name.gif`)                        |
-| `--format=gif` | required; manim renders MP4 otherwise               |
+| `--format=gif` | required because Manim renders MP4 otherwise        |
 
 Minimal scene:
 
@@ -129,17 +129,17 @@ state the concrete readability or semantic reason.
   Position with `.to_edge()`, `.next_to()`, `.shift()`,
   and verify nothing is clipped or overlapping.
 - `MathTex`/`Tex` require a LaTeX toolchain.
-  Check `command -v latex` first; when absent, use `Text`.
+  Check `command -v latex` first. When absent, use `Text`.
 - GIF duration = sum of `run_time` (default 1 s per `self.play`)
   plus `self.wait()` calls. Keep it 2-6 s.
 - GIFs loop infinitely by default.
-  For a seamless loop, the final visual state must match the first frame;
+  For a seamless loop, the final visual state must match the first frame.
   a wait does not repair a mismatched transition.
   If a visible reset is intentional, add a short `self.wait()` and describe it
   as an intentional reset rather than a seamless loop.
-- Prefer few precise animations (`Create`, `Write`, `Transform`,
-  `FadeIn`, `MoveTo`/`animate`) over layered effects.
-- Text must stay readable at final display size; `font_size=36`
+- Prefer few precise animations (`Create`, `Write`, `Transform`, `FadeIn`,
+  and `.animate.move_to(...)`) over layered effects.
+- Text must stay readable at final display size. `font_size=36`
   at 480p is a safe floor.
 
 ## Verification Loop
@@ -166,8 +166,9 @@ never report an unverified GIF as done.
 
 Load supported static images into the scene as `ImageMobject` instances.
 The resulting GIF must still be rendered directly by Manim.
-Do not assemble frame sequences or post-process Manim output with another GIF
-library. If the requested edit cannot be expressed as a Manim scene,
+Read-only inspection with a viewer, `ffprobe`, or sampled frames is allowed.
+Do not assemble frame sequences, edit frames, or post-process Manim output with
+another GIF library. If the requested edit cannot be expressed as a Manim scene,
 state that limitation instead of silently switching pipelines.
 
 ## Size Control
@@ -190,7 +191,7 @@ After the user explicitly accepts the GIF, ask one scoped question:
 
 Do not clone, edit, commit, or push to that repository unless the user answers
 yes. That answer authorizes only the new-folder commit described in the
-question; it does not authorize changes to existing GIFs or repository-wide
+question. It does not authorize changes to existing GIFs or repository-wide
 files.
 
 After confirmation:
@@ -199,7 +200,7 @@ After confirmation:
    `origin/main`. Stop on a dirty tree, a non-fast-forward state, divergence,
    authentication failure, or network failure.
 2. Choose a descriptive, unique, kebab-case path under `giffs/`.
-   Stop if `giffs/<slug>/` already exists; never merge into or replace it.
+   Stop if `giffs/<slug>/` already exists. Never merge into or replace it.
 3. Copy the exact Manim scene to `giffs/<slug>/scene.py`.
    Add only local modules, source assets, fonts, or brief reproduction metadata
    that are actually required, and keep every added file inside that folder.
@@ -211,6 +212,7 @@ After confirmation:
    repository file.
 6. Commit on `main` with `feat: add <slug> gif source` and verify the commit
    contains only the new folder.
+   Follow the `git-commit` skill and its confirmation policy.
 7. Push `main` to `origin` normally. Never force-push. If the push is rejected
    because `main` moved, stop and report it rather than rebasing or changing
    other GIFs automatically.

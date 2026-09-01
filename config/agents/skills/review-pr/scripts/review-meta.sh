@@ -1,46 +1,92 @@
 #!/usr/bin/env bash
-# Prepares the review output directory and prints JSON metadata:
-#   outfile, repo, branch, commit_id, pr_number
-# Usage: review_meta=$(bash scripts/review-meta.sh)
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
+readonly PROG="${0##*/}"
+
+usage() {
   cat <<'EOF'
-review-meta.sh — Prepare the review output directory and print JSON metadata.
-
-Usage: review_meta=$(bash scripts/review-meta.sh)
-
-Output fields (JSON):
-  outfile     Full path to the timestamped JSON file to write
-  repo        Repository in owner/repo format
-  branch      Current git branch name
-  commit_id   HEAD commit SHA
-  pr_number   Pull request number, or null if no PR exists
-
-The output directory ($XDG_DATA_HOME/agents/pr-review/<repo-slug>/) is
-created automatically.
+Usage: review-meta.sh --pr-number NUMBER
+Create the local review output directory and print exact PR metadata as JSON.
 EOF
-  exit 0
-fi
+}
 
-REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
-REPO_SLUG=$(echo "$REPO" | tr '/' '-')
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-BRANCH_SLUG=$(echo "$BRANCH" | tr '/' '-' | tr -cd '[:alnum:]-_')
-COMMIT_ID=$(git rev-parse HEAD)
-PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null || echo "null")
-TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+fatal() {
+  local message="$1"
+  local status="${2:-1}"
 
-REVIEW_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agents/pr-review/$REPO_SLUG"
-mkdir -p "$REVIEW_DIR"
+  printf '%s: ERROR: %s\n' "${PROG}" "${message}" >&2
+  exit "${status}"
+}
 
-OUTFILE="$REVIEW_DIR/${TIMESTAMP}_${BRANCH_SLUG}.json"
+main() {
+  local pr_number=""
 
-jq -n \
-  --arg outfile "$OUTFILE" \
-  --arg repo "$REPO" \
-  --arg branch "$BRANCH" \
-  --arg commit_id "$COMMIT_ID" \
-  --argjson pr_number "$PR_NUMBER" \
-  '{outfile: $outfile, repo: $repo, branch: $branch, commit_id: $commit_id, pr_number: $pr_number}'
+  umask 077
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --pr-number)
+      [[ $# -ge 2 ]] || fatal "--pr-number requires an argument" 2
+      pr_number="$2"
+      shift 2
+      ;;
+    --pr-number=*)
+      pr_number="${1#*=}"
+      shift
+      ;;
+    *) fatal "unknown argument: $1" 2 ;;
+    esac
+  done
+
+  [[ "${pr_number}" =~ ^[0-9]+$ ]] || fatal "--pr-number must be numeric" 2
+
+  local pr_json
+  local repo
+  local repo_slug
+  local branch
+  local branch_slug
+  local timestamp
+  local review_dir
+  local outfile
+  pr_json="$(
+    gh pr view "${pr_number}" \
+      --json number,baseRefName,baseRefOid,headRefName,headRefOid
+  )"
+  repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"
+  repo_slug="${repo//\//-}"
+  branch="$(jq -r '.headRefName' <<<"${pr_json}")"
+  branch_slug="$(printf '%s' "${branch//\//-}" | tr -cd '[:alnum:]-_')"
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  review_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/agents/pr-review/${repo_slug}"
+  mkdir -p -- "${review_dir}"
+  chmod 700 -- "${review_dir}"
+  outfile="$(
+    mktemp --suffix=.json \
+      "${review_dir}/${timestamp}_${branch_slug}_XXXXXX"
+  )"
+  chmod 600 -- "${outfile}"
+
+  jq -n \
+    --arg outfile "${outfile}" \
+    --arg repo "${repo}" \
+    --arg branch "${branch}" \
+    --arg base_ref "$(jq -r '.baseRefName' <<<"${pr_json}")" \
+    --arg base_commit_id "$(jq -r '.baseRefOid' <<<"${pr_json}")" \
+    --arg commit_id "$(jq -r '.headRefOid' <<<"${pr_json}")" \
+    --argjson pr_number "${pr_number}" \
+    '{
+      outfile: $outfile,
+      repo: $repo,
+      branch: $branch,
+      base_ref: $base_ref,
+      base_commit_id: $base_commit_id,
+      commit_id: $commit_id,
+      pr_number: $pr_number
+    }'
+}
+
+main "$@"

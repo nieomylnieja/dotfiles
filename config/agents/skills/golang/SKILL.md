@@ -19,12 +19,6 @@ Related skills:
 
 ## Determine the Target Go Version
 
-<!-- markdownlint-disable-next-line MD013 -->
-!`gomod=$(go env GOMOD); if [ -n "$gomod" ] && [ "$gomod" != "/dev/null" ]; then awk '$1 == "go" { print $2; found=1; exit } END { if (!found) print "unknown" }' "$gomod"; else echo unknown; fi`
-
-Treat the value above as an initial signal, not the complete compatibility
-contract.
-
 1. Identify the module that owns the changed package. A workspace can contain
    modules with different `go` directives.
 2. Read that module's `go.mod`. The `go` directive declares its minimum Go

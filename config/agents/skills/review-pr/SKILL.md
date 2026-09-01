@@ -1,155 +1,84 @@
 ---
 name: review-pr
 description: |
-  Comprehensive PR review using specialized agents.
-  Use when asked to review a pull request, check code quality before merging,
-  or run any subset of review aspects (code, tests, errors, types, docs, simplify).
+  Run a read-only pull request review with independent specialist agents.
+  Use when asked to review a PR, assess merge risk, or review selected code, test,
+  error-handling, type, documentation, comment, or specification aspects.
 allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.sh*) Bash(jira issue view*) Bash(mkdir -p */agents/pr-review/*) Edit(**/agents/pr-review/*/*.json) Write(**/agents/pr-review/*/*.json)
 ---
 
-# PR Review
+# Pull request review
 
-## Available Review Aspects
+Review the exact pull request head against its actual base.
+Here, read-only means no repository-content edits or GitHub writes.
+Fetching missing Git objects and creating the isolated review worktree are
+authorized setup operations. Review requests do not authorize thread changes
+or GitHub review posts.
 
-- **docs** - Analyze developer documentation, docstrings, and comments
-  for accuracy, clarity, and maintainability
-- **comments** - Alias for **docs**
-- **tests** - Review test coverage quality and completeness
-- **errors** - Check error handling for silent failures
-- **types** - Analyze type design and invariants (if new types added)
-- **code** - General code review for project guidelines
-- **simplify** - Simplify code for clarity and maintainability
-- **spec** - Verify implementation matches requirements (GitHub issues, Jira tickets, PR description)
-- **all** - Run all applicable reviews (default)
+## Establish scope
 
-## Workflow
+1. Read PR metadata: number, `baseRefName`, `baseRefOid`, `headRefName`, and `headRefOid`.
+2. Fetch the exact PR head object through the repository's PR ref when it is not
+   available locally. Invoke `git-worktrees`, then run its
+   [`worktree-setup.sh`](../git-worktrees/scripts/worktree-setup.sh) helper with
+   `--commit "$headRefOid" "review-pr-${pr_number}-${headRefOid:0:12}"`.
+   Use one worktree at that object, including for fork pull requests.
+3. Fetch the exact base object when needed, then compute the merge base with the PR base.
+4. Review `MERGE_BASE..headRefOid`, not `origin/HEAD..HEAD`.
+5. Confirm that the worktree `HEAD` equals `headRefOid` before reading files.
 
-1. **Checkout the PR Branch**
+Include review threads and any requirements supplied by the user.
+Use [`scripts/gather-requirements.sh`](scripts/gather-requirements.sh) for linked issue or ticket context.
+Rank sources in this order: user-provided requirements, linked issue or ticket,
+explicit acceptance criteria, then PR context.
+A general PR summary is context, not acceptance criteria.
+If no requirements exist, omit specification review and state that limit; do not block other aspects.
+If a requirement source exists but cannot be read, preserve the exact error and
+skip only specification review unless that source is mandatory for another aspect.
 
-   Use the `git-worktrees` skill to create an isolated checkout of the PR branch:
+## Select agents
 
-   Pass the branch name to check out. The worktree will be created at
-   `.worktrees/<branch-name>`. All subsequent steps operate from within
-   that worktree path.
+Run applicable read-only agents in parallel:
 
-2. **Determine Review Scope**
-   - From within the worktree, run `git diff --name-only origin/HEAD...HEAD` to identify changed files
-   - Check if specific aspects were requested; default to **all**
-   - Prepare the output file and capture metadata:
+| Aspect | Agent | Use when |
+| :--- | :--- | :--- |
+| `code` | `code-reviewer` | Always |
+| `spec` | `spec-reviewer` | Requirements are available |
+| `tests` | `test-analyzer` | Behavior changed, even when test files did not |
+| `errors` | `silent-failure-hunter` | Error, fallback, retry, or boundary logic changed |
+| `types` | `type-design-analyzer` | Types or invariants changed |
+| `docs` | `docs-analyzer` | External or developer documentation changed |
+| `comments` | `comment-analyzer` | Source comments or docstrings changed |
 
-     ```bash
-     $DOTFILES/config/agents/skills/review-pr/scripts/review-meta.sh
-     ```
+`all` means every applicable read-only aspect.
+Code simplification is a separate implementation task and requires explicit authorization.
 
-     Read the JSON output directly from the tool result:
-     `outfile`, `repo`, `branch`, `commit_id`, `pr_number`.
+Give each agent the requirements, exact diff, changed files, relevant threads, and repository constraints.
+Keep agents independent; do not pass one agent's findings to another before aggregation.
 
-3. **Gather Requirements Context**
+## Aggregate and persist
 
-   Run the requirements-gathering script:
+Verify each finding against the exact diff and deduplicate by normalized file, line, and defect.
+Keep only actionable findings with evidence and a precise location when available.
 
-   ```bash
-   $DOTFILES/config/agents/skills/review-pr/scripts/gather-requirements.sh
-   ```
+Run [`scripts/review-meta.sh`](scripts/review-meta.sh) with the PR number.
+Persist the review at its timestamped `outfile` as valid JSON:
 
-   Read the JSON output: `source`, `issue_ref`, `requirements`.
+```json
+{
+  "version": 1,
+  "timestamp": "<ISO 8601 UTC>",
+  "repo": "<owner/repo>",
+  "branch": "<head branch>",
+  "base_ref": "<base branch>",
+  "base_commit_id": "<base SHA>",
+  "commit_id": "<PR head SHA>",
+  "pr_number": 123,
+  "aspects": ["code", "tests"],
+  "findings": []
+}
+```
 
-   - If `source` is `"none"`, use `AskUserQuestion`:
-
-     > I couldn't find linked requirements for this PR.
-     > Please paste the requirements, acceptance criteria,
-     > or issue description — or type `skip` to omit the spec review.
-
-   - If `jira_attempted` is true and `source` is `"none"`,
-     mention the Jira key that was tried
-     and ask the user to paste the ticket description.
-
-   Store the collected requirements text as `REQUIREMENTS`.
-   If the user types `skip`, omit the spec review from the run.
-
-4. **Determine Applicable Reviews**
-
-   Based on changes:
-   - **Always**: requirements-verifier, code-reviewer
-   - **If `_test.go` or test files changed**: test-analyzer
-   - **If comments/docs added or modified**: docs-analyzer
-   - **If error handling changed**: silent-failure-hunter
-   - **If types added/modified**: type-design-analyzer
-   - **After passing review**: code-simplifier
-
-   Skip **requirements-verifier** only if `REQUIREMENTS` is empty (user typed `skip`).
-
-5. **Launch Review Agents**
-
-   Default: sequential (one at a time, easier to act on).
-   If user requests parallel, launch all simultaneously.
-
-   **Requirements-verifier** — use `spec-reviewer` subagent type.
-   Pass the following context in the prompt:
-
-   - `REQUIREMENTS` text collected in step 3
-   - Changed files list from `git diff --name-only origin/HEAD...HEAD`
-   - Full code diff from `git diff origin/HEAD...HEAD`
-
-6. **Aggregate Results**
-
-   ```markdown
-   # PR Review Summary
-
-   ## Critical Issues (X found)
-   - [agent]: description [file:line]
-
-   ## Important Issues (X found)
-   - [agent]: description [file:line]
-
-   ## Suggestions (X found)
-   - [agent]: suggestion [file:line]
-
-   ## Recommended Action
-   1. Fix critical issues first
-   2. Address important issues
-   3. Consider suggestions
-   4. Re-run review after fixes
-   ```
-
-7. **Persist Results**
-
-   Write findings to the `outfile` path from step 2 using this schema:
-
-   ```json
-   {
-     "version": 1,
-     "timestamp": "<ISO 8601 UTC>",
-     "repo": "<owner/repo from gh repo view>",
-     "branch": "<current branch>",
-     "commit_id": "<HEAD sha>",
-     "pr_number": <number or null>,
-     "aspects": ["<aspects that were run>"],
-     "findings": [
-       {
-         "severity": "critical | important | suggestion",
-         "agent": "<agent name>",
-         "file": "<relative file path or null>",
-         "line": <line number or null>,
-         "description": "<finding text>"
-       }
-     ],
-   }
-   ```
-
-   Report the output path to the user.
-
-8. **Offer to Post Review to GitHub**
-
-   Use `AskUserQuestion` to ask:
-
-   > Would you like to post these findings as a GitHub PR review?
-
-   If **yes**, invoke the `github-post-pr-review` skill.
-
-## Notes
-
-- Agents run autonomously and return detailed reports
-- Results are actionable with specific file:line references
-- All agents available in `/agents` list
-- Review history is stored in `$XDG_DATA_HOME/agents/pr-review/`
+Use a timestamped path approved by the current environment.
+Report the path and the reviewed base/head pair.
+Do not offer or perform a GitHub write unless the user explicitly asks to publish the findings.

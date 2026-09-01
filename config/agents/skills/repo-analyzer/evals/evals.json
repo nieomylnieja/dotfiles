@@ -3,21 +3,57 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I need to understand how ripgrep works. Can you analyze https://github.com/BurntSushi/ripgrep and explain how it integrates the regex engine? I'm particularly interested in the architecture and how it achieves such fast search speeds.",
-      "expected_output": "A detailed explanation of ripgrep's regex engine integration, including file references to the relevant modules, explanation of the architecture (likely mentioning the regex-automata crate), and insights into performance optimizations. Should include specific file paths and code references.",
-      "files": []
+      "prompt": "Analyze the checkout at /work/nobl9-go and show where retry delays are calculated. Do not change or update the repository.",
+      "expected_output": "A read-only answer from the supplied checkout at its recorded commit, with exact path and line evidence.",
+      "files": [],
+      "expectations": [
+        "The supplied local checkout is used instead of cloning another copy.",
+        "No fetch, pull, checkout, reset, clean, or stash command runs in the local checkout.",
+        "The response records the inspected commit and cites exact path and line evidence."
+      ]
     },
     {
       "id": 2,
-      "prompt": "Analyze the anthropics/anthropic-sdk-python repository and find examples of how to use streaming responses with the Messages API. Show me the code patterns and best practices.",
-      "expected_output": "Code examples showing streaming response usage, file references to examples or documentation within the repo, explanation of the streaming API patterns, and any relevant client setup required. Should include file:line references.",
-      "files": []
+      "prompt": "Inspect https://github.com/BurntSushi/ripgrep at tag 14.1.1 and explain how ignore files are matched.",
+      "expected_output": "An evidence-backed explanation from the exact resolved 14.1.1 revision.",
+      "files": [],
+      "expectations": [
+        "The repository is cloned only because no local checkout was supplied.",
+        "The requested tag is resolved and the inspected commit is reported.",
+        "The answer contains exact path and line evidence for ignore matching."
+      ]
     },
     {
       "id": 3,
-      "prompt": "I want to understand FastAPI's dependency injection system. Clone tiangolo/fastapi and explain how Depends() works internally. What's the magic that makes it work?",
-      "expected_output": "Explanation of FastAPI's dependency injection mechanism, file references to the core implementation (likely in fastapi/dependencies.py or similar), code examples showing how Depends() is resolved at runtime, and explanation of the inspection/introspection mechanisms used.",
-      "files": []
+      "prompt": "Use the cached clone of example/acme and tell me how authentication works.",
+      "expected_output": "A read-only analysis of the unrefreshed cached revision that states the cache limit and cites code.",
+      "files": [],
+      "expectations": [
+        "The cached clone is reused without an automatic fetch or pull.",
+        "The response states that the result came from an unrefreshed cached clone.",
+        "The answer cites exact path and line evidence."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Refresh the managed clone of example/acme to origin/main, then inspect its request router.",
+      "expected_output": "An exact-ref refresh followed by read-only analysis, or an exact failure with no stale fallback.",
+      "files": [],
+      "expectations": [
+        "The explicit refresh request uses --refresh with an exact ref.",
+        "A dirty managed clone causes a hard failure instead of a reset, stash, or silent continuation.",
+        "A fetch or checkout failure is reported exactly and stops analysis."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Explain the current repository's build command.",
+      "expected_output": "A direct local repository answer without invoking repo-analyzer or creating a clone.",
+      "files": [],
+      "expectations": [
+        "The repo-analyzer skill is not used for ordinary inspection of the current repository.",
+        "No managed clone is created."
+      ]
     }
   ]
 }

@@ -1,249 +1,88 @@
 ---
 name: golang-comments
-description: >
-  Use this skill when writing or editing Go doc comments.
-  Covers doc comment style, doc links ([pkg.Name] syntax),
-  headings, lists, code blocks, and common formatting mistakes.
+description: >-
+  Use when writing, editing, reviewing, or deciding whether to add Go doc
+  comments, package comments, declaration comments, or Go comment directives.
 ---
 
-# Go Doc Comments
+# Go comments
 
-Go doc comments appear immediately before top-level `package`, `const`,
-`func`, `type`, and `var` declarations with no intervening blank lines.
-Every exported (capitalised) name must have a doc comment.
+Load [code-comments](../code-comments/SKILL.md) for content decisions. Use this
+skill for Go syntax and rendering. Follow the owning module's Go version and
+the repository's documentation policy.
 
-Reference: [go.dev/doc/comment](https://go.dev/doc/comment)
+Reference: [Go doc comment syntax](https://go.dev/doc/comment).
 
----
+## Declaration comments
 
-## Doc Links — Most Important Rule
-
-**Use `[Name]` doc links to refer to Go symbols, not backtick code fences.**
+Put a doc comment directly before the declaration. Start with the declared name
+when that produces a clear sentence:
 
 ```go
-// WRONG — backtick does not create a navigable link:
-// Use `fmt.Errorf` to wrap errors.
-
-// RIGHT — creates a hyperlink in pkg.go.dev and gopls hover:
-// Use [fmt.Errorf] to wrap errors.
+// Parse returns the configuration represented by data.
+func Parse(data []byte) (Config, error)
 ```
 
-Doc link forms:
+Go tools conventionally expect comments for exported declarations, but not
+every project enforces that rule. Follow project lint policy. A required comment
+must still describe a useful contract instead of restating the identifier.
 
-| Reference | Syntax |
-| --- | --- |
-| Same-package symbol | `[Buffer]`, `[Buffer.Reset]` |
-| Pointer type | `[*Buffer]` |
-| Other package (short name) | `[fmt.Errorf]`, `[io.Reader]` |
-| Other package (full path) | `[encoding/json.Decoder]` |
-| Package itself | `[encoding/json]`, `[path/filepath]` |
+Document relevant:
 
-Use a full import path only when the short name is ambiguous.
-Doc links must be surrounded by punctuation, spaces, tabs,
-or start/end of line — they do not trigger inside `map[K]V` or generics.
+- zero-value behavior;
+- concurrency safety;
+- ownership and mutation;
+- error identity and partial results;
+- side effects and cancellation;
+- accepted formats, ranges, and special values.
 
-Use backticks **only** for:
+Use “reports whether” for a boolean when it reads naturally. Do not force a
+stock sentence form when it makes the contract less precise.
 
-- Inline shell commands or non-Go literals (`` `go test ./...` ``)
-- Values that are not Go identifiers (`` `nil` ``, `` `true` ``)
-- Parameter names referred to by their literal text
+Only one file needs the package comment. Start it with `Package name` and
+describe the package's purpose, not its directory.
 
----
+Use the exact prefix `Deprecated:` for deprecation notices and state the
+replacement or migration path.
 
-## Comment Style by Declaration Kind
+## Doc links
 
-### Package
+Use Go doc links for symbols:
 
-Begin with "Package name …" as the first sentence.
-For large packages, give a brief API overview with doc links.
+- `[Buffer]` and `[Buffer.Reset]` for the current package;
+- `[io.Reader]` for an imported package;
+- `[encoding/json.Decoder]` when a full path avoids ambiguity.
+
+Use backticks for non-symbol literals such as `nil`, file names, flags, and
+commands. Do not convert ordinary parameter names into links.
+
+Define a prose link target at the end of a doc comment:
 
 ```go
-// Package path implements utility routines for manipulating
-// slash-separated paths.
+// Package wire implements the format defined by [Protocol X].
 //
-// The path package should only be used for paths separated by forward
-// slashes, such as paths in URLs.
-// To manipulate operating system paths, use the [path/filepath] package.
-package path
+// [Protocol X]: https://example.com/protocol
+package wire
 ```
 
-Only one source file in a multi-file package should have a package comment.
+## Blocks and directives
 
-### Type
+Blank comment lines separate paragraphs. Go 1.19+ recognizes unindented
+`# Heading` lines. Use headings and lists only when a short paragraph is not
+clearer.
 
-Explain what each instance represents or provides.
-Document zero-value semantics and concurrency guarantees.
+Indent list items and code according to `gofmt` and Go doc syntax. Check the
+rendered result when a comment contains nested structure.
 
-```go
-// A Buffer is a variable-sized buffer of bytes with [Buffer.Read]
-// and [Buffer.Write] methods.
-// The zero value for Buffer is an empty buffer ready to use.
-type Buffer struct { ... }
+Tool directives such as `//go:generate`, `//go:build`, and
+`//nolint:<name>` are not prose. Keep their required position and syntax.
+Give a narrow reason for a lint suppression when the tool permits it.
 
-// Regexp is the representation of a compiled regular expression.
-// A Regexp is safe for concurrent use by multiple goroutines,
-// except for configuration methods such as [Regexp.Longest].
-type Regexp struct { ... }
-```
+## Verify
 
-### Func / Method
+Run `gofmt` through the project's formatter. Run the configured doc-comment
+linter and `go test` for executable examples. Use `go doc` or the project
+documentation renderer when links, headings, lists, or code blocks changed.
 
-Say what the function **returns** (or does, for side-effect functions).
-Use "reports whether" for boolean-returning functions.
-Name parameters directly in prose — no special syntax needed.
-
-```go
-// Quote returns a double-quoted Go string literal representing s.
-func Quote(s string) string
-
-// HasPrefix reports whether s begins with prefix.
-func HasPrefix(s, prefix string) bool
-
-// Copy copies from src to dst until EOF or an error occurs.
-// It returns the total bytes written and the first error encountered,
-// if any.
-//
-// A successful Copy returns err == nil, not err == [io.EOF].
-func Copy(dst Writer, src Reader) (n int64, err error)
-```
-
-Do not explain internal implementation details in doc comments;
-keep those in body comments.
-
-### Const / Var
-
-A single doc comment can introduce a group; individual members use
-end-of-line comments.
-
-```go
-// Generic file system errors tested with [errors.Is].
-var (
-    ErrInvalid    = errInvalid()    // "invalid argument"
-    ErrPermission = errPermission() // "permission denied"
-    ErrNotExist   = errNotExist()   // "file does not exist"
-)
-```
-
----
-
-## Syntax Rules
-
-### Paragraphs
-
-Unindented, non-blank lines form a paragraph.
-Blank lines separate paragraphs.
-Use semantic line breaks (one sentence or clause per source line).
-
-### Headings
-
-A line starting with `#` (hash + space) is a heading,
-provided it is unindented and surrounded by blank lines.
-
-```go
-// # Numeric Conversions
-//
-// The most common conversions are [Atoi] and [Itoa].
-```
-
-Only available in Go 1.19+.
-Headings must be a single line; multi-line `#` prefixes are not headings.
-
-### Links
-
-Define link targets at the end of the comment as `[Text]: URL`.
-Use them inline as `[Text]`.
-
-```go
-// Package json implements encoding and decoding of JSON as defined in
-// [RFC 7159].
-//
-// [RFC 7159]: https://tools.ietf.org/html/rfc7159
-package json
-```
-
-Plain URLs in prose are auto-linked in HTML renderings.
-
-### Lists
-
-Indent list items with spaces/tabs.
-Use `-`, `*`, `+`, or `•` for bullet items;
-a decimal followed by `.` or `)` for numbered items.
-
-```go
-// PublicSuffixList provides the public suffix of a domain. For example:
-//   - the public suffix of "example.com" is "com",
-//   - the public suffix of "foo1.foo2.foo3.co.uk" is "co.uk".
-```
-
-Nested lists are not supported — flatten them.
-
-### Code Blocks
-
-Any indented (non-list) span is a code block rendered in fixed-width font.
-Always separate code blocks from surrounding prose with a blank `//` line.
-
-```go
-// Search uses binary search to find the smallest index i such that f(i).
-//
-//  func GuessingGame() {
-//      answer := sort.Search(100, func(i int) bool { ... })
-//  }
-func Search(n int, f func(int) bool) int
-```
-
-### Notes and Deprecations
-
-```go
-// TODO(username): refactor to use [context.Context].
-
-// Deprecated: RC4 is cryptographically broken.
-// Use [crypto/aes] instead.
-package rc4
-```
-
----
-
-## Common Mistakes
-
-### Accidental code blocks
-
-Any indented line becomes a code block, even if unintentional.
-Numbered lists not indented look like paragraphs + code blocks:
-
-```go
-// WRONG — "2) On Read failure…" becomes a code block:
-// 1) On Read error or close, stop func is called.
-// 2) On Read failure, error is wrapped as net.Error.
-
-// RIGHT:
-//  1. On Read error or close, stop func is called.
-//  2. On Read failure, error is wrapped as [net.Error].
-```
-
-### Wrapped continuation lines
-
-A wrapped continuation that is not indented enough breaks out of
-the list or code block:
-
-```go
-// WRONG:
-//   - Partial errors. If a service needs to return partial errors to the
-// client, it may embed Status in the response.
-
-// RIGHT:
-//   - Partial errors. If a service needs to return partial errors to the
-//     client, it may embed [Status] in the response.
-```
-
-### Directives
-
-`//go:generate`, `//nolint:`, and similar tool directives are not
-part of the doc comment.
-Gofmt moves them after a blank line at the end of the comment.
-
-```go
-// An Op is a single regular expression operator.
-//
-//go:generate stringer -type Op -trimprefix Op
-type Op uint8
-```
+Check that the comment describes the current declaration and does not duplicate
+generated API or schema metadata.

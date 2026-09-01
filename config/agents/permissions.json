@@ -117,15 +117,15 @@
     },
     "git-worktrees": {
       "bash": {
-        "*scripts/worktree-create*": "allow",
+        "*scripts/worktree-setup.sh*": "allow",
         "git worktree *": "allow"
       }
     },
     "pr-comment-audit": {
       "bash": {
-        "*scripts/fetch-threads.sh": "allow",
-        "*scripts/resolve-thread.sh": "allow",
-        "*scripts/reply-to-thread.sh": "allow",
+        "*scripts/fetch-threads.sh*": "allow",
+        "*scripts/resolve-thread.sh*": "allow",
+        "*scripts/reply-to-thread.sh*": "allow",
         "gh *": "allow"
       }
     },
@@ -162,7 +162,7 @@
     "repo-analyzer": {
       "bash": {
         "*scripts/clone_repo.sh *": "allow",
-        "~/.local/share/claude/repositories/**": "allow"
+        "~/.local/share/agents/repositories/**": "allow"
       }
     },
     "github-post-pr-review": {
@@ -170,8 +170,8 @@
         "gh api *": "allow",
         "gh pr *": "allow",
         "gh repo *": "allow",
-        "*scripts/pr-meta.sh": "allow",
-        "*scripts/find-review-file.sh": "allow",
+        "*scripts/pr-meta.sh*": "allow",
+        "*scripts/find-review-file.sh*": "allow",
         "*scripts/post-findings.sh*": "allow"
       },
       "edit": {
@@ -183,14 +183,15 @@
     },
     "git-commit": {
       "bash": {
-        "*scripts/get-commit-info.sh": "allow",
+        "*scripts/get-commit-info.sh*": "allow",
+        "git diff --cached*": "allow",
         "git commit *": "allow",
         "git add *": "allow"
       }
     },
     "create-github-pr": {
       "bash": {
-        "*scripts/get-pr-info.sh": "allow",
+        "*scripts/get-pr-info.sh*": "allow",
         "git checkout*": "allow",
         "git switch*": "allow",
         "git push*": "allow",
@@ -199,7 +200,7 @@
     },
     "github-pr-comments": {
       "bash": {
-        "*scripts/get-unresolved-comments.sh": "allow"
+        "*scripts/get-unresolved-comments.sh*": "allow"
       }
     },
     "find-skills": {

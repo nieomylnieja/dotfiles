@@ -3,7 +3,12 @@
 
 # SPDX-License-Identifier: MIT
 # Adapted from woosal1337/blog at commit 51100c98f20022746d340db657a34bf71bfe77b9.
-import re, sys, json, glob, os
+import glob
+import json
+import math
+import os
+import re
+import sys
 
 # Score v2: adds complex_tense (perfect tenses, modal stacks), exempts
 # adjectival/stative participles from the passive count, moves "provide" to the
@@ -200,14 +205,43 @@ def lint(text, strict=False):
         "sample_noun_train": trains[:3],
     }
 
+
+def cli_error(message):
+    print(f"ste-lint.py: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print(
+            "Usage: ste-lint.py [--strict] [--json] "
+            "[--fail-over SCORE] [FILE_OR_GLOB ...]"
+        )
+        sys.exit(0)
+
+    known_flags = {"--strict", "--json", "--fail-over"}
+    unknown_flags = [
+        arg for arg in args if arg.startswith("-") and arg not in known_flags
+    ]
+    if unknown_flags:
+        cli_error(f"unknown option: {unknown_flags[0]}")
+
     strict = "--strict" in args
     as_json = "--json" in args
     fail_over = None
+    if args.count("--fail-over") > 1:
+        cli_error("--fail-over can be specified only once")
     if "--fail-over" in args:
         i = args.index("--fail-over")
-        fail_over = float(args[i + 1])
+        if i + 1 >= len(args):
+            cli_error("--fail-over requires a score")
+        try:
+            fail_over = float(args[i + 1])
+        except ValueError:
+            cli_error(f"invalid score: {args[i + 1]}")
+        if not math.isfinite(fail_over) or fail_over < 0:
+            cli_error(f"invalid score: {args[i + 1]}")
         del args[i:i + 2]
     files = [a for a in args if a not in ("--strict", "--json")]
     worst = 0.0
@@ -222,20 +256,23 @@ if __name__ == "__main__":
             if glob.has_magic(f):
                 matches = sorted(glob.glob(f))
                 if not matches:
-                    print(f"ste-lint.py: no files match pattern: {f}", file=sys.stderr)
-                    sys.exit(2)
+                    cli_error(f"no files match pattern: {f}")
                 exp += matches
             else:
                 exp.append(f)
         for f in exp:
             if not os.path.isfile(f):
-                print(f"ste-lint.py: file does not exist: {f}", file=sys.stderr)
-                sys.exit(2)
-            with open(f, encoding="utf-8") as fh: r = lint(fh.read(), strict=strict)
+                cli_error(f"file does not exist: {f}")
+            with open(f, encoding="utf-8") as fh:
+                r = lint(fh.read(), strict=strict)
             worst = max(worst, r["total_per100w"])
             if as_json:
                 print(json.dumps({"file": f, **r}, indent=2))
             else:
-                print(f"{os.path.basename(f):32} words={r['words']:4d} total={r['total']:3d} per100w={r['total_per100w']:6.2f} em_dash={r['em_dash(slop-marker)']:2d}")
+                print(
+                    f"{f} words={r['words']:4d} total={r['total']:3d} "
+                    f"per100w={r['total_per100w']:6.2f} "
+                    f"em_dash={r['em_dash(slop-marker)']:2d}"
+                )
     if fail_over is not None and worst > fail_over:
         sys.exit(1)

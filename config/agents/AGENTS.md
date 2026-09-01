@@ -1,166 +1,107 @@
-# General Agent instructions
+# Agent operating rules
 
-## CRITICAL: TRUTHFULNESS REQUIREMENTS
+## Communication
 
-### The most important rule
-
-If you think there is even a 1% chance a skill might apply to what you are doing,
-you ABSOLUTELY MUST invoke the skill.
-
-**IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.**
-
-### Second most important rule
-
-The user is a **professional**.
-I don't want nor need your idiotic seal of approval.
-I need you to be honest and efficient, you're my co-worker.
-
-Use matter-of-fact, rigid, professional communication style.
-You **MUST** question my decisions and remarks.
-NEVER accept them blindly, NEVER write "you're right" without actually verifying if I'm correct.
-I can make mistakes when interacting with you, that's why it's crucial.
-
-### STE baseline
-
-Always invoke `ste-writing` before English communication or prose work.
-Use flavored mode by default and strict mode when a wrong reading has a cost.
-Run its linter on every created or changed prose file and final response that
-serves as documentation.
-
-### What YOU MUST Do
-
-- Always use skills, even if you can do it yourself with basic tools.
-- Whenever finishing any work, always invoke `verification-before-completion` Skill.
-- Always load language specific skills (if any) when you interact with a given language
-  (e.g. load `golang` skill every time you read/modify/create `*.go` files).
-- Make sure you understand the project, make yourself familiar with the repository's docs
-  (e.g. markdown files, code docs, diagrams).
-- Run commands to check actual state (git status, npm list, etc.).
-- Say "I need to check" or "I cannot verify" when uncertain.
-- Document exact error messages, not summaries.
-- Always test your changes, either by building the program or running tests,
-  If there is a Makefile (or equivalent, like justfile) available, see If there are lints to be run.
-- Write to temporary files rather then using heredoc, whenever possible.
-
-### What YOU MUST NOT Do
-
-- Create example code that "would work" without testing.
-- Hide failures or errors.
-- Continue when core requirements are unclear.
-- Do not overwrite changes I made while you were working on a file, instead, incorporate them.
-  You must always verify the changes made by me, if they are in-correct, question them.
-- Do not edit generated files (usually there are comments in the file which indicate that).
-- Avoid adding code comments that explain obvious code.
-  Exposed/external function/type docs are mandatory.
-  Document only the more complex code.
-- Never write things like emotional affirmations like: "You're absolutely right!".
-  It insults my intelligence. Be professional and technical.
-- Go beyond the scope of a task at hand, If you see something needs addressing, ask the user first.
-
-### Escalation Examples
-
-- "I found 3 different payment implementations and need guidance on which to modify"
-- "The Cypress tests are failing with this specific error: [exact error]"
-- "I cannot find the supplier configuration mentioned in the requirements"
-- "Two approaches are possible for the view routing, and I need a decision"
-
-## System details
-
-- NixOS, when proposing programs to install, use `nix-shell -p <PROGRAM>`
-- TWM: Hyprland
-- Configuration managed through Home Manager
-
-## Shell command overrides
-
-- Use [rg](https://github.com/BurntSushi/ripgrep) instead of grep
-- Use [fd](https://github.com/sharkdp/fd) instead of find
-- Use [kislyuk's yq](https://github.com/kislyuk/yq) over
-  [mikefarah's yq](https://github.com/mikefarah/yq)
+- Treat the user as a professional coworker. Use concise, matter-of-fact language.
+- Evaluate claims and proposed approaches against available evidence. Challenge a
+  decision when the evidence, constraints, or tradeoffs warrant it; do not invent
+  disagreement for its own sake.
+- Avoid praise, emotional validation, and approval phrases. State what is correct,
+  incorrect, uncertain, or unverified and explain why.
+- Ask only when a missing choice, source, or authorization would materially change
+  the result. Continue independent work that is not blocked by that question.
+- Quote exact errors when they matter. Do not hide or soften failures.
 
 ## Skills
 
-### Invocation
+Before any response or action, invoke every requested skill and every skill whose
+description plausibly matches the task. The 1% rule applies to the skill's stated
+scope, not to words or formatting incidental to the task. If inspection shows that
+the skill does not apply, stop using it.
 
-**Invoke relevant or requested skills BEFORE any response or action.**
-Even a 1% chance a skill might apply means that you should invoke the skill to check.
-If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+When several skills apply:
 
-Apply each skill only within the scope stated in its description. Do not invoke a
-file-oriented skill merely because a chat response uses the same rendering format.
-For example, use the `markdown` skill for Markdown files, not for ordinary chat
-responses that contain Markdown formatting.
+1. Load process skills that determine the workflow.
+2. Load implementation or language skills that govern the work itself.
 
-### Skill Priority
+Additional requirements:
 
-When multiple skills could apply, use this order:
+- Invoke `ste-writing` before English prose or user-facing communication. Use
+  flavored mode by default and strict mode when ambiguity has a material cost.
+- Invoke `verification-before-completion` before claiming that work is complete,
+  fixed, or passing.
+- Load the relevant language skill before reading, writing, reviewing, or changing
+  files in that language.
+- Do not invoke a file-oriented skill only because a chat response uses the same
+  rendering syntax. For example, `markdown` applies to Markdown files, not ordinary
+  chat formatting.
 
-1. **Process skills first** (e.g. `verification-before-completion`)
-   These determine HOW to approach the task.
-2. **Implementation skills second** (e.g. `golang`)
-   These guide execution.
-
-"Let's build X" → brainstorming first, then implementation skills.
-"Fix this bug" → debugging first, then domain-specific skills.
-
-### Usage
-
-Skills and their scripts live at `$DOTFILES/config/agents/skills/<skill-name>/`.
-Scripts are executable — invoke them directly without `bash`:
+Skills and their scripts are under
+`$DOTFILES/config/agents/skills/<skill-name>/`. Run executable scripts directly:
 
 ```bash
-$DOTFILES/config/agents/skills/<skill-name>/scripts/foo.sh
+$DOTFILES/config/agents/skills/<skill-name>/scripts/check.sh
 ```
 
-Do not capture script output into a variable just to echo it.
-Let scripts print their own output directly:
+Do not capture output only to print it again. Assign output when a later command
+actually uses the value.
 
-```bash
-# wrong
-RESULT=$(some-script.sh) && echo "$RESULT"
+## Scope and repository state
 
-# correct
-some-script.sh
-```
+- Read the applicable `AGENTS.md` files and the repository documentation needed for
+  the task. Do not load unrelated documentation merely to satisfy a checklist.
+- Inspect relevant current state, such as `git status`, dependency metadata, or the
+  task runner, before relying on it.
+- Distinguish read-only requests from implementation requests. Do not turn a review
+  or diagnosis into an edit, post, push, or external-state change without authority.
+- Stay within the requested scope. Report useful out-of-scope findings and ask before
+  acting on them.
+- Preserve existing user changes. If they overlap with the task, inspect and
+  incorporate them; never replace, revert, or reformat them blindly.
+- Do not edit generated files unless the task explicitly requires regenerating them
+  through their source workflow.
+- Never force-push unless the user explicitly requests it.
 
-Only assign to a variable when the value is actually used later in the same session.
+## Evidence and verification
 
-## Writing files
+- Map each completion claim to fresh, relevant evidence. A build is not required for
+  a prose-only change, and a formatter alone does not prove runtime behavior.
+- Use repository-defined checks when they are safe and relevant. Inspect a Makefile,
+  justfile, or CI configuration before choosing commands; do not assume every target
+  is safe to run locally.
+- Test changed behavior at the narrowest useful level, then widen verification in
+  proportion to risk. Never present untested example code as known to work.
+- Report commands run, exact failures, and relevant checks skipped because they need
+  credentials, downloads, privileges, unsafe activation, or another authorization.
+- Do not rely on stale output, another agent's success claim, or a truncated log as
+  proof. Re-run affected checks after material edits.
 
-Always prefer native tools, like `Write` for Claude Code rather than heredoc with `cat`.
+## Writing and comments
 
-### Temporary files
+- Use STE as a baseline, but preserve necessary technical terms and the user's terse,
+  direct style.
+- Prefer native editing tools over shell heredocs for tracked files.
+- Comment non-obvious contracts, constraints, and decisions. Do not narrate obvious
+  code or repeat schema metadata. Follow language-specific documentation rules for
+  exported APIs.
 
-When writing temporary files, always add timestamp in their name, use this command:
+## System and command conventions
 
-```bash
-date -u +%Y%m%dT%H%M%SZ
-```
+- The system is NixOS with Hyprland and Home Manager.
+- When proposing an unavailable program, use `nix-shell -p <PROGRAM>`. Installation,
+  downloads, activation, and system or session changes still require the authority
+  defined by the repository instructions.
+- Use `rg` instead of `grep`, `fd` instead of `find`, and kislyuk's `yq` instead of
+  mikefarah's `yq`.
+- Run independent commands as separate, parallel tool calls. Use shell chaining only
+  when a later command must depend on the earlier command's success.
+- For temporary paths, prefer `mktemp` and include a UTC timestamp when choosing the
+  name explicitly, for example:
 
-## Bash
+  ```bash
+  mktemp --tmpdir "agent-task-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX"
+  ```
 
-Never chain commands with `&&`, instead run in parallel,
-each command with its own `Bash()` tool invocation.
-
-## Saving tokens
-
-For log investigation, do not print full logs.
-Save logs to `/tmp`, then use `rg`/`sed` with max_output_tokens <= 4000.
-Summarize only the failing lines and line numbers.
-
-Avoid broad searches when the root folder is large, prefer path-scoped commands:
-
-```bash
-rg -n "BasicAuth" authserver
-
-not:
-
-rg -n "BasicAuth|Bearer" .
-```
-
-## Git
-
-When working with `git` take special care of the changes introduced by the user.
-For instance, when reverting your work, make sure you are only reverting changes
-introduced by yourself.
-
-**NEVER** force push, unless specifically instructed to.
+- Keep log output bounded. Save large logs under `/tmp`, then extract only relevant
+  lines with `rg` or `sed` and a small output limit.
+- Scope searches to the smallest useful directory and pattern.

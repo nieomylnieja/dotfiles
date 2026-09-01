@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${GH_SCENARIO:-criteria}:$*" in
+no-pr:"pr list --head main --state open --json number --limit 2")
+  printf '[]\n'
+  ;;
+pr-error:"pr view 7 --json title,body,headRefName")
+  printf 'gh: authentication failed\n' >&2
+  exit 1
+  ;;
+issue-error:"pr view 7 --json title,body,headRefName")
+  printf '%s\n' '{"title":"Fix","body":"Fixes #42","headRefName":"fix"}'
+  ;;
+issue-error:"issue view 42 --json title,body,labels,milestone")
+  printf 'gh: issue access denied\n' >&2
+  exit 1
+  ;;
+criteria:"pr view 7 --json title,body,headRefName")
+  printf '%s\n' \
+    '{"title":"Feature","body":"## Acceptance criteria\n\n- [ ] Works","headRefName":"feature"}'
+  ;;
+jira:"pr view 7 --json title,body,headRefName")
+  printf '%s\n' '{"title":"ABC-123: Feature","body":"","headRefName":"feature"}'
+  ;;
+meta:"pr view 7 --json number,baseRefName,baseRefOid,headRefName,headRefOid")
+  printf '%s\n' \
+    '{"number":7,"baseRefName":"main","baseRefOid":"base1","headRefName":"feature/private","headRefOid":"head1"}'
+  ;;
+meta:"repo view --json nameWithOwner --jq .nameWithOwner")
+  printf 'example/private\n'
+  ;;
+*)
+  printf 'unexpected gh command: %s\n' "$*" >&2
+  exit 2
+  ;;
+esac

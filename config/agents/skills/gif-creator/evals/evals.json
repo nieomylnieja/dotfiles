@@ -59,6 +59,30 @@
         "The response routes the work to vhs-gif-creator.",
         "The response does not propose recreating terminal interaction in Manim."
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "Animate positive and negative charges moving through a wire. Make the physical direction unambiguous, keep it slow enough to teach from, and fade the labels in and out.",
+      "expected_output": "A Manim GIF whose charge motion matches the stated model, uses deliberate timing and fades, and is inspected for motion correctness rather than only appearance.",
+      "files": [],
+      "expectations": [
+        "Positive and negative charge directions match the physical model stated in the scene or narration.",
+        "Labels use explicit fade-in and fade-out transitions.",
+        "The timing leaves enough time to observe each direction before the loop resets.",
+        "The full animation is inspected for motion correctness."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "The last GIF had choppy motion and tiny black dots around transparent objects. Re-render it smoothly and verify those artifacts are gone.",
+      "expected_output": "A direct Manim re-render with a suitable frame rate and an artifact-focused visual check, without another GIF editing pipeline.",
+      "files": [],
+      "expectations": [
+        "The Manim frame rate is raised or otherwise adjusted to address choppy motion.",
+        "Transparent edges and representative frames are inspected for black-dot artifacts.",
+        "The response reports the selected frame rate and the artifact-check result.",
+        "No external GIF editor or transcoder changes the rendered output."
+      ]
     }
   ]
 }

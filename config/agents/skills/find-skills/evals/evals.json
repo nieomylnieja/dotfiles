@@ -1,0 +1,57 @@
+{
+  "skill_name": "find-skills",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find me a skill for reviewing Terraform plans, but do not install anything.",
+      "expected_output": "A concise comparison of up to three inspected candidates, with no installation or removal.",
+      "files": [],
+      "expectations": [
+        "The agent searches for skills and does not run an installation command.",
+        "Each recommended candidate includes its source, license status, dependencies, and overlap with installed skills.",
+        "The response presents no more than three candidates."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Install the acme/example-skill skill globally for my configured agents.",
+      "expected_output": "The named skill is inspected and installed for the configured agents without a duplicate confirmation.",
+      "files": [],
+      "expectations": [
+        "The explicit install request is treated as authorization and is not followed by a redundant confirmation question.",
+        "The candidate is inspected for source, license, scripts, dependencies, and mutation scope before installation.",
+        "The configured SKILLS_AGENTS value is checked instead of assuming a target agent."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Can you connect my Airtable account as a plugin?",
+      "expected_output": "The request is routed to plugin management without a skill search or installation.",
+      "files": [],
+      "expectations": [
+        "The request is routed to plugin management instead of the skills CLI.",
+        "No skill search or skill installation command runs."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "How do I make this SQL query faster?",
+      "expected_output": "The agent handles the SQL task directly with installed database guidance.",
+      "files": [],
+      "expectations": [
+        "The request is not treated as skill discovery unless the user asks to extend the agent.",
+        "The agent uses an installed database skill or helps directly."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Update every installed skill to its latest version.",
+      "expected_output": "The agent treats updates as a separate authorized workflow and does not bypass repository policy.",
+      "files": [],
+      "expectations": [
+        "The agent identifies the update as a separate external and tracked-file mutation.",
+        "The agent follows repository update policy and does not use this workflow to bypass it."
+      ]
+    }
+  ]
+}

@@ -1,178 +1,242 @@
 #!/usr/bin/env bash
-# Gathers all information needed to create a GitHub Pull Request
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
-  cat <<'EOF'
-get-pr-info.sh — Gather all information needed to create a GitHub Pull Request.
+readonly PROG="${0##*/}"
 
-Usage: get-pr-info.sh
+usage() {
+  cat <<EOF
+Usage: ${PROG} [--base BRANCH]
+Print JSON metadata for creating a pull request.
 
-Outputs a JSON object to stdout with:
-  current_branch       Current git branch name
-  base_branch          Target branch (main/master)
-  on_main_or_master    Whether currently on main/master
-  has_upstream         Whether branch has a remote tracking branch
-  upstream_status      ahead | behind | up-to-date | diverged
-  commits              Array of {hash, message} objects
-  commits_count        Number of commits ahead of base
-  files_changed        Number of files changed
-  insertions           Lines added
-  deletions            Lines removed
-  uncommitted_changes  Whether there are uncommitted changes
-  uncommitted_files    Array of uncommitted file paths
-  pr_template          Contents of PR template file, if found
-  pr_template_path     Path to PR template file, if found
-  existing_pr_number   Number of existing PR for this branch, or null
-  existing_pr_url      URL of existing PR for this branch, or null
+Options:
+  -b, --base BRANCH  target branch (default: current remote HEAD)
+  -h, --help         display this help and exit
+
+Exit status:
+  0  success
+  1  operational error
+  2  usage error
 EOF
-  exit 0
-fi
+}
 
-echo "Gathering PR information..." >&2
+fatal() {
+  local message="$1"
+  local status="${2:-1}"
 
-# Get current branch
-current_branch=$(git branch --show-current)
-if [ -z "$current_branch" ]; then
-  echo "Error: Not on a branch (detached HEAD?)" >&2
-  exit 1
-fi
+  printf '%s: ERROR: %s\n' "${PROG}" "${message}" >&2
+  exit "${status}"
+}
 
-echo "Current branch: $current_branch" >&2
+detect_default_branch() {
+  local remote_info
+  local remote_ref
+  local branch
 
-# Get base branch (main or master)
-base_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|origin/||' || echo "main")
-echo "Base branch: $base_branch" >&2
+  remote_info="$(git ls-remote --symref origin HEAD)" ||
+    fatal "cannot resolve origin's current default branch; use --base"
+  remote_ref="$(
+    awk '$1 == "ref:" && $3 == "HEAD" {print $2}' <<<"${remote_info}"
+  )"
+  [[ -n "${remote_ref}" && "${remote_ref}" != *$'\n'* ]] ||
+    fatal "origin returned an ambiguous default branch; use --base"
+  [[ "${remote_ref}" == refs/heads/* ]] ||
+    fatal "origin returned an invalid default branch: ${remote_ref}"
+  branch="${remote_ref#refs/heads/}"
+  git check-ref-format --branch "${branch}" >/dev/null ||
+    fatal "origin returned an invalid default branch: ${remote_ref}"
+  printf '%s\n' "${branch}"
+}
 
-# Check if on main/master
-on_main_or_master=false
-if [[ "$current_branch" == "main" || "$current_branch" == "master" ]]; then
-  on_main_or_master=true
-fi
+remote_base_commit() {
+  local base_branch="$1"
+  local remote_line
 
-# Check if branch has upstream tracking
-has_upstream=false
-upstream_status="unknown"
-if git rev-parse --abbrev-ref --symbolic-full-name @{u} &>/dev/null; then
-  has_upstream=true
+  remote_line="$(git ls-remote --exit-code origin "refs/heads/${base_branch}")" ||
+    fatal "cannot resolve current remote base 'origin/${base_branch}'"
+  printf '%s\n' "${remote_line%%[[:space:]]*}"
+}
 
-  # Determine upstream status (ahead/behind/up-to-date/diverged)
-  upstream_branch=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
-  local_commit=$(git rev-parse @)
-  remote_commit=$(git rev-parse @{u})
-  base_commit=$(git merge-base @ @{u})
+main() {
+  local base_branch=""
 
-  if [ "$local_commit" = "$remote_commit" ]; then
-    upstream_status="up-to-date"
-  elif [ "$local_commit" = "$base_commit" ]; then
-    upstream_status="behind"
-  elif [ "$remote_commit" = "$base_commit" ]; then
-    upstream_status="ahead"
-  else
-    upstream_status="diverged"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -b | --base)
+      [[ $# -ge 2 ]] || fatal "--base requires an argument" 2
+      base_branch="$2"
+      shift 2
+      ;;
+    --base=*)
+      base_branch="${1#*=}"
+      shift
+      ;;
+    *) fatal "unknown argument: $1" 2 ;;
+    esac
+  done
+
+  local current_branch
+  current_branch="$(git branch --show-current)"
+  [[ -n "${current_branch}" ]] || fatal "not on a branch"
+  [[ -n "${base_branch}" ]] || base_branch="$(detect_default_branch)"
+
+  local base_ref="refs/remotes/origin/${base_branch}"
+  git show-ref --verify --quiet "${base_ref}" ||
+    fatal "base branch 'origin/${base_branch}' is not available locally"
+
+  local head_commit
+  local base_commit
+  local remote_base
+  local merge_base
+  head_commit="$(git rev-parse HEAD)"
+  base_commit="$(git rev-parse "${base_ref}")"
+  remote_base="$(remote_base_commit "${base_branch}")"
+  [[ "${base_commit}" == "${remote_base}" ]] ||
+    fatal "cached ${base_ref} is ${base_commit}, but the remote base is ${remote_base}; fetch the base before creating the PR"
+  merge_base="$(git merge-base "${base_ref}" HEAD)"
+
+  local on_base=false
+  [[ "${current_branch}" == "${base_branch}" ]] && on_base=true
+
+  local has_upstream=false
+  local upstream=""
+  local ahead=0
+  local behind=0
+  local upstream_status="none"
+  if upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    has_upstream=true
+    local rev_list_counts
+    local command_status
+    if rev_list_counts="$(git rev-list --left-right --count "${upstream}...HEAD")"; then
+      :
+    else
+      command_status=$?
+      return "${command_status}"
+    fi
+    [[ "${rev_list_counts}" =~ ^[0-9]+[[:space:]]+[0-9]+$ ]] ||
+      fatal "unexpected rev-list count output: ${rev_list_counts}"
+    read -r behind ahead <<<"${rev_list_counts}"
+    case "${behind}:${ahead}" in
+    0:0) upstream_status="up-to-date" ;;
+    0:*) upstream_status="ahead" ;;
+    *:0) upstream_status="behind" ;;
+    *) upstream_status="diverged" ;;
+    esac
   fi
-fi
 
-# Get commits between base and current branch
-echo "Analyzing commits..." >&2
-commits_json="[]"
-commits_count=0
-if ! $on_main_or_master; then
-  # Get commits as JSON array
-  commits_json=$(git log origin/$base_branch..HEAD --format='{"hash":"%h","message":"%s"}' 2>/dev/null | jq -s '.' || echo '[]')
-  commits_count=$(echo "$commits_json" | jq 'length')
-fi
+  local commits_json
+  commits_json="$(
+    git log --format='%h%x09%s' "${merge_base}..HEAD" |
+      jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {hash: .[0], message: (.[1:] | join("\t"))})'
+  )"
 
-# Get diff stats (files changed, insertions, deletions)
-echo "Analyzing changes..." >&2
-files_changed=0
-insertions=0
-deletions=0
-if ! $on_main_or_master && [ "$commits_count" -gt 0 ]; then
-  # Get the stat summary line
-  stat_line=$(git diff origin/$base_branch...HEAD --shortstat 2>/dev/null || echo "")
+  local diff_stats
+  diff_stats="$(
+    git diff --numstat "${merge_base}...HEAD" |
+      awk '{files += 1; if ($1 ~ /^[0-9]+$/) add += $1; if ($2 ~ /^[0-9]+$/) del += $2} END {printf "%d %d %d", files, add, del}'
+  )"
+  local files_changed insertions deletions
+  read -r files_changed insertions deletions <<<"${diff_stats}"
 
-  if [ -n "$stat_line" ]; then
-    # Parse: "3 files changed, 120 insertions(+), 45 deletions(-)"
-    files_changed=$(echo "$stat_line" | grep -oP '\d+(?= file)' || echo "0")
-    insertions=$(echo "$stat_line" | grep -oP '\d+(?= insertion)' || echo "0")
-    deletions=$(echo "$stat_line" | grep -oP '\d+(?= deletion)' || echo "0")
-  fi
-fi
+  local uncommitted_files
+  uncommitted_files="$(
+    git status --porcelain=v1 -z |
+      jq -Rs '
+          (split("\u0000") | if .[-1] == "" then .[:-1] else . end) as $records
+          | reduce range(0; $records | length) as $index
+              ({items: [], skip: false};
+                if .skip then
+                  .skip = false
+                else
+                  ($records[$index]) as $record
+                  | ($record[0:2]) as $status
+                  | ($record[3:]) as $path
+                  | if ($status | test("[RC]")) then
+                      .items += [{
+                        status: $status,
+                        path: $path,
+                        original_path: ($records[$index + 1] // null)
+                      }]
+                      | .skip = true
+                    else
+                      .items += [{status: $status, path: $path}]
+                    end
+                end)
+          | .items
+        '
+  )"
 
-# Check for uncommitted changes
-uncommitted_changes=false
-uncommitted_files="[]"
-status_output=$(git status --short --porcelain)
-if [ -n "$status_output" ]; then
-  uncommitted_changes=true
-  # Convert git status output to JSON array
-  uncommitted_files=$(echo "$status_output" | jq -R . | jq -s '.')
-fi
+  local existing_pr_json
+  local existing_pr_matches
+  local existing_pr_count
+  local existing_pr
+  existing_pr_json="$(
+    gh pr list \
+      --head "${current_branch}" \
+      --base "${base_branch}" \
+      --state open \
+      --json number,url,baseRefName,headRefName \
+      --limit 100
+  )"
+  existing_pr_matches="$(
+    jq \
+      --arg head "${current_branch}" \
+      --arg base "${base_branch}" \
+      '[.[] | select(.headRefName == $head and .baseRefName == $base)]' \
+      <<<"${existing_pr_json}"
+  )"
+  existing_pr_count="$(jq 'length' <<<"${existing_pr_matches}")"
+  [[ "${existing_pr_count}" -le 1 ]] ||
+    fatal "multiple open pull requests match head '${current_branch}' and base '${base_branch}'"
+  existing_pr="$(jq '.[0] // null' <<<"${existing_pr_matches}")"
 
-# Read PR template if it exists
-pr_template=""
-pr_template_path=""
-for template_path in .github/pull_request_template.md .github/PULL_REQUEST_TEMPLATE.md docs/pull_request_template.md; do
-  if [ -f "$template_path" ]; then
-    pr_template=$(cat "$template_path")
-    pr_template_path="$template_path"
-    echo "Found PR template: $pr_template_path" >&2
-    break
-  fi
-done
+  jq -n \
+    --arg current_branch "${current_branch}" \
+    --arg base_branch "${base_branch}" \
+    --arg head_commit "${head_commit}" \
+    --arg base_commit "${base_commit}" \
+    --arg remote_base_commit "${remote_base}" \
+    --arg merge_base "${merge_base}" \
+    --arg upstream "${upstream}" \
+    --arg upstream_status "${upstream_status}" \
+    --argjson on_base "${on_base}" \
+    --argjson has_upstream "${has_upstream}" \
+    --argjson ahead "${ahead}" \
+    --argjson behind "${behind}" \
+    --argjson commits "${commits_json}" \
+    --argjson files_changed "${files_changed}" \
+    --argjson insertions "${insertions}" \
+    --argjson deletions "${deletions}" \
+    --argjson uncommitted_files "${uncommitted_files}" \
+    --argjson existing_pr "${existing_pr}" \
+    '{
+      current_branch: $current_branch,
+      base_branch: $base_branch,
+      head_commit: $head_commit,
+      base_commit: $base_commit,
+      remote_base_commit: $remote_base_commit,
+      merge_base: $merge_base,
+      on_base: $on_base,
+      has_upstream: $has_upstream,
+      upstream: ($upstream | if . == "" then null else . end),
+      upstream_status: $upstream_status,
+      ahead: $ahead,
+      behind: $behind,
+      commits: $commits,
+      commits_count: ($commits | length),
+      files_changed: $files_changed,
+      insertions: $insertions,
+      deletions: $deletions,
+      uncommitted_changes: ($uncommitted_files | length > 0),
+      uncommitted_files: $uncommitted_files,
+      existing_pr_number: ($existing_pr.number // null),
+      existing_pr_url: ($existing_pr.url // null),
+      existing_pr_base: ($existing_pr.baseRefName // null),
+      existing_pr_head: ($existing_pr.headRefName // null)
+    }'
+}
 
-# Check for existing PR on this branch
-echo "Checking for existing PR..." >&2
-existing_pr_number=""
-existing_pr_url=""
-if ! $on_main_or_master; then
-  existing_pr_data=$(gh pr list --head "$current_branch" --json number,url --jq '.[0]' 2>/dev/null || echo "{}")
-  existing_pr_number=$(echo "$existing_pr_data" | jq -r '.number // empty')
-  existing_pr_url=$(echo "$existing_pr_data" | jq -r '.url // empty')
-
-  if [ -n "$existing_pr_number" ]; then
-    echo "Found existing PR #$existing_pr_number" >&2
-  fi
-fi
-
-# Build final JSON output
-echo "" >&2
-echo "Done!" >&2
-
-jq -n \
-  --arg current_branch "$current_branch" \
-  --arg base_branch "$base_branch" \
-  --argjson on_main_or_master "$on_main_or_master" \
-  --argjson has_upstream "$has_upstream" \
-  --arg upstream_status "$upstream_status" \
-  --argjson commits "$commits_json" \
-  --argjson commits_count "$commits_count" \
-  --argjson files_changed "$files_changed" \
-  --argjson insertions "$insertions" \
-  --argjson deletions "$deletions" \
-  --argjson uncommitted_changes "$uncommitted_changes" \
-  --argjson uncommitted_files "$uncommitted_files" \
-  --arg pr_template "$pr_template" \
-  --arg pr_template_path "$pr_template_path" \
-  --arg existing_pr_number "$existing_pr_number" \
-  --arg existing_pr_url "$existing_pr_url" \
-  '{
-    current_branch: $current_branch,
-    base_branch: $base_branch,
-    on_main_or_master: $on_main_or_master,
-    has_upstream: $has_upstream,
-    upstream_status: $upstream_status,
-    commits: $commits,
-    commits_count: $commits_count,
-    files_changed: $files_changed,
-    insertions: $insertions,
-    deletions: $deletions,
-    uncommitted_changes: $uncommitted_changes,
-    uncommitted_files: $uncommitted_files,
-    pr_template: $pr_template,
-    pr_template_path: $pr_template_path,
-    existing_pr_number: ($existing_pr_number | if . == "" then null else . end),
-    existing_pr_url: ($existing_pr_url | if . == "" then null else . end)
-  }'
+main "$@"

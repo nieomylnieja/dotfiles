@@ -1,222 +1,61 @@
 ---
 name: bats-testing-patterns
-description: |
-  Master Bash Automated Testing System (Bats) for production shell and CLI
-  testing. Use this skill whenever writing or reviewing Bats tests, shell
-  command tests, CLI integration tests, fixture-heavy tests, Docker-backed Bats
-  suites, or unit/e2e test split patterns for shell utilities.
+description: >-
+  Use when writing or reviewing Bats tests, shell-command tests, CLI integration
+  tests, fixture-heavy suites, or Docker-backed Bats runners.
 ---
 
-# Bats Testing Patterns
+# Bats testing
 
-Use this skill to build maintainable Bats test suites for shell scripts and
-command-line programs.
-Favor project-local conventions over generic examples:
-first inspect the existing runner, helpers, fixtures, and tags, then extend
-those patterns.
+Treat CLI output, exit status, files, and external effects as observable
+behavior. Inspect the project's runner, tags, helpers, fixtures, and installed
+Bats libraries before adding a pattern.
 
-## When to Use This Skill
+## Inspect the suite
 
-- Writing unit or e2e tests for shell scripts and CLI tools.
-- Adding Bats coverage for edge cases, error messages, and output formats.
-- Creating shared Bats helpers, fixtures, or Docker-backed test runners.
-- Reviewing Bats suites for maintainability, isolation, and useful failures.
-- Splitting tests by tags such as `unit` and `e2e`.
+Look for:
 
-## First Read the Project
+- project test targets and containerized runners;
+- the supported Bats version;
+- `setup_suite.bash`, shared helpers, and assertion libraries;
+- file and test tags;
+- input and expected-output fixture conventions;
+- local rules for unit, integration, and end-to-end tests.
 
-Before writing tests, inspect the local suite:
+Use the project target when it sets build flags, dependencies, credentials, or
+containers. Do not replace its test selection with custom environment flags.
 
-```sh
-fd -t f '\\.(bats|bash|sh)$' test scripts
-fd -t f '^(Makefile|justfile|package.json)$' .
-rg -n 'file_tags|--filter-tags|setup_suite|load_lib|run_.*\\(' test scripts Makefile
-```
+## Choose the test boundary
 
-Look specifically for:
+- Use Bats for shell code and observable CLI workflows.
+- Use the implementation language's test framework for internal functions.
+- Keep unit tests deterministic and offline.
+- Mark tests that need services, credentials, or mutable remote state. Run them
+  only through the project's authorized integration or end-to-end path.
+- Use a pseudo-terminal (PTY) only when TTY detection or terminal interaction is
+  part of the behavior.
 
-- task-runner targets such as `make test/bats/unit` or `make test/bats/e2e`;
-- Dockerfiles or containers used to pin the Bats runtime and dependencies;
-- `test/setup_suite.bash` for global suite setup;
-- `test/test_helper/load.bash` or equivalent shared helper files;
-- fixture roots such as `test/inputs` and `test/outputs`;
-- existing assertion libraries such as `bats-support` and `bats-assert`;
-- existing tags such as `# bats file_tags=unit` and `# bats file_tags=e2e`.
+## File structure
 
-Do not bypass project targets with raw `bats` commands when wrappers exist.
-The wrapper often builds binaries, injects environment variables, or runs tests
-inside a controlled container.
+A `.bats` file can omit a shebang. If the project uses one, use
+`#!/usr/bin/env bats`, not a Bash shebang.
 
-## Suite Layout
+Keep lifecycle functions near the top, tests next, and file-local helpers at the
+bottom unless the repository has another consistent order. Put reusable helpers
+in the suite's helper directory.
 
-A scalable CLI test suite usually looks like this:
+Use the narrowest Bats-managed temporary directory:
 
-```text
-test/
-├── setup_suite.bash
-├── test_helper/
-│   └── load.bash
-├── inputs/
-│   └── command-name/
-│       └── fixture.yaml
-├── outputs/
-│   └── command-name/
-│       └── expected.yaml
-├── docker/
-│   ├── Dockerfile.unit
-│   └── Dockerfile.e2e
-├── command-unit.bats
-└── command-e2e.bats
-```
+- `$BATS_TEST_TMPDIR` for one test;
+- `$BATS_FILE_TMPDIR` for one test file;
+- `$BATS_SUITE_TMPDIR` for one suite.
 
-Store source fixtures such as request payloads and release bodies under
-`test/inputs/<test-file-name>/`.
-Store complete expected stdout and stderr messages, along with structured
-command output, under `test/outputs/<test-file-name>/`.
-This keeps a large suite navigable and lets helpers derive fixture paths from
-`$BATS_TEST_FILENAME`.
+Do not use `$BATS_TMPDIR` as suite-owned scratch space. It is the parent
+directory selected by Bats and can be shared with other runs.
 
-## Runner and Tags
+## Run commands safely
 
-Tag files explicitly when the suite separates fast unit tests from slower e2e
-tests:
-
-```bash
-#!/usr/bin/env bash
-# bats file_tags=unit
-```
-
-```bash
-#!/usr/bin/env bash
-# bats file_tags=e2e
-```
-
-Wire tags through the project runner:
-
-```makefile
-.PHONY: test/bats/unit test/bats/e2e
-
-test/bats/unit:
-	docker build -t cli-bats-unit -f test/docker/Dockerfile.unit .
-	docker run -e TERM=linux --rm \
-		cli-bats-unit -F pretty --filter-tags unit,!platform ./test/*
-
-test/bats/e2e:
-	docker build -t cli-bats-e2e -f test/docker/Dockerfile.e2e .
-	./scripts/run-e2e-tests.sh cli-bats-e2e
-```
-
-Use Docker when tests need a pinned Bats version, CLI binary, shell tools, or
-system dependencies.
-Set `TERM=linux` when the pretty formatter needs a terminal value.
-
-Use Bats tags as the only selector for test categories, execution modes, and
-platform suites.
-Do not introduce custom environment variables such as `PLATFORM_TESTS=1` or
-`E2E_TESTS=1` and branch on them in tests or lifecycle hooks.
-Select the intended cases with `--filter-tags`, including negative tags when a
-broader file tag would otherwise include a specialized test.
-Within a test or per-test hook, inspect `$BATS_TEST_TAGS` when setup or helpers
-must differ for that tagged case.
-
-Environment variables are still appropriate when they are actual inputs to the
-program or fixture, such as terminal width, editor selection, credentials, or a
-server URL.
-They must not duplicate Bats' test-selection mechanism.
-
-## Suite Setup
-
-Use `setup_suite.bash` for shared dependencies and suite-wide fixture roots:
-
-```bash
-setup_suite() {
-  load "test_helper/load"
-
-  ensure_installed jq git yq
-
-  export TEST_SUITE_INPUTS="$BATS_TEST_DIRNAME/inputs"
-  export TEST_SUITE_OUTPUTS="$BATS_TEST_DIRNAME/outputs"
-  export TEST_GIT_REVISION="${TEST_GIT_REVISION:=undefined}"
-}
-```
-
-Use `setup_file` for expensive file-level preparation and `teardown_file` for
-matching cleanup:
-
-```bash
-setup_file() {
-  load "test_helper/load"
-  load_lib "bats-assert"
-
-  generate_inputs "$BATS_FILE_TMPDIR"
-
-  run_cli apply -f "'$TEST_INPUTS/**'"
-  assert_success_joined_output
-}
-
-teardown_file() {
-  run_cli delete -f "'$TEST_INPUTS/**'"
-}
-```
-
-When a test file needs narrower fixture roots, set `TEST_INPUTS` or
-`TEST_OUTPUTS` in `setup_file` rather than repeating paths in each test.
-Generated e2e fixtures can set those variables in `generate_inputs` and
-`generate_outputs` instead.
-
-Use `setup` for helpers required by each test:
-
-```bash
-setup() {
-  load "test_helper/load"
-  load_lib "bats-support"
-  load_lib "bats-assert"
-}
-```
-
-Prefer Bats-managed temporary directories:
-
-- `$BATS_TEST_TMPDIR` for per-test scratch files.
-- `$BATS_FILE_TMPDIR` for files shared by tests in one `.bats` file.
-- `$BATS_TMPDIR` for suite-level scratch state.
-
-## Bats File Ordering
-
-Keep each `.bats` test file organized from lifecycle code to test behavior to
-local implementation detail.
-After the shebang, file tags, and any required `load` statements, always place
-functions in this order:
-
-1. `setup_file` and `setup` functions.
-2. `teardown` and `teardown_file` functions.
-3. `@test` cases.
-4. Local helper functions.
-
-Helper functions belong at the bottom of the file.
-Tests should read top-down as the executable specification, with helper
-implementations kept after the test cases they support.
-Do not place helper functions above `@test` cases just because they are used by
-the setup or tests.
-
-## Shared Helpers
-
-Put reusable helpers in `test/test_helper/load.bash`.
-Name command wrappers after the command under test, for example `run_cli` or
-`run_sloctl`, so test bodies read like user workflows.
-
-When the command under test must support pipes, shell globs, or command output
-normalization, use a wrapper intentionally:
-
-```bash
-run_cli() {
-  bats_require_minimum_version 1.5.0
-  run --separate-stderr bash -c \
-    "set -eo pipefail && my-cli $* | sed 's/ *$//'"
-}
-```
-
-Use `bash -c` only for trusted test arguments.
-If the test does not need shell parsing, prefer direct argument passing:
+Pass arguments directly when shell parsing is not under test:
 
 ```bash
 run_cli() {
@@ -225,116 +64,69 @@ run_cli() {
 }
 ```
 
-When using `run --separate-stderr`, add helpers that keep failures readable:
+Do not interpolate `$*` into `bash -c`. If a pipeline or redirection is the
+behavior under test, pass positional parameters separately:
 
 ```bash
-assert_success_joined_output() {
-  output+="
-$stderr" assert_success
-}
-
-assert_stderr() {
-  output="$stderr"
-  assert_output "$@"
-}
-
-refute_stderr() {
-  output="$stderr"
-  refute_output "$@"
+run_pipeline() {
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr bash -o pipefail -c \
+    'my-cli "$1" | sed "s/[[:space:]]*$//"' bash "$1"
 }
 ```
 
-Load Bats libraries through a small wrapper when the runtime stores them under a
-known path:
+Use `bash -c` only when the suite intentionally tests Bash syntax. Match the
+shell to the command's documented environment.
+
+## Setup and isolation
+
+Use:
+
+- `setup_suite` for immutable suite dependencies and suite-level resources;
+- `setup_file` for file-level state;
+- `setup` for per-test state;
+- the matching teardown level for cleanup.
+
+Do not modify a source fixture in place. Copy it into a Bats temporary directory
+before passing it to an editor, formatter, migration, or command that can write.
 
 ```bash
-load_lib() {
-  local name="$1"
-  load "/usr/lib/bats/${name}/load.bash"
+@test "edit persists the requested change" {
+  local working_file="${BATS_TEST_TMPDIR}/resource.yaml"
+  cp -- "${FIXTURES}/resource.yaml" "${working_file}"
+
+  EDITOR="${TEST_HELPERS}/editor-add-label" run_cli edit "${working_file}"
+
+  assert_success
+  assert_file_equal "${working_file}" "${EXPECTED}/resource-edited.yaml"
 }
 ```
 
-## Fixture Generation
-
-Use generated fixtures when tests mutate external state or need unique resource
-names.
-Derive the fixture directory from the current test file:
-
-```bash
-generate_inputs() {
-  load_lib "bats-support"
-
-  local directory="$1"
-  local test_filename
-  test_filename="$(basename "$BATS_TEST_FILENAME" .bats)"
-
-  TEST_INPUTS="$directory/$test_filename"
-  mkdir "$TEST_INPUTS"
-
-  local test_hash
-  test_hash="${BATS_TEST_NUMBER}-$(date +%s)-$TEST_GIT_REVISION"
-  TEST_PROJECT="e2e-$test_hash"
-
-  cp -R "$TEST_SUITE_INPUTS/$test_filename/." "$TEST_INPUTS/"
-  rg -l '<PROJECT>' "$TEST_INPUTS" |
-    while read -r file; do
-      sed -i "s/<PROJECT>/$TEST_PROJECT/g" "$file"
-    done
-
-  export TEST_INPUTS
-  export TEST_PROJECT
-}
-```
-
-Keep generated names stable enough to diagnose failures and unique enough to
-avoid collisions across concurrent or retried e2e tests.
-Include the Bats test number, timestamp, and git revision when available.
-
-For expected outputs, copy or transform the matching output fixture directory:
-
-```bash
-generate_outputs() {
-  load_lib "bats-support"
-
-  local test_filename
-  test_filename="$(basename "$BATS_TEST_FILENAME" .bats)"
-  TEST_OUTPUTS="$TEST_SUITE_OUTPUTS/$test_filename"
-
-  if [[ -z "$TEST_PROJECT" ]]; then
-    fail "TEST_PROJECT is not set. Call generate_inputs first."
-  fi
-
-  rg -l '<PROJECT>' "$TEST_OUTPUTS" |
-    while read -r file; do
-      sed -i "s/<PROJECT>/$TEST_PROJECT/g" "$file"
-    done
-
-  export TEST_OUTPUTS
-}
-```
+Generate unique names for mutable external resources. Make cleanup idempotent
+only when setup can fail after partial creation. Do not hide ordinary teardown
+failures with `|| true`.
 
 ## Assertions
 
-Use `bats-assert` and `bats-support` helpers instead of ad hoc checks.
-Prefer file-backed, exact assertions for complete CLI messages, including short
-messages that would fit inline:
+Use the project's assertion libraries. Check status before output or effects:
 
 ```bash
-@test "command rejects missing required flag" {
-  run_cli command subcommand
-
-  assert_failure
-  assert_stderr - < "$TEST_OUTPUTS/missing-file.stderr"
-}
+run --separate-stderr my-cli show missing
+assert_failure 1
+assert_output ""
+assert_equal "${stderr}" "resource \"missing\" was not found"
 ```
 
-Use `--partial` only as a last resort when exact output would be unstable for
-reasons unrelated to the behavior under test, such as nondeterministic fields
-that cannot be normalized.
-If `--partial` is necessary, keep the assertion narrow and leave nearby context
-explaining why a full output fixture would be brittle.
+Prefer an inline exact assertion for a short, stable message. Use file-backed
+fixtures for long output, structured documents, repeated output, or text that
+reviewers benefit from editing as a whole. Use partial matches only for values
+that cannot be normalized, and state why.
 
-For YAML or JSON, compare normalized structures rather than raw formatting:
+Keep stdout and stderr separate for error behavior. Join them only when the
+public interface intentionally combines them or when a project helper defines
+that contract.
+
+Normalize structured data before comparison:
 
 ```bash
 assert_yaml_equal() {
@@ -342,153 +134,29 @@ assert_yaml_equal() {
   local want="$2"
 
   assert_equal \
-    "$(yq --sort-keys -y . <<<"$have")" \
-    "$(yq --sort-keys -y . <<<"$want")"
+    "$(yq --sort-keys -y . <<<"${have}")" \
+    "$(yq --sort-keys -y . <<<"${want}")"
 }
 ```
 
-## CLI Workflow Tests
+Use the repository-selected yq implementation. Python yq and mikefarah yq have
+different flags and output.
 
-Write tests as user workflows, not implementation probes:
+## Test design
 
-```bash
-@test "apply and delete resources from file" {
-  local input="$TEST_INPUTS/resource.yaml"
+- Name tests for user-visible conditions and outcomes.
+- Cover success, invalid input, dependency failure, and cleanup where relevant.
+- Test aliases or flag variants in a loop only when their expected behavior is
+  identical.
+- Keep complete workflow tests small enough that one failure identifies the
+  broken step.
+- Pin terminal width, `TERM`, color mode, and locale for terminal output.
+- Use local fixture servers instead of live APIs in deterministic tests.
+- Do not assert implementation details that users cannot observe.
 
-  run_cli apply -f "$input"
-  assert_success_joined_output
-  assert_output - < "$TEST_OUTPUTS/apply.stdout"
+## Verify
 
-  run_cli delete -f "$input"
-  assert_success_joined_output
-  assert_output - < "$TEST_OUTPUTS/delete.stdout"
-}
-```
-
-For commands with aliases or repeated flag variants, use loops to avoid
-copy-paste drift:
-
-```bash
-@test "command aliases return the same object" {
-  local aliases="service services svc"
-
-  for alias in $aliases; do
-    run_cli get "$alias" example-service -o yaml
-    assert_success_joined_output
-    assert_output - < "$TEST_OUTPUTS/service.yaml"
-  done
-}
-```
-
-For interactive terminal tests, prefer the command's deterministic plain-text
-path: set `NO_COLOR=1` and use accessible form mode when available.
-Use a PTY only when TTY detection is itself under test; in that case, also pin
-`TERM`, terminal width, and color mode.
-Keep source data and complete expected messages in the file's existing fixture
-directories.
-
-For notification tests, serve release data from the project's local release
-fixture server instead of proxying GitHub.
-Keep release bodies with the other input fixtures, compare the complete stdout
-or stderr message with an output fixture, and use `refute_stderr` when stderr
-must be empty.
-
-For commands that open editors or external tools, create executable wrappers in
-`$BATS_TEST_TMPDIR` and pass their path through the environment:
-
-```bash
-create_editor_script() {
-  local name="$1"
-  local editor_script="$BATS_TEST_TMPDIR/editor-$name.sh"
-
-  cat >"$editor_script" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-yq -Y -i '.metadata.labels.edited = ["true"]' "$1"
-EOF
-  chmod +x "$editor_script"
-
-  printf '%s\n' "$editor_script"
-}
-
-@test "edit persists editor changes" {
-  local editor_script
-  editor_script="$(create_editor_script service)"
-
-  CLI_EDITOR="$editor_script" run_cli edit service example-service
-
-  assert_success_joined_output
-  assert_output - < "$TEST_OUTPUTS/apply.stdout"
-}
-```
-
-## Error and Cleanup Patterns
-
-Test both validation errors and external-command failures.
-The editor failure below includes a Bats-managed temporary path that changes on
-each run and cannot be normalized by the command wrapper, so it checks only the
-two stable clauses:
-
-```bash
-@test "editor failure preserves changed file" {
-  local editor_script
-  editor_script="$(create_failing_editor)"
-
-  CLI_EDITOR="$editor_script" run_cli edit service example-service
-
-  assert_failure
-  assert_stderr --partial "failed to run editor"
-  assert_stderr --partial "A copy of your changes has been stored to"
-}
-```
-
-For cleanup that talks to external systems, make the cleanup idempotent when a
-failed setup may leave partial state:
-
-```bash
-teardown_file() {
-  run_cli delete -f "'$TEST_INPUTS/**'" 2>/dev/null || true
-}
-```
-
-Use this sparingly.
-Silent cleanup can hide real teardown bugs, so keep assertions in normal cleanup
-paths when the setup is expected to complete.
-
-## Dependency Checks
-
-Fail early when the Bats container or developer machine lacks required tools:
-
-```bash
-ensure_installed() {
-  load_lib "bats-support"
-
-  for dep in "$@"; do
-    if ! command -v "$dep" >/dev/null 2>&1; then
-      fail "ERROR: $dep is not installed"
-    fi
-  done
-}
-```
-
-If a project requires a specific tool implementation, validate it directly.
-For example, Python `yq` and Go `yq` are not interchangeable.
-
-## Review Checklist
-
-- Use project-defined runners and tags instead of raw `bats` commands.
-- Use tags, not custom environment variables, to select test categories or modes.
-- Keep shared command wrappers and assertion helpers in `test/test_helper`.
-- Use `setup_suite`, `setup_file`, and `setup` for the right state lifetime.
-- Prefer Bats temporary directories over hand-rolled `mktemp` cleanup.
-- Separate stdout and stderr when testing CLI error behavior.
-- Join stderr into output for success assertions when failures need both streams.
-- Store source fixtures and complete expected messages in per-test-file fixture
-  directories.
-- Prefer exact stdout and stderr fixtures; use partial assertions only for values
-  that cannot be normalized.
-- Disable color for plain-text terminal assertions; pin the color mode for PTY
-  tests.
-- Generate unique e2e resource names for mutable external systems.
-- Compare structured YAML/JSON after normalization.
-- Keep teardown explicit; use best-effort cleanup only for partial setup failures.
+Run the repository's Bats target and the narrow changed file or tag when the
+runner supports it. Report the exact missing tool, unavailable service, or
+skipped credential-dependent suite. A raw `bats` run is not equivalent when
+the project wrapper builds the binary or provides dependencies.

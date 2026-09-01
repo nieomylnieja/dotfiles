@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$*" in
+"repo view --json nameWithOwner --jq .nameWithOwner")
+  printf 'example/private\n'
+  ;;
+"pr view 7 --json number,baseRefName,baseRefOid,headRefName,headRefOid")
+  printf '%s\n' \
+    '{"number":7,"baseRefName":"main","baseRefOid":"base1","headRefName":"feature/private","headRefOid":"head1"}'
+  ;;
+*)
+  printf 'unexpected gh command: %s\n' "$*" >&2
+  exit 2
+  ;;
+esac

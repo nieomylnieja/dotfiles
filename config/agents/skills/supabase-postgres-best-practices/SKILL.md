@@ -1,33 +1,40 @@
 ---
 name: supabase-postgres-best-practices
-description: "Postgres best practices maintained by Supabase, for Postgres running anywhere. Load this skill BEFORE writing or changing anything that lives in a Postgres database: creating or altering tables and columns (including choosing column types), schema design, migrations and declarative schema files, RLS policies and the tests that verify them, indexes, triggers, database functions, queues and scheduled jobs (pg_cron, pgmq), vector/semantic search (pgvector), and restoring dumps (pg_restore) or importing data. Also load it when diagnosing slow queries, high CPU, timeouts, EXPLAIN plans, connection exhaustion, locking, bloat, or rows visible to the wrong user or tenant. This is not just a performance guide — schema, migration, security, and SQL authoring tasks need these rules too, even for a one-column change or a single query."
+description: |
+  Apply Supabase-maintained Postgres rules to database work. This includes SQL,
+  schemas, migrations, constraints, indexes, RLS, privileges, connections,
+  locking, batching, pagination, full-text search, JSONB, and EXPLAIN work.
+  Do not use for Grafana design or unsupported operations such as pgvector,
+  pg_cron, pgmq, and pg_restore.
 license: MIT
 metadata:
   author: supabase
-  version: "1.1.1"
+  version: "1.6.0"
   organization: Supabase
-  date: January 2026
-  abstract: Comprehensive Postgres performance optimization guide for developers using Supabase and Postgres. Contains performance rules across 8 categories, prioritized by impact from critical (query performance, connection management) to incremental (advanced features). Each rule includes detailed explanations, incorrect vs. correct SQL examples, query plan analysis, and specific performance metrics to guide automated optimization and code generation.
+  date: July 2026
+  abstract: Postgres design, security, and performance rules for Supabase and other Postgres deployments.
 ---
 
 # Supabase Postgres Best Practices
 
-Comprehensive performance optimization guide for Postgres, maintained by Supabase. Contains rules across 8 categories, prioritized by impact to guide automated query optimization and schema design.
+Postgres design, security, and performance rules maintained by Supabase.
+Load only the reference files needed for the current task.
 
 ## When to Apply
 
 Reference these guidelines when:
-- Writing SQL queries or designing schemas
-- Implementing indexes or query optimization
-- Reviewing database performance issues
-- Configuring connection pooling or scaling
-- Optimizing for Postgres-specific features
-- Working with Row-Level Security (RLS)
+
+- writing SQL queries or designing schemas.
+- implementing indexes or query optimization.
+- reviewing database performance issues.
+- configuring connection pooling or scaling.
+- optimizing Postgres-specific features.
+- working with row-level security (RLS).
 
 ## Rule Categories by Priority
 
 | Priority | Category | Impact | Prefix |
-|----------|----------|--------|--------|
+| --- | --- | --- | --- |
 | 1 | Query Performance | CRITICAL | `query-` |
 | 2 | Connection Management | CRITICAL | `conn-` |
 | 3 | Security & RLS | CRITICAL | `security-` |
@@ -41,24 +48,24 @@ Reference these guidelines when:
 
 Read individual rule files for detailed explanations and SQL examples:
 
-```
+```text
 references/query-missing-indexes.md
 references/query-partial-indexes.md
 references/_sections.md
 ```
 
 Each rule file contains:
-- Brief explanation of why it matters
-- Incorrect SQL example with explanation
-- Correct SQL example with explanation
-- Optional EXPLAIN output or metrics
-- Additional context and references
-- Supabase-specific notes (when applicable)
+
+- a brief explanation of why it matters.
+- incorrect and corrected SQL examples.
+- optional `EXPLAIN` output or metrics.
+- additional context and references.
+- Supabase-specific notes when applicable.
 
 ## References
 
-- https://www.postgresql.org/docs/current/
-- https://supabase.com/docs
-- https://wiki.postgresql.org/wiki/Performance_Optimization
-- https://supabase.com/docs/guides/database/overview
-- https://supabase.com/docs/guides/auth/row-level-security
+- [PostgreSQL documentation](https://www.postgresql.org/docs/current/)
+- [Supabase documentation](https://supabase.com/docs)
+- [PostgreSQL performance optimization](https://wiki.postgresql.org/wiki/Performance_Optimization)
+- [Supabase database overview](https://supabase.com/docs/guides/database/overview)
+- [Supabase row-level security](https://supabase.com/docs/guides/auth/row-level-security)

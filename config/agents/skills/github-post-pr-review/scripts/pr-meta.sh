@@ -1,61 +1,98 @@
 #!/usr/bin/env bash
-# Prints PR metadata as JSON.
-# Usage: pr_meta=$(pr-meta.sh)
-#
-# Output fields: pr_number, commit_id, repo, review_id, comments_file
-# review_id is null when no pending review exists for the authenticated user.
-# Exits with code 1 and prints an error if no PR exists for the current branch.
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
-  cat << 'EOF'
-pr-meta.sh — Print PR metadata as JSON.
+readonly PROG="${0##*/}"
 
-Usage: pr_meta=$(pr-meta.sh)
+usage() {
+  cat <<'EOF'
+Usage: pr-meta.sh [--pr-number NUMBER]
+Print current pull request and pending-review metadata as JSON.
 
-Output fields:
-  pr_number   Pull request number
-  commit_id   HEAD commit SHA of the PR branch
-  repo        Repository in owner/repo format
-  review_id   ID of an existing pending review for the authenticated user, or null if none
-  comments_file  Path to JSON file with review comments ({path, line, body})
-Exits with code 1 if no pull request exists for the current branch.
+The result includes the exact base and head commit IDs, any pending review
+owned by the authenticated user, and all existing review comments.
 EOF
-  exit 0
-fi
+}
 
-if ! PR=$(gh pr view --json number,headRefOid 2> /dev/null); then
-  echo "error: no pull request found for the current branch" >&2
-  exit 1
-fi
+fatal() {
+  local message="$1"
+  local status="${2:-1}"
 
-PR_NUM=$(echo "${PR}" | jq -r '.number')
-COMMIT_ID=$(echo "${PR}" | jq -r '.headRefOid')
-REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
-CURRENT_USER=$(gh api user --jq '.login')
-if ! REVIEWS=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUM}/reviews" | jq -s 'add'); then
-  echo "error: failed to fetch pull request reviews" >&2
-  exit 1
-fi
+  printf '%s: ERROR: %s\n' "${PROG}" "${message}" >&2
+  exit "${status}"
+}
 
-if ! REVIEW_ID=$(echo "${REVIEWS}" | jq --arg current_user "${CURRENT_USER}" 'map(select(.state=="PENDING" and .user.login==$current_user)) | first | .id // null'); then
-  echo "error: failed to parse pull request reviews" >&2
-  exit 1
-fi
+main() {
+  local pr_number=""
 
-if ! COMMENTS=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUM}/comments" | jq -s 'add | map({path, line, body})'); then
-  echo "error: failed to fetch pull request comments" >&2
-  exit 1
-fi
-TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-COMMENTS_FILE=$(mktemp "/tmp/github-post-pr-review-${TIMESTAMP}-comments-XXXXXX.json")
-printf '%s\n' "${COMMENTS}" > "${COMMENTS_FILE}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --pr-number)
+      [[ $# -ge 2 ]] || fatal "--pr-number requires an argument" 2
+      pr_number="$2"
+      shift 2
+      ;;
+    --pr-number=*)
+      pr_number="${1#*=}"
+      shift
+      ;;
+    *) fatal "unknown argument: $1" 2 ;;
+    esac
+  done
 
-jq -n \
-  --argjson pr_number "${PR_NUM}" \
-  --arg commit_id "${COMMIT_ID}" \
-  --arg repo "${REPO}" \
-  --argjson review_id "${REVIEW_ID}" \
-  --arg comments_file "${COMMENTS_FILE}" \
-  '{ pr_number: $pr_number, commit_id: $commit_id, repo: $repo, review_id: $review_id, comments_file: $comments_file }'
+  [[ -z "${pr_number}" || "${pr_number}" =~ ^[0-9]+$ ]] ||
+    fatal "--pr-number must be numeric" 2
+
+  local -a pr_command=(gh pr view)
+  if [[ -n "${pr_number}" ]]; then
+    pr_command+=("${pr_number}")
+  fi
+  pr_command+=(--json "number,baseRefName,baseRefOid,headRefOid")
+
+  local pr_json
+  local repo
+  local current_user
+  local reviews
+  local pending_review
+  local comments
+  pr_json="$("${pr_command[@]}")"
+  pr_number="$(jq -r '.number' <<<"${pr_json}")"
+  repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"
+  current_user="$(gh api user --jq '.login')"
+  reviews="$(gh api --paginate "repos/${repo}/pulls/${pr_number}/reviews" | jq -s 'add')"
+  pending_review="$(
+    jq --arg current_user "${current_user}" \
+      'map(select(.state == "PENDING" and .user.login == $current_user))
+       | first
+       | if . == null then null else {id, commit_id} end' \
+      <<<"${reviews}"
+  )"
+  comments="$(
+    gh api --paginate "repos/${repo}/pulls/${pr_number}/comments" |
+      jq -s 'add | map({path, line, side, body, commit_id})'
+  )"
+
+  jq -n \
+    --argjson pr_number "${pr_number}" \
+    --arg repo "${repo}" \
+    --arg base_ref "$(jq -r '.baseRefName' <<<"${pr_json}")" \
+    --arg base_commit_id "$(jq -r '.baseRefOid' <<<"${pr_json}")" \
+    --arg commit_id "$(jq -r '.headRefOid' <<<"${pr_json}")" \
+    --argjson pending_review "${pending_review}" \
+    --argjson comments "${comments}" \
+    '{
+      pr_number: $pr_number,
+      repo: $repo,
+      base_ref: $base_ref,
+      base_commit_id: $base_commit_id,
+      commit_id: $commit_id,
+      review_id: ($pending_review.id // null),
+      review_commit_id: ($pending_review.commit_id // null),
+      comments: $comments
+    }'
+}
+
+main "$@"

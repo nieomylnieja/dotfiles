@@ -1,120 +1,178 @@
 #!/usr/bin/env bash
-# Gathers requirements from GitHub issue, Jira ticket, or PR description.
-# Prints JSON: { "source": "<source>", "requirements": "<text>" }
-# Exit code 0 with empty requirements means no requirements found.
-#
-# Usage: gather-requirements.sh [--pr-number N]
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
+readonly PROG="${0##*/}"
+
+usage() {
   cat <<'EOF'
-gather-requirements.sh — Collect requirements for a PR.
+Usage: gather-requirements.sh [--pr-number NUMBER]
+Collect explicit requirements linked from a pull request.
 
-Checks these sources in order, stops at the first hit:
-  1. GitHub issues linked via closing keywords in the PR body
-  2. Jira ticket ID in branch name or PR title
-  3. PR description itself (if it contains acceptance criteria)
+Sources, in priority order:
+  1. GitHub issues linked with a closing or reference keyword
+  2. A Jira key in the PR branch or title
+  3. Explicit acceptance criteria in the PR description
 
-Output (JSON):
-  source         "github-issue" | "jira" | "pr-description" | "none"
-  issue_ref      Issue/ticket identifier (e.g. "#42", "FEAT-123") or null
-  requirements   The requirements text, or empty string
-
-Usage:
-  gather-requirements.sh              # auto-detect PR from current branch
-  gather-requirements.sh --pr-number 42
+The command prints JSON with source, issue_ref, and requirements fields.
+A confirmed absence returns source "none". Source access failures are errors.
 EOF
-  exit 0
-fi
+}
 
-PR_NUMBER=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --pr-number) PR_NUMBER="$2"; shift 2 ;;
-    *) echo "Unknown arg: $1" >&2; exit 1 ;;
-  esac
-done
+fatal() {
+  local message="$1"
+  local status="${2:-1}"
 
-# Detect PR number if not provided
-if [[ -z "$PR_NUMBER" ]]; then
-  PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null || echo "")
-fi
+  printf '%s: ERROR: %s\n' "${PROG}" "${message}" >&2
+  exit "${status}"
+}
 
-if [[ -z "$PR_NUMBER" ]]; then
-  jq -n '{source:"none", issue_ref:null, requirements:""}'
-  exit 0
-fi
+main() {
+  local pr_number=""
 
-PR_JSON=$(gh pr view "$PR_NUMBER" --json title,body,headRefName)
-PR_BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
-PR_TITLE=$(echo "$PR_JSON" | jq -r '.title // ""')
-BRANCH=$(echo "$PR_JSON" | jq -r '.headRefName // ""')
-
-# 1. GitHub issue — closing keywords in PR body
-ISSUE_NUMS=$(echo "$PR_BODY" | grep -ioP '(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?|refs?)\s+#\K[0-9]+' | sort -u || true)
-
-if [[ -n "$ISSUE_NUMS" ]]; then
-  REQUIREMENTS=""
-  ISSUE_REFS=""
-  for NUM in $ISSUE_NUMS; do
-    ISSUE_JSON=$(gh issue view "$NUM" --json title,body,labels,milestone 2>/dev/null || echo "")
-    if [[ -n "$ISSUE_JSON" ]]; then
-      ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title // ""')
-      ISSUE_BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
-      REQUIREMENTS="${REQUIREMENTS}## Issue #${NUM}: ${ISSUE_TITLE}\n\n${ISSUE_BODY}\n\n"
-      ISSUE_REFS="${ISSUE_REFS}#${NUM} "
-    fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --pr-number)
+      [[ $# -ge 2 ]] || fatal "--pr-number requires an argument" 2
+      pr_number="$2"
+      shift 2
+      ;;
+    --pr-number=*)
+      pr_number="${1#*=}"
+      shift
+      ;;
+    *) fatal "unknown argument: $1" 2 ;;
+    esac
   done
-  if [[ -n "$REQUIREMENTS" ]]; then
+
+  if [[ -z "${pr_number}" ]]; then
+    local branch
+    local candidates
+    local candidate_count
+    branch="$(git branch --show-current)"
+    [[ -n "${branch}" ]] || fatal "cannot infer a pull request from a detached HEAD; use --pr-number"
+    candidates="$(gh pr list --head "${branch}" --state open --json number --limit 2)"
+    candidate_count="$(jq 'length' <<<"${candidates}")"
+    if [[ "${candidate_count}" -eq 0 ]]; then
+      jq -n '{source:"none", issue_ref:null, requirements:""}'
+      exit 0
+    fi
+    [[ "${candidate_count}" -eq 1 ]] ||
+      fatal "multiple open pull requests match branch '${branch}'; use --pr-number"
+    pr_number="$(jq -r '.[0].number' <<<"${candidates}")"
+  fi
+
+  [[ "${pr_number}" =~ ^[0-9]+$ ]] || fatal "--pr-number must be numeric" 2
+
+  local pr_json
+  local pr_body
+  local pr_title
+  local branch
+  pr_json="$(gh pr view "${pr_number}" --json title,body,headRefName)"
+  pr_body="$(jq -r '.body // ""' <<<"${pr_json}")"
+  pr_title="$(jq -r '.title // ""' <<<"${pr_json}")"
+  branch="$(jq -r '.headRefName // ""' <<<"${pr_json}")"
+
+  local issue_numbers
+  local issue_matches
+  local command_status
+  if issue_matches="$(
+    rg -io --pcre2 --replace '$1' \
+      '(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?|refs?)\s+#([0-9]+)' \
+      <<<"${pr_body}"
+  )"; then
+    if issue_numbers="$(sort -u <<<"${issue_matches}")"; then
+      :
+    else
+      command_status=$?
+      return "${command_status}"
+    fi
+  else
+    command_status=$?
+    [[ "${command_status}" -eq 1 ]] || return "${command_status}"
+    issue_numbers=""
+  fi
+
+  if [[ -n "${issue_numbers}" ]]; then
+    local requirements=""
+    local issue_refs=""
+    local issue_number
+    while IFS= read -r issue_number; do
+      local issue_json
+      local issue_title
+      local issue_body
+      local section
+      issue_json="$(gh issue view "${issue_number}" --json title,body,labels,milestone)"
+      issue_title="$(jq -r '.title // ""' <<<"${issue_json}")"
+      issue_body="$(jq -r '.body // ""' <<<"${issue_json}")"
+      printf -v section '## Issue #%s: %s\n\n%s\n\n' \
+        "${issue_number}" "${issue_title}" "${issue_body}"
+      requirements+="${section}"
+      issue_refs+="#${issue_number} "
+    done <<<"${issue_numbers}"
+
     jq -n \
       --arg source "github-issue" \
-      --arg issue_ref "${ISSUE_REFS% }" \
-      --arg requirements "$(echo -e "$REQUIREMENTS")" \
+      --arg issue_ref "${issue_refs% }" \
+      --arg requirements "${requirements%$'\n\n'}" \
       '{source:$source, issue_ref:$issue_ref, requirements:$requirements}'
     exit 0
   fi
-fi
 
-# 2. Jira ticket — pattern in branch name or PR title
-JIRA_KEY=$(echo "$BRANCH $PR_TITLE" | grep -oP '[A-Z]+-[0-9]+' | head -1 || true)
+  local jira_key
+  local jira_matches
+  if jira_matches="$(rg -o '[A-Z]+-[0-9]+' <<<"${branch} ${pr_title}")"; then
+    if jira_key="$(sed -n '1p' <<<"${jira_matches}")"; then
+      :
+    else
+      command_status=$?
+      return "${command_status}"
+    fi
+  else
+    command_status=$?
+    [[ "${command_status}" -eq 1 ]] || return "${command_status}"
+    jira_key=""
+  fi
 
-if [[ -n "$JIRA_KEY" ]]; then
-  JIRA_OUTPUT=$(jira issue view "$JIRA_KEY" 2>/dev/null || echo "")
-  if [[ -n "$JIRA_OUTPUT" ]]; then
+  if [[ -n "${jira_key}" ]]; then
+    command -v jira >/dev/null 2>&1 ||
+      fatal "PR references ${jira_key}, but the jira command is unavailable"
+    local jira_output
+    jira_output="$(jira issue view "${jira_key}")"
     jq -n \
       --arg source "jira" \
-      --arg issue_ref "$JIRA_KEY" \
-      --arg requirements "$JIRA_OUTPUT" \
+      --arg issue_ref "${jira_key}" \
+      --arg requirements "${jira_output}" \
       '{source:$source, issue_ref:$issue_ref, requirements:$requirements}'
     exit 0
   fi
-fi
 
-# 3. PR description — check if it has acceptance criteria
-# Look for checkboxes, "acceptance criteria", numbered lists, given/when/then
-HAS_CRITERIA=$(echo "$PR_BODY" | grep -ciP '(acceptance.criter|given\s.+when\s.+then|\- \[[ x]\]|^\d+\.\s)' || echo "0")
+  local criteria_count
+  if criteria_count="$(
+    rg -ci --pcre2 \
+      '(acceptance.criter|given\s.+when\s.+then|\- \[[ x]\]|^[0-9]+\.\s)' \
+      <<<"${pr_body}"
+  )"; then
+    :
+  else
+    command_status=$?
+    [[ "${command_status}" -eq 1 ]] || return "${command_status}"
+    criteria_count=0
+  fi
 
-if [[ "$HAS_CRITERIA" -gt 0 ]]; then
-  jq -n \
-    --arg source "pr-description" \
-    --arg issue_ref "PR #${PR_NUMBER}" \
-    --arg requirements "## PR #${PR_NUMBER}: ${PR_TITLE}\n\n${PR_BODY}" \
-    '{source:$source, issue_ref:$issue_ref, requirements:$requirements}'
-  exit 0
-fi
+  if [[ "${criteria_count}" -gt 0 ]]; then
+    jq -n \
+      --arg source "pr-description" \
+      --arg issue_ref "PR #${pr_number}" \
+      --arg requirements "## PR #${pr_number}: ${pr_title}\n\n${pr_body}" \
+      '{source:$source, issue_ref:$issue_ref, requirements:$requirements}'
+    exit 0
+  fi
 
-# 4. If PR body is non-trivial (>100 chars), use it as a fallback
-if [[ ${#PR_BODY} -gt 100 ]]; then
-  jq -n \
-    --arg source "pr-description" \
-    --arg issue_ref "PR #${PR_NUMBER}" \
-    --arg requirements "## PR #${PR_NUMBER}: ${PR_TITLE}\n\n${PR_BODY}" \
-    '{source:$source, issue_ref:$issue_ref, requirements:$requirements}'
-  exit 0
-fi
+  jq -n '{source:"none", issue_ref:null, requirements:""}'
+}
 
-# Nothing found
-jq -n \
-  --arg jira_key "${JIRA_KEY:-}" \
-  '{source:"none", issue_ref:null, requirements:"", jira_attempted:($jira_key | length > 0)}'
+main "$@"

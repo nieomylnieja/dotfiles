@@ -28,6 +28,8 @@ if the reader has to decode it like a paper.
 ## Verify Before Writing
 
 - Check the code, commands, config, interface, ticket, or other source material first.
+- Search for an existing source of truth before adding a new document.
+- Check whether the target file or section is generated. Edit its source instead.
 - Do not invent behavior, defaults, examples, or rationale.
 - If something cannot be verified, say what still needs checking.
 
@@ -55,6 +57,7 @@ if the reader has to decode it like a paper.
 - Use examples when they remove ambiguity.
 - Keep them minimal and accurate.
 - Ensure commands, identifiers, paths, and outputs match the current system.
+- Run commands before presenting them as verified procedures.
 - If an example is schematic rather than exact, label it clearly.
 
 ## By Document Type
@@ -75,6 +78,8 @@ if the reader has to decode it like a paper.
 ## Maintenance
 
 - Prefer stable behavior over transient implementation detail.
+- Link to the authoritative source instead of copying facts that change often.
+- Remove duplicate explanations or name one canonical document and link to it.
 - Avoid version-sensitive claims unless you include the scope.
 - Delete stale TODOs and outdated transitional notes
   instead of writing around them.

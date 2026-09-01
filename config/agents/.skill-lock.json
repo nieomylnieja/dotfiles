@@ -42,9 +42,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/vercel-labs/agent-browser.git",
       "skillPath": "skills/agent-browser/SKILL.md",
-      "skillFolderHash": "037e8078db4b20b4aa25c04f21c6de7d335ec449",
+      "skillFolderHash": "82def67855a0d2aad7794207951820fa5422fdb0",
       "installedAt": "2026-05-01T16:55:09.856Z",
-      "updatedAt": "2026-07-23T08:37:36.813Z"
+      "updatedAt": "2026-08-31T15:43:52.433Z"
     },
     "improve-codebase-architecture": {
       "source": "mattpocock/skills",
@@ -60,9 +60,9 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/github/awesome-copilot.git",
       "skillPath": "skills/excalidraw-diagram-generator/SKILL.md",
-      "skillFolderHash": "508522bb5a9950bbbac3c3a680bdc2fed717a5d8",
+      "skillFolderHash": "dd3f9353c4106a8929217b399865db3952f8c13f",
       "installedAt": "2026-06-22T11:58:48.704Z",
-      "updatedAt": "2026-06-22T11:58:48.704Z"
+      "updatedAt": "2026-08-31T15:43:51.742Z"
     },
     "grafana-dashboards": {
       "source": "wshobson/agents",
@@ -72,15 +72,6 @@
       "skillFolderHash": "2d667b90e0be300db3dd576ffe40451b8c2e810e",
       "installedAt": "2026-07-03T09:27:46.279Z",
       "updatedAt": "2026-07-03T09:27:46.279Z"
-    },
-    "notebooklm": {
-      "source": "teng-lin/notebooklm-py",
-      "sourceType": "github",
-      "sourceUrl": "https://github.com/teng-lin/notebooklm-py.git",
-      "skillPath": "SKILL.md",
-      "skillFolderHash": "3bb0c1850ac4e85378a831581a0cf1e82fa80272",
-      "installedAt": "2026-07-25T11:15:59.576Z",
-      "updatedAt": "2026-08-19T11:45:28.592Z"
     },
     "yt-dlp": {
       "source": "lwmxiaobei/yt-dlp-skill",

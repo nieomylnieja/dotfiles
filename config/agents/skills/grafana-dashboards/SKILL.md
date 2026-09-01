@@ -1,382 +1,74 @@
 ---
 name: grafana-dashboards
-description: Create and manage production Grafana dashboards for real-time visualization of system and application metrics. Use when building monitoring dashboards, visualizing metrics, or creating operational observability interfaces.
+description: |
+  Create or revise Grafana dashboard models and provisioning files when the
+  user asks for Grafana panels, dashboards, or operational metric views. Do not
+  use for database schema work, generic charts, or alerting resources that do
+  not belong to a dashboard.
 ---
 
-# Grafana Dashboards
+# Grafana dashboards
 
-Create and manage production-ready Grafana dashboards for comprehensive system observability.
+Build the smallest dashboard that answers the operator's questions.
+Do not invent metrics, labels, data-source identifiers, or alert thresholds.
 
-## Purpose
+## Establish the contract
 
-Design effective Grafana dashboards for monitoring applications, infrastructure, and business metrics.
+Before editing or generating a model:
 
-## When to Use
+1. Identify the target Grafana version.
+2. Identify the input form: exported dashboard JSON, API envelope,
+   provisioning configuration, Grafonnet, Terraform, or another project model.
+3. Read the repository's existing dashboards, metric definitions, naming
+   conventions, and deployment path.
+4. List the operational questions, target audience, data sources, variables,
+   refresh interval, and expected time range.
+5. Confirm every metric and label from a queryable source or repository code.
 
-- Visualize Prometheus metrics
-- Create custom dashboards
-- Implement SLO dashboards
-- Monitor infrastructure
-- Track business KPIs
+Do not copy legacy `graph`, `yaxes`, or panel-alert models into a current
+dashboard. Use the target version's supported panel and unified-alerting models.
 
-## Dashboard Design Principles
+## Design
 
-### 1. Hierarchy of Information
+Use a clear information order:
 
-```
-┌─────────────────────────────────────┐
-│  Critical Metrics (Big Numbers)     │
-├─────────────────────────────────────┤
-│  Key Trends (Time Series)           │
-├─────────────────────────────────────┤
-│  Detailed Metrics (Tables/Heatmaps) │
-└─────────────────────────────────────┘
-```
+1. current health and high-cost failures;
+2. rate, errors, and latency trends for services;
+3. utilization, saturation, and errors for resources;
+4. drill-down panels and diagnostic dimensions.
 
-### 2. RED Method (Services)
+Apply RED or USE only when it fits the monitored system. Show units,
+descriptions, legends, and no-data behavior. Use thresholds only when an
+operational objective or verified convention defines them.
 
-- **Rate** - Requests per second
-- **Errors** - Error rate
-- **Duration** - Latency/response time
+Keep variables few and bounded. Avoid high-cardinality defaults and queries
+that multiply series without a clear diagnostic use. Match histogram buckets,
+counter rates, numerator and denominator labels, and aggregation windows.
 
-### 3. USE Method (Resources)
+## Edit safely
 
-- **Utilization** - % time resource is busy
-- **Saturation** - Queue length/wait time
-- **Errors** - Error count
+- Preserve dashboard, panel, library-panel, and data-source UIDs.
+- Preserve `refId`, `schemaVersion`, plugin versions, field configuration,
+  transformations, links, variables, and unknown fields unless the task changes
+  them.
+- Preserve the repository's API envelope or provisioning wrapper.
+- Make the smallest structural edit. Do not regenerate unrelated panel IDs or
+  reorder the whole model.
+- Keep secrets, credentials, and environment-specific URLs out of tracked JSON.
+- Do not import a dashboard, call a Grafana API, apply Terraform, restart a
+  service, or write provisioning paths unless the user explicitly requests that
+  external mutation.
 
-## Dashboard Structure
+## Verify
 
-### API Monitoring Dashboard
+1. Parse changed JSON, YAML, HCL, or source files with the repository tools.
+2. Compare preserved identifiers and unknown fields with the input model.
+3. Validate queries against the target data source when safe access exists.
+4. Check representative no-data, partial-data, and high-cardinality cases.
+5. Render or import into a compatible non-production Grafana only when the user
+   authorizes that write.
+6. Report the target Grafana version and any query or rendering check that did
+   not run.
 
-```json
-{
-  "dashboard": {
-    "title": "API Monitoring",
-    "tags": ["api", "production"],
-    "timezone": "browser",
-    "refresh": "30s",
-    "panels": [
-      {
-        "title": "Request Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "sum(rate(http_requests_total[5m])) by (service)",
-            "legendFormat": "{{service}}"
-          }
-        ],
-        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
-      },
-      {
-        "title": "Error Rate %",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))) * 100",
-            "legendFormat": "Error Rate"
-          }
-        ],
-        "alert": {
-          "conditions": [
-            {
-              "evaluator": { "params": [5], "type": "gt" },
-              "operator": { "type": "and" },
-              "query": { "params": ["A", "5m", "now"] },
-              "type": "query"
-            }
-          ]
-        },
-        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
-      },
-      {
-        "title": "P95 Latency",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))",
-            "legendFormat": "{{service}}"
-          }
-        ],
-        "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 }
-      }
-    ]
-  }
-}
-```
-
-**Reference:** See `assets/api-dashboard.json`
-
-## Panel Types
-
-### 1. Stat Panel (Single Value)
-
-```json
-{
-  "type": "stat",
-  "title": "Total Requests",
-  "targets": [
-    {
-      "expr": "sum(http_requests_total)"
-    }
-  ],
-  "options": {
-    "reduceOptions": {
-      "values": false,
-      "calcs": ["lastNotNull"]
-    },
-    "orientation": "auto",
-    "textMode": "auto",
-    "colorMode": "value"
-  },
-  "fieldConfig": {
-    "defaults": {
-      "thresholds": {
-        "mode": "absolute",
-        "steps": [
-          { "value": 0, "color": "green" },
-          { "value": 80, "color": "yellow" },
-          { "value": 90, "color": "red" }
-        ]
-      }
-    }
-  }
-}
-```
-
-### 2. Time Series Graph
-
-```json
-{
-  "type": "graph",
-  "title": "CPU Usage",
-  "targets": [
-    {
-      "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
-    }
-  ],
-  "yaxes": [
-    { "format": "percent", "max": 100, "min": 0 },
-    { "format": "short" }
-  ]
-}
-```
-
-### 3. Table Panel
-
-```json
-{
-  "type": "table",
-  "title": "Service Status",
-  "targets": [
-    {
-      "expr": "up",
-      "format": "table",
-      "instant": true
-    }
-  ],
-  "transformations": [
-    {
-      "id": "organize",
-      "options": {
-        "excludeByName": { "Time": true },
-        "indexByName": {},
-        "renameByName": {
-          "instance": "Instance",
-          "job": "Service",
-          "Value": "Status"
-        }
-      }
-    }
-  ]
-}
-```
-
-### 4. Heatmap
-
-```json
-{
-  "type": "heatmap",
-  "title": "Latency Heatmap",
-  "targets": [
-    {
-      "expr": "sum(rate(http_request_duration_seconds_bucket[5m])) by (le)",
-      "format": "heatmap"
-    }
-  ],
-  "dataFormat": "tsbuckets",
-  "yAxis": {
-    "format": "s"
-  }
-}
-```
-
-## Variables
-
-### Query Variables
-
-```json
-{
-  "templating": {
-    "list": [
-      {
-        "name": "namespace",
-        "type": "query",
-        "datasource": "Prometheus",
-        "query": "label_values(kube_pod_info, namespace)",
-        "refresh": 1,
-        "multi": false
-      },
-      {
-        "name": "service",
-        "type": "query",
-        "datasource": "Prometheus",
-        "query": "label_values(kube_service_info{namespace=\"$namespace\"}, service)",
-        "refresh": 1,
-        "multi": true
-      }
-    ]
-  }
-}
-```
-
-### Use Variables in Queries
-
-```
-sum(rate(http_requests_total{namespace="$namespace", service=~"$service"}[5m]))
-```
-
-## Alerts in Dashboards
-
-```json
-{
-  "alert": {
-    "name": "High Error Rate",
-    "conditions": [
-      {
-        "evaluator": {
-          "params": [5],
-          "type": "gt"
-        },
-        "operator": { "type": "and" },
-        "query": {
-          "params": ["A", "5m", "now"]
-        },
-        "reducer": { "type": "avg" },
-        "type": "query"
-      }
-    ],
-    "executionErrorState": "alerting",
-    "for": "5m",
-    "frequency": "1m",
-    "message": "Error rate is above 5%",
-    "noDataState": "no_data",
-    "notifications": [{ "uid": "slack-channel" }]
-  }
-}
-```
-
-## Dashboard Provisioning
-
-**dashboards.yml:**
-
-```yaml
-apiVersion: 1
-
-providers:
-  - name: "default"
-    orgId: 1
-    folder: "General"
-    type: file
-    disableDeletion: false
-    updateIntervalSeconds: 10
-    allowUiUpdates: true
-    options:
-      path: /etc/grafana/dashboards
-```
-
-## Common Dashboard Patterns
-
-### Infrastructure Dashboard
-
-**Key Panels:**
-
-- CPU utilization per node
-- Memory usage per node
-- Disk I/O
-- Network traffic
-- Pod count by namespace
-- Node status
-
-**Reference:** See `assets/infrastructure-dashboard.json`
-
-### Database Dashboard
-
-**Key Panels:**
-
-- Queries per second
-- Connection pool usage
-- Query latency (P50, P95, P99)
-- Active connections
-- Database size
-- Replication lag
-- Slow queries
-
-**Reference:** See `assets/database-dashboard.json`
-
-### Application Dashboard
-
-**Key Panels:**
-
-- Request rate
-- Error rate
-- Response time (percentiles)
-- Active users/sessions
-- Cache hit rate
-- Queue length
-
-## Best Practices
-
-1. **Start with templates** (Grafana community dashboards)
-2. **Use consistent naming** for panels and variables
-3. **Group related metrics** in rows
-4. **Set appropriate time ranges** (default: Last 6 hours)
-5. **Use variables** for flexibility
-6. **Add panel descriptions** for context
-7. **Configure units** correctly
-8. **Set meaningful thresholds** for colors
-9. **Use consistent colors** across dashboards
-10. **Test with different time ranges**
-
-## Dashboard as Code
-
-### Terraform Provisioning
-
-```hcl
-resource "grafana_dashboard" "api_monitoring" {
-  config_json = file("${path.module}/dashboards/api-monitoring.json")
-  folder      = grafana_folder.monitoring.id
-}
-
-resource "grafana_folder" "monitoring" {
-  title = "Production Monitoring"
-}
-```
-
-### Ansible Provisioning
-
-```yaml
-- name: Deploy Grafana dashboards
-  copy:
-    src: "{{ item }}"
-    dest: /etc/grafana/dashboards/
-  with_fileglob:
-    - "dashboards/*.json"
-  notify: restart grafana
-```
-
-
-## Related Skills
-
-- `prometheus-configuration` - For metric collection
-- `slo-implementation` - For SLO dashboards
+A valid JSON document does not prove that Grafana accepts the model or that its
+queries return useful data.

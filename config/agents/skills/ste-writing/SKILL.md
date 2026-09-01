@@ -63,8 +63,10 @@ Put safety text directly before the step that it protects.
 ## Review prose
 
 For a review-only task, do not rewrite the source.
-Report each issue in a `Rule | Original | Simplified` table.
-Then identify text that you intentionally left unchanged and give the reason.
+Group repeated issues by rule. Show a representative
+`Rule | Original | Simplified` row for each pattern, then list affected
+locations. Report every high-cost ambiguity separately. Identify text that you
+left unchanged when the reason matters.
 
 ## Run the check
 

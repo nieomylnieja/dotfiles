@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "${1:-}" == "api" ]] || {
+  printf 'unexpected gh command: %s\n' "$*" >&2
+  exit 2
+}
+shift
+
+method="GET"
+endpoint=""
+input=""
+paginate=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --method)
+    method="$2"
+    shift 2
+    ;;
+  --input)
+    input="$2"
+    shift 2
+    ;;
+  --paginate)
+    paginate=true
+    shift
+    ;;
+  repos/*)
+    endpoint="$1"
+    shift
+    ;;
+  user)
+    endpoint="$1"
+    shift
+    ;;
+  *) shift ;;
+  esac
+done
+
+next_count() {
+  local name="$1"
+  local counter_file="${GH_STATE_DIR}/${name}.count"
+  local count=0
+
+  if [[ -f "${counter_file}" ]]; then
+    IFS= read -r count <"${counter_file}"
+  fi
+  count=$((count + 1))
+  printf '%s\n' "${count}" >"${counter_file}"
+  printf '%s\n' "${count}"
+}
+
+pending_review() {
+  local id="$1"
+  local commit="$2"
+  local body="${3:-<!-- github-post-pr-review -->}"
+  local login="${4:-current-user}"
+
+  jq -cn \
+    --argjson id "${id}" \
+    --arg commit_id "${commit}" \
+    --arg body "${body}" \
+    --arg login "${login}" \
+    '{id:$id,state:"PENDING",commit_id:$commit_id,body:$body,user:{login:$login}}'
+}
+
+review_from_post_payload() {
+  local id="$1"
+  local state="$2"
+  local commit="$3"
+  local login="${4:-current-user}"
+
+  jq -c \
+    --argjson id "${id}" \
+    --arg state "${state}" \
+    --arg commit_id "${commit}" \
+    --arg login "${login}" \
+    '. + {id:$id,state:$state,commit_id:$commit_id,user:{login:$login}}' \
+    "${GH_PAYLOAD}"
+}
+
+review_from_put_payload() {
+  local state="$1"
+  local body
+
+  body="$(jq -r '.body' "${GH_PAYLOAD}")"
+  jq -cn \
+    --arg state "${state}" \
+    --arg body "${body}" \
+    '{id:44,state:$state,commit_id:"head1",body:$body,user:{login:"current-user"}}'
+}
+
+printf '%s %s\n' "${method}" "${endpoint}" >>"${GH_REQUEST_LOG}"
+
+case "${method}:${endpoint}" in
+GET:user)
+  printf '%s\n' '{"login":"current-user"}'
+  ;;
+GET:repos/o/r/pulls/1)
+  pr_read="$(next_count pr)"
+  base="base1"
+  head="head1"
+  if [[ "${GH_SCENARIO:-default}" == "head-mutates" && "${pr_read}" -ge 2 ]]; then
+    head="head2"
+  fi
+  if [[ "${GH_SCENARIO:-default}" == "base-mutates" && "${pr_read}" -ge 2 ]]; then
+    base="base2"
+  fi
+  jq -cn \
+    --arg base "${base}" \
+    --arg head "${head}" \
+    '{base:{sha:$base},head:{sha:$head}}'
+  ;;
+GET:repos/o/r/pulls/1/files)
+  "${paginate}" || exit 2
+  if [[ "${GH_SCENARIO:-default}" == "second-page" ]]; then
+    printf '%s\n' \
+      '[{"filename":"first.go","patch":"@@ -1 +1 @@\n-old\n+new"}]' \
+      '[{"filename":"later.go","patch":"@@ -0,0 +10 @@\n+later"}]'
+  else
+    printf '%s\n' \
+      '[{"filename":"a.go","patch":"@@ -1,2 +1,3 @@\n context\n+added\n context"}]'
+  fi
+  ;;
+GET:repos/o/r/pulls/1/reviews/44)
+  next_count review44 >/dev/null
+  if [[ -f "${GH_STATE_DIR}/put-persisted" ]]; then
+    if [[ "${GH_SCENARIO:-default}" == "put-non-pending" ]]; then
+      review_from_put_payload APPROVED
+    else
+      review_from_put_payload PENDING
+    fi
+  elif [[ "${GH_SCENARIO:-default}" == "review-wrong-commit" ]]; then
+    pending_review 44 old-head
+  else
+    pending_review 44 head1
+  fi
+  ;;
+GET:repos/o/r/pulls/1/reviews/99)
+  review_from_post_payload 99 PENDING head1
+  ;;
+GET:repos/o/r/pulls/1/reviews)
+  "${paginate}" || exit 2
+  case "${GH_SCENARIO:-default}" in
+  post-malformed-response | post-write-fails-persisted)
+    review_from_post_payload 99 PENDING head1 | jq -s '.'
+    ;;
+  post-other-user-only)
+    review_from_post_payload 88 PENDING head1 other-user | jq -s '.'
+    ;;
+  post-current-and-other-users)
+    other="$(review_from_post_payload 88 PENDING head1 other-user)"
+    current="$(review_from_post_payload 99 PENDING head1 current-user)"
+    jq -cn --argjson other "${other}" --argjson current "${current}" \
+      '[$other,$current]'
+    ;;
+  post-ambiguous-response | post-write-fails-ambiguous)
+    first="$(review_from_post_payload 98 PENDING head1)"
+    second="$(review_from_post_payload 99 PENDING head1)"
+    jq -cn --argjson first "${first}" --argjson second "${second}" \
+      '[$first,$second]'
+    ;;
+  *) printf '[]\n' ;;
+  esac
+  ;;
+POST:repos/o/r/pulls/1/reviews)
+  printf '%s\n' "${method}" >>"${GH_LOG}"
+  cp -- "${input}" "${GH_PAYLOAD}"
+  case "${GH_SCENARIO:-default}" in
+  post-malformed-response | post-ambiguous-response | post-other-user-only | post-current-and-other-users)
+    printf '{malformed\n'
+    ;;
+  post-write-fails-persisted | post-write-fails-ambiguous | post-write-fails-unconfirmed)
+    printf 'gh: simulated POST transport failure\n' >&2
+    exit 54
+    ;;
+  post-mismatched-response)
+    printf '%s\n' \
+      '{"id":99,"state":"PENDING","commit_id":"old-head","user":{"login":"current-user"}}'
+    ;;
+  *)
+    printf '%s\n' \
+      '{"id":99,"state":"PENDING","commit_id":"head1","user":{"login":"current-user"}}'
+    ;;
+  esac
+  ;;
+PUT:repos/o/r/pulls/1/reviews/44)
+  printf '%s\n' "${method}" >>"${GH_LOG}"
+  cp -- "${input}" "${GH_PAYLOAD}"
+  case "${GH_SCENARIO:-default}" in
+  put-write-fails-unconfirmed)
+    printf 'gh: simulated PUT transport failure\n' >&2
+    exit 55
+    ;;
+  put-write-fails-persisted)
+    : >"${GH_STATE_DIR}/put-persisted"
+    printf 'gh: simulated PUT transport failure\n' >&2
+    exit 55
+    ;;
+  put-mismatched-response)
+    : >"${GH_STATE_DIR}/put-persisted"
+    printf '%s\n' \
+      '{"id":99,"state":"PENDING","commit_id":"old-head","user":{"login":"current-user"}}'
+    ;;
+  put-non-pending)
+    : >"${GH_STATE_DIR}/put-persisted"
+    printf '%s\n' \
+      '{"id":44,"state":"APPROVED","commit_id":"head1","user":{"login":"current-user"}}'
+    ;;
+  *)
+    : >"${GH_STATE_DIR}/put-persisted"
+    printf '%s\n' \
+      '{"id":44,"state":"PENDING","commit_id":"head1","user":{"login":"current-user"}}'
+    ;;
+  esac
+  ;;
+*)
+  printf 'unexpected gh api request: %s %s\n' "${method}" "${endpoint}" >&2
+  exit 2
+  ;;
+esac

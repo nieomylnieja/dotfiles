@@ -1,99 +1,112 @@
 #!/usr/bin/env bash
-# Gathers all information needed to create a git commit
-
 set -euo pipefail
 
-if [[ "${1:-}" == "--help" ]]; then
-  cat << 'EOF'
-get-commit-info.sh — Gather all information needed to create a git commit.
+readonly PROG="${0##*/}"
+temporary_dir=""
 
+usage() {
+  cat <<'EOF'
 Usage: get-commit-info.sh
+Print bounded working-tree and commit-style metadata as JSON.
 
-Outputs a JSON object to stdout with:
-  current_branch        Current git branch name
-  has_staged            Whether there are staged changes
-  has_unstaged          Whether there are unstaged changes
-  nothing_to_commit     Whether working tree is clean
-  staged_files          Array of {status, path} objects for staged files
-  unstaged_files        Array of {status, path} objects for unstaged files
-  staged_stat           Summary line from git diff --cached --stat
-  staged_diff           Full diff of staged changes
-  recent_commits        Array of {hash, message} for last 5 commits (style reference)
-  issue_number          Issue/ticket number extracted from branch name, or null
+The command does not modify the index or working tree.
 EOF
-  exit 0
+}
+
+fatal() {
+  printf '%s: ERROR: %s\n' "${PROG}" "$1" >&2
+  exit "${2:-1}"
+}
+
+cleanup() {
+  if [[ -n "${temporary_dir}" && -d "${temporary_dir}" ]]; then
+    rm -rf -- "${temporary_dir}"
+  fi
+}
+
+name_status_json() {
+  jq -Rs '
+    def records:
+      if length == 0 then []
+      else .[0] as $status
+        | if ($status | test("^[RC][0-9]*$")) then
+            [{status: $status, old_path: .[1], path: .[2]}]
+            + (.[3:] | records)
+          else
+            [{status: $status, path: .[1]}]
+            + (.[2:] | records)
+          end
+      end;
+    split("\u0000")
+    | if last == "" then .[:-1] else . end
+    | records
+  ' "$1"
+}
+
+if [[ $# -gt 0 ]]; then
+  if [[ $# -eq 1 && "$1" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+  fatal "unknown argument: $1" 2
 fi
 
-echo "Gathering commit information..." >&2
+git rev-parse --git-dir >/dev/null
+current_branch="$(git branch --show-current)"
+[[ -n "${current_branch}" ]] || fatal "detached HEAD has no commit branch"
 
-# Get current branch
-current_branch=$(git branch --show-current)
-if [[ -z "${current_branch}" ]]; then
-  echo "Error: Not on a branch (detached HEAD?)" >&2
-  exit 1
-fi
-echo "Current branch: ${current_branch}" >&2
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+temporary_dir="$(mktemp -d "/tmp/get-commit-info-${timestamp}-XXXXXX")"
+trap cleanup EXIT
 
-# Parse staged files
-staged_files_json="[]"
-has_staged=false
-staged_raw=$(git diff --cached --name-status 2> /dev/null || true)
-if [[ -n "${staged_raw}" ]]; then
-  has_staged=true
-  staged_files_json=$(echo "${staged_raw}" | awk '{print "{\"status\":\""$1"\",\"path\":\""$2"\"}"}' | jq -s '.')
-fi
-
-# Parse unstaged files
-unstaged_files_json="[]"
-has_unstaged=false
-unstaged_raw=$(git diff --name-status 2> /dev/null || true)
-if [[ -n "${unstaged_raw}" ]]; then
-  has_unstaged=true
-  unstaged_files_json=$(echo "${unstaged_raw}" | awk '{print "{\"status\":\""$1"\",\"path\":\""$2"\"}"}' | jq -s '.')
+git diff --cached --name-status -z >"${temporary_dir}/staged"
+git diff --name-status -z >"${temporary_dir}/unstaged"
+git ls-files --others --exclude-standard -z >"${temporary_dir}/untracked"
+git diff --cached --stat >"${temporary_dir}/staged-stat"
+if git rev-parse --verify --quiet HEAD >/dev/null; then
+  git log -5 -z --format='%h%x00%s' >"${temporary_dir}/recent"
+else
+  : >"${temporary_dir}/recent"
 fi
 
-# Check for untracked files too (include in unstaged count)
-untracked_raw=$(git ls-files --others --exclude-standard 2> /dev/null || true)
-if [[ -n "${untracked_raw}" ]]; then
-  has_unstaged=true
-  untracked_json=$(echo "${untracked_raw}" | jq -R '{"status":"?","path":.}' | jq -s '.')
-  unstaged_files_json=$(jq -s '.[0] + .[1]' <(echo "${unstaged_files_json}") <(echo "${untracked_json}"))
+staged_files_json="$(name_status_json "${temporary_dir}/staged")"
+unstaged_files_json="$(name_status_json "${temporary_dir}/unstaged")"
+untracked_files_json="$(
+  jq -Rs '
+    split("\u0000")
+    | if last == "" then .[:-1] else . end
+    | map({status: "?", path: .})
+  ' "${temporary_dir}/untracked"
+)"
+unstaged_files_json="$(
+  jq -n \
+    --argjson tracked "${unstaged_files_json}" \
+    --argjson untracked "${untracked_files_json}" \
+    '$tracked + $untracked'
+)"
+recent_commits_json="$(
+  jq -Rs '
+    split("\u0000")
+    | if last == "" then .[:-1] else . end
+    | [range(0; length; 2) as $index
+       | {hash: .[$index], message: .[$index + 1]}]
+  ' "${temporary_dir}/recent"
+)"
+
+has_staged="$(jq 'length > 0' <<<"${staged_files_json}")"
+has_unstaged="$(jq 'length > 0' <<<"${unstaged_files_json}")"
+if [[ "${has_staged}" == "false" && "${has_unstaged}" == "false" ]]; then
+  nothing_to_commit="true"
+else
+  nothing_to_commit="false"
 fi
 
-# Nothing to commit?
-nothing_to_commit=false
-if ! ${has_staged} && ! ${has_unstaged}; then
-  nothing_to_commit=true
-fi
-
-# Staged stat summary
-staged_stat=""
-if ${has_staged}; then
-  staged_stat=$(git diff --cached --stat 2> /dev/null | tail -1 || true)
-fi
-
-# Full staged diff (for message generation) — written to temp file to avoid ARG_MAX
-staged_diff_file=$(mktemp "/tmp/staged-diff-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")
-trap 'rm -f "${staged_diff_file}"' EXIT
-if ${has_staged}; then
-  git diff --cached 2> /dev/null > "${staged_diff_file}" || true
-fi
-
-# Recent commits for style reference
-echo "Fetching recent commits..." >&2
-recent_commits_json=$(git log --oneline -5 --format='{"hash":"%h","message":"%s"}' 2> /dev/null | jq -s '.' || echo '[]')
-
-# Extract issue number from branch name
-# Supports: feature-123-desc, fix/456-desc, PROJ-789-desc, ABC-42
 issue_number=""
 if [[ "${current_branch}" =~ ([A-Z]+-[0-9]+) ]]; then
   issue_number="${BASH_REMATCH[1]}"
-elif [[ "${current_branch}" =~ [^0-9]([0-9]+)[^0-9] ]] || [[ "${current_branch}" =~ ^([0-9]+)[-_] ]]; then
-  issue_number="${BASH_REMATCH[1]}"
+elif [[ "${current_branch}" =~ (^|[^0-9])([0-9]+)([^0-9]|$) ]]; then
+  issue_number="${BASH_REMATCH[2]}"
 fi
-
-echo "" >&2
-echo "Done!" >&2
 
 jq -n \
   --arg current_branch "${current_branch}" \
@@ -102,8 +115,7 @@ jq -n \
   --argjson nothing_to_commit "${nothing_to_commit}" \
   --argjson staged_files "${staged_files_json}" \
   --argjson unstaged_files "${unstaged_files_json}" \
-  --arg staged_stat "${staged_stat}" \
-  --rawfile staged_diff "${staged_diff_file}" \
+  --rawfile staged_stat "${temporary_dir}/staged-stat" \
   --argjson recent_commits "${recent_commits_json}" \
   --arg issue_number "${issue_number}" \
   '{
@@ -113,8 +125,7 @@ jq -n \
     nothing_to_commit: $nothing_to_commit,
     staged_files: $staged_files,
     unstaged_files: $unstaged_files,
-    staged_stat: $staged_stat,
-    staged_diff: $staged_diff,
+    staged_stat: ($staged_stat | rtrimstr("\n")),
     recent_commits: $recent_commits,
     issue_number: ($issue_number | if . == "" then null else . end)
   }'
