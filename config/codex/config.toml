@@ -1,10 +1,10 @@
 #:schema https://developers.openai.com/codex/config-schema.json
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model = "gpt-6-astra"
+model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 approvals_reviewer = "guardian_subagent"
 model_auto_compact_token_limit = 250000
-plan_mode_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "max"
 model_reasoning_summary = "none"
 model_verbosity = "low"
 web_search = "cached"

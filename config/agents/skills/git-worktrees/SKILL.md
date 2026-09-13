@@ -13,6 +13,11 @@ Honor a user-supplied worktree path instead of creating another checkout.
 
 ## Setup
 
+Choose a plain, descriptive `BRANCH` name with no slash (`/`). Use one path
+segment, such as `fix-login-timeout`, not a categorized name such as
+`feat/login-timeout`. The branch name also becomes the directory name directly
+under `.worktrees/`.
+
 Run the helper from the repository root:
 
 ```sh
@@ -23,7 +28,7 @@ Use `--base BRANCH` only when creating a new branch from a non-default base.
 Use `--commit COMMIT LABEL` for an exact detached review checkout after the
 object is available locally. `LABEL` names the path under `.worktrees/`; include
 the pull request number and a short commit ID so a later head does not collide
-with an older review checkout.
+with an older review checkout. Use one path segment with no slash for `LABEL`.
 Do not copy ignored or untracked hidden files into a worktree. If the task needs
 local configuration, ask for the exact non-secret source and destination as a
 separate operation.

@@ -111,6 +111,7 @@ in
     codex-acp
     ddcutil
     delta
+    dig
     diffnav
     direnv
     # Discord wrapped to force XWayland for keybinding support (PTT, etc.)
