@@ -1,1 +1,1 @@
-/nix/store/4869hhi3ppzhbz489qhsq16xmgmcskrw-home-manager-files/.claude/skills/excalidraw-diagram-generator/scripts/add-arrow.py
+/nix/store/ncbzihbjqsmnm8y43jixv8bzlhndp9rv-home-manager-files/.claude/skills/excalidraw-diagram-generator/scripts/add-arrow.py

@@ -1,1 +1,1 @@
-/nix/store/4869hhi3ppzhbz489qhsq16xmgmcskrw-home-manager-files/.claude/skills/yt-dlp/scripts/test_yt_dlp.py
+/nix/store/ncbzihbjqsmnm8y43jixv8bzlhndp9rv-home-manager-files/.claude/skills/yt-dlp/scripts/test_yt_dlp.py
