@@ -1,15 +1,19 @@
 ---
 name: git-commit
 description: |
-  Create a git commit when the user asks to commit changes or invokes `/commit`.
+  Create a git commit when the user asks to commit changes, invokes `/commit`,
+  or requests a workflow that requires task commits, such as PR creation.
   Inspect and preserve the user's staging and repository message conventions.
 allowed-tools: Bash(*scripts/get-commit-info.sh*) Bash(git add *) Bash(git commit *) Bash(git diff --cached*)
 ---
 
 # Git commit
 
-An explicit request to commit authorizes the commit.
-Do not add another confirmation unless the commit contents or message need a material user choice.
+An explicit commit request or an authorized workflow that requires task commits authorizes the commit.
+Carry authorization from the calling workflow, including `create-github-pr`,
+without a separate commit approval.
+Derive the message from the task and repository conventions.
+Ask only when the intended contents remain unclear.
 
 ## Workflow
 

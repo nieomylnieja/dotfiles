@@ -3,7 +3,8 @@ name: pr-description
 description: |
   Use when writing, rewriting, or updating a pull request description.
   Explain the supplied reason, keep only reviewer-relevant sections, and include only
-  change-specific validation in Testing. Updating GitHub requires an explicit write request.
+  change-specific validation in Testing. Omit unsupported motivation and ask after PR creation.
+  Writing to GitHub requires an explicit create or update request.
 ---
 
 # PR description
@@ -22,11 +23,18 @@ request unless the user explicitly supplied or approved that text for publicatio
 
 A user-described defect, limitation, operational need, or desired outcome
 is valid motivation even when the user did not label it as such.
-If the required `Motivation` section has no supported reason,
-ask one focused question before updating GitHub.
-If the user says to omit motivation or supplies another template, follow that instruction without asking.
 
-Drafting text does not authorize `gh pr edit` or another external write.
+If the reason is unknown or unclear, omit `## Motivation` and continue with the supported content.
+Missing motivation does not block PR creation or an authorized body update.
+For a new PR, first create it, verify success, and report its URL.
+Then ask one focused question about the missing motivation.
+Treat the user's answer as a continuation of that task and add the supported motivation to the PR.
+
+Honor an explicit request to omit motivation or use another template.
+Skip the motivation question in those cases.
+
+An explicit request to create or update a PR authorizes its body write within that task.
+A request only to draft or review text does not authorize an external write.
 
 ## Default template
 
@@ -87,7 +95,8 @@ Report routine verification in the implementation handoff instead.
 
 ## Final check
 
-- The reason comes from an allowed source or the section was explicitly omitted.
+- The reason comes from an allowed source.
+  Otherwise, omit the section. Also omit it when the user requests this.
 - Each section helps the reviewer.
 - Testing contains behavior and coverage, not a command log.
 - Prose has no accidental source wrapping.

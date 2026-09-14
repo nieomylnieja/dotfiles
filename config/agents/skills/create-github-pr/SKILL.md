@@ -2,28 +2,32 @@
 name: create-github-pr
 description: |
   Create a GitHub pull request when the user explicitly asks for one.
-  Preserve the requested base, use `pr-description` for the body, and avoid duplicate confirmation.
+  Complete the necessary branch, commit, push, and creation steps without repeated approval.
+  Use `pr-description` for the body and defer missing motivation until after creation.
 allowed-tools: Bash(*scripts/get-pr-info.sh*) Bash(gh pr create*) Bash(git checkout*) Bash(git push*) Bash(git switch*)
 compatibility: Requires authenticated gh CLI and git.
 ---
 
 # Create a GitHub pull request
 
-An explicit request to create a pull request authorizes the required push
-and `gh pr create` for the selected branch.
-Ask only when a missing choice can change the result.
+An explicit request to create a pull request authorizes the necessary branch creation,
+task commits, push, and `gh pr create` within the requested scope.
+Carry that authorization through supporting skills without asking the user to approve each step.
+Honor explicit limits such as committed changes only or a draft pull request.
 
 ## Workflow
 
 1. Load `pr-description`.
-2. Determine the requested base branch.
-3. If the current branch is the base branch, ask for a branch name before switching.
+2. Use the requested base branch, or the remote default when none was specified.
+3. Use the requested head branch, or the current task branch.
+   When the task needs a new branch, choose an unused name from the task and repository conventions.
+   Create it without a separate approval request.
    Never create a pull request from the base branch.
-4. Resolve uncommitted task changes before collecting final metadata.
-   Invoke `git-commit` only when the user also authorized a commit.
-   Otherwise ask whether to commit the task changes or leave them out.
+4. Commit uncommitted task changes with `git-commit` before collecting final metadata,
+   unless the user explicitly excluded them.
+   Preserve unrelated changes and staging. Ask only if the intended contents cannot be separated safely.
 5. Run [`scripts/get-pr-info.sh`](scripts/get-pr-info.sh) on the stable branch.
-   Pass the requested base with `--base`; otherwise use the remote default.
+   Pass the selected base with `--base`.
    Inspect the complete base-to-head diff and commit list.
 6. Stop if an open pull request already exists; report its number and URL.
 7. If the branch is behind or diverged, report the state.
@@ -31,16 +35,21 @@ Ask only when a missing choice can change the result.
 8. Derive the title from the full diff and project title policy.
 9. Draft the body with `pr-description`.
    Use the user request, linked issue, existing PR context, commits, and diff.
+   Apply its missing-motivation rule without delaying creation.
 10. Run current safe verification before the push.
 11. Run the helper again. Require the branch, base, `HEAD`, and clean-state
     decision to match the metadata used for the title and body.
 12. Write the body to a timestamped temporary file and push without force.
-    Run `gh pr create --base BASE --head HEAD --body-file FILE`.
-13. Report the URL, exact base and head, title, and draft state.
+    Run `gh pr create --base BASE --head HEAD --title TITLE --body-file FILE`.
+    Use `--draft` when the user or repository policy requires it.
+    Otherwise, create a ready pull request.
+13. Verify creation and report the URL, exact base and head, title, and draft state.
+    Then ask the motivation follow-up defined in `pr-description`, if needed.
 
-If title, body, base, head, or draft state is ambiguous,
-show the proposed value and ask one focused question.
-Do not request another generic confirmation after the user has already authorized PR creation.
+Resolve routine wording and metadata choices from the task and repository conventions.
+Ask only when unresolved scope, destination, conflicting instructions,
+or a real permission barrier prevents safe creation.
+State the specific blocker and combine related questions into one request.
 
 ## Title
 
