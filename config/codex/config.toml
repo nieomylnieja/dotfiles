@@ -15,6 +15,8 @@ hooks = true
 terminal_resize_reflow = true
 guardian_approval = true
 mentions_v2 = true
+multi_agent_v2.enabled = true
+multi_agent_v2.expose_spawn_agent_model_overrides = true
 
 [sandbox_workspace_write]
 network_access = true
@@ -32,8 +34,8 @@ context_size = "low"
 # statusMessage = "Compacting large tool result"
 
 [agents]
-max_depth = 1
-max_threads = 3
+max_depth = 2
+max_threads = 15
 
 [agents.quick-inspector]
 description = "Use for independent read-only repo inspection when the parent would otherwise need large command output. Do not use for one-command facts such as workspace cleanliness. Return only final facts, exact paths, counts, and blocking errors."

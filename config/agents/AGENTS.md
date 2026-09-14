@@ -30,6 +30,9 @@ Additional requirements:
   flavored mode by default and strict mode when ambiguity has a material cost.
 - Invoke `verification-before-completion` before claiming that work is complete,
   fixed, or passing.
+- When the user expresses uncertainty about implementation choices, invoke `grill`
+  to clarify decisions that materially affect the result. For factual confusion,
+  explain or investigate first.
 - Load the relevant language skill before reading, writing, reviewing, or changing
   files in that language.
 - Do not invoke a file-oriented skill only because a chat response uses the same
