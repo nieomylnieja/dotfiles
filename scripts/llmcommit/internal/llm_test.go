@@ -7,6 +7,82 @@ import (
 	"testing"
 )
 
+func Test_OpenCodeClientRenderPrompt_includesSemanticCommitRules(t *testing.T) {
+	t.Parallel()
+
+	client := &OpenCodeClient{model: defaultOpenCodeModel}
+	diff := "diff --git a/config.nix b/config.nix\n+new setting"
+	prompt, err := client.renderPrompt(diff, []string{"flake.nix", "flake.lock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"<type>: <description>",
+		"`feat`", "`fix`", "`docs`", "`style`", "`refactor`", "`perf`",
+		"`test`", "`build`", "`ci`", "`chore`", "`revert`",
+		diff,
+		"flake.nix, flake.lock",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("renderPrompt() is missing %q", want)
+		}
+	}
+}
+
+func Test_OpenCodeClientCallOpenCode_requiresSemanticSubject(t *testing.T) {
+	binDir := t.TempDir()
+	script := "#!/bin/sh\nprintf '%s\\n' \"$LLMCOMMIT_TEST_RESPONSE\"\n"
+	if err := os.WriteFile(filepath.Join(binDir, "opencode"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	client := &OpenCodeClient{model: defaultOpenCodeModel}
+	type testCase struct {
+		name    string
+		message string
+		wantErr bool
+	}
+	tests := []testCase{
+		{name: "missing type", message: "Add writing-for-agents skill", wantErr: true},
+		{name: "unknown type", message: "commit: update settings", wantErr: true},
+		{name: "missing separator space", message: "chore:update settings", wantErr: true},
+		{name: "empty description", message: "fix: ", wantErr: true},
+		{name: "body cannot replace description", message: "fix: \n\nrestore prefix", wantErr: true},
+		{name: "prefix only in body", message: "Update settings\n\nchore: update settings", wantErr: true},
+		{name: "body", message: "fix: restore semantic commits\n\nKeep message rules in the embedded prompt."},
+	}
+	for _, commitType := range []string{
+		"feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert",
+	} {
+		tests = append(tests, testCase{name: commitType, message: commitType + ": update settings"})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("LLMCOMMIT_TEST_RESPONSE", tt.message)
+			got, err := client.callOpenCode(t.Context(), "prompt")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("callOpenCode() accepted invalid subject %q", tt.message)
+				}
+				if got != "" {
+					t.Errorf("callOpenCode() returned invalid message %q", got)
+				}
+				if !strings.Contains(err.Error(), "semantic commit subject") {
+					t.Errorf("callOpenCode() error = %v, want semantic commit subject error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.message {
+				t.Errorf("callOpenCode() = %q, want %q", got, tt.message)
+			}
+		})
+	}
+}
+
 func Test_opencodeArgs(t *testing.T) {
 	t.Parallel()
 
@@ -53,7 +129,7 @@ func Test_OpenCodeClientCallOpenCode_usesDirectOpencodeInvocation(t *testing.T) 
 		"#!/bin/sh",
 		`printf '%s\n' "$@" > "$LLMCOMMIT_CAPTURE_ARGS"`,
 		`env > "$LLMCOMMIT_CAPTURE_ENV"`,
-		`printf 'commit: direct opencode path\n'`,
+		`printf 'chore: direct opencode path\n'`,
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(binDir, "opencode"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
@@ -71,8 +147,8 @@ func Test_OpenCodeClientCallOpenCode_usesDirectOpencodeInvocation(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "commit: direct opencode path" {
-		t.Fatalf("callOpenCode() = %q, want %q", got, "commit: direct opencode path")
+	if got != "chore: direct opencode path" {
+		t.Fatalf("callOpenCode() = %q, want %q", got, "chore: direct opencode path")
 	}
 
 	content, err := os.ReadFile(argsPath)

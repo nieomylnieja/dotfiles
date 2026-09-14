@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -32,7 +31,6 @@ const (
 
 // promptData holds all template variables for the system prompt.
 type promptData struct {
-	Overview     string
 	Diff         string
 	RelatedFiles string
 }
@@ -46,15 +44,13 @@ type LLMClient interface {
 
 // OpenCodeClient implements LLMClient through the opencode CLI.
 type OpenCodeClient struct {
-	model    string
-	overview string
+	model string
 }
 
 // NewOpenCodeClient creates an OpenCodeClient.
 func NewOpenCodeClient() *OpenCodeClient {
 	return &OpenCodeClient{
-		model:    defaultOpenCodeModel,
-		overview: loadSkillOverview(),
+		model: defaultOpenCodeModel,
 	}
 }
 
@@ -106,8 +102,7 @@ func (c *OpenCodeClient) GenerateCommitMessage(
 // renderPrompt executes the system prompt template with the given data.
 func (c *OpenCodeClient) renderPrompt(diff string, relatedFiles []string) (string, error) {
 	data := promptData{
-		Overview: c.overview,
-		Diff:     diff,
+		Diff: diff,
 	}
 	if len(relatedFiles) > 0 {
 		data.RelatedFiles = strings.Join(relatedFiles, ", ")
@@ -150,7 +145,16 @@ func (c *OpenCodeClient) callOpenCode(ctx context.Context, prompt string) (strin
 		)
 	}
 
-	return message, nil
+	subject, _, _ := strings.Cut(message, "\n")
+	commitType, description, ok := strings.Cut(subject, ": ")
+	if ok && strings.TrimSpace(description) != "" {
+		switch commitType {
+		case "feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert":
+			return message, nil
+		}
+	}
+
+	return "", fmt.Errorf("opencode returned an invalid semantic commit subject %q: expected <type>: <description>", subject)
 }
 
 func (c *OpenCodeClient) cleanResponse(response string) string {
@@ -230,50 +234,4 @@ func formatOpenCodeError(err error, stdout string, stderr string) error {
 	}
 
 	return fmt.Errorf("running opencode: %w\n%s", err, strings.Join(details, "\n"))
-}
-
-// loadSkillOverview reads the Overview section from the git-commit skill file.
-func loadSkillOverview() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-
-	skillPath := filepath.Join(
-		home,
-		".dotfiles",
-		"config",
-		"agents",
-		"skills",
-		"git-commit",
-		"SKILL.md",
-	)
-	content, err := os.ReadFile(skillPath)
-	if err != nil {
-		return ""
-	}
-
-	return extractOverviewSection(string(content))
-}
-
-// extractOverviewSection extracts the ## Overview section and all its subsections.
-func extractOverviewSection(content string) string {
-	lines := strings.Split(content, "\n")
-	var result []string
-	inOverview := false
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "## Overview") {
-			inOverview = true
-			continue
-		}
-		if inOverview && strings.HasPrefix(line, "## ") && !strings.HasPrefix(line, "## Overview") {
-			break
-		}
-		if inOverview {
-			result = append(result, line)
-		}
-	}
-
-	return strings.TrimSpace(strings.Join(result, "\n"))
 }

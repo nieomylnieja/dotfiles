@@ -14,9 +14,28 @@ Use a single-line subject only for trivial changes.
 For non-trivial changes, include a blank line after the subject,
 then add a concise body of 1-3 lines explaining the intent or impact.
 
-## Overview
+## Message format
 
-{{ .Overview }}
+Write a semantic commit subject in this exact format: `<type>: <description>`.
+Select the type from the diff:
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation only
+- `style`: Formatting without behavior changes
+- `refactor`: Code changes without a feature or fix
+- `perf`: Performance improvement
+- `test`: Tests
+- `build`: Build system or dependencies
+- `ci`: Continuous integration
+- `chore`: Maintenance
+- `revert`: Revert a previous commit
+
+Use the type without a scope.
+Write a lowercase, imperative description without a final period.
+Keep the full subject under 72 characters.
+For example: `chore: update agent configuration` or `feat: add DNS lookup utility`.
+Do not add attribution footers such as `Co-Authored-By`.
 
 ---
 

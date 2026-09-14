@@ -1,5 +1,5 @@
 # Binaries
-llmcommit
+/llmcommit
 
 # Go build artifacts
 *.exe

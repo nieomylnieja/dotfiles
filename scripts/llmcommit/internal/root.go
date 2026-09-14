@@ -21,11 +21,11 @@ func NewRootHandler() *RootHandler {
 	}
 }
 
-func (h *RootHandler) Run(ctx context.Context) error {
-	return h.run(ctx)
+func (h *RootHandler) Run(ctx context.Context, paths ...string) error {
+	return h.run(ctx, paths)
 }
 
-func (h *RootHandler) run(ctx context.Context) error {
+func (h *RootHandler) run(ctx context.Context, paths []string) error {
 	if err := h.git.VerifyGitInstallation(); err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (h *RootHandler) run(ctx context.Context) error {
 		return err
 	}
 
-	stagedFiles, err := h.git.GetStagedFiles()
+	stagedFiles, err := h.git.GetStagedFiles(paths...)
 	if err != nil {
 		return err
 	}
