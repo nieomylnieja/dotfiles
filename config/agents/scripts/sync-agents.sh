@@ -4,9 +4,12 @@ set -euo pipefail
 
 readonly PROG="${0##*/}"
 readonly HARNESSES=("claude-code" "opencode" "codex")
+sync_output_root=""
+sync_work_dir=""
+sync_adopt_existing=false
 
 usage() {
-  cat << EOF
+  cat <<EOF
 Usage: ${PROG} [OPTIONS]
 
 Generate harness-specific agent definitions from source agents.
@@ -22,8 +25,19 @@ overrides. Common fields are merged with harness-specific fields; harness fields
 take precedence. Codex agents are emitted as standalone TOML files using the
 source agent body as developer instructions.
 
+Each destination records generated filenames and content hashes in
+.sync-agents.json. Later runs remove retired files only when their content
+still matches that record. Modified managed files stop synchronization.
+Files without a record and without a current source are preserved.
+Unowned files are adopted only when their content already matches the source.
+Use --adopt-existing to replace differing unowned files with current source names
+after confirming that they are legacy generated copies.
+
 Options:
   --source DIR  source agents directory (default: config/agents/agents)
+  --output-root DIR  write under DIR/{claude-code,opencode,codex} instead
+                     of the live harness directories
+  --adopt-existing  replace differing unowned files with current source names
   -h, --help    display this help and exit
 
 Exit status:
@@ -40,24 +54,24 @@ fatal() {
   exit "${2:-1}"
 }
 
-# make_tmp_file SUFFIX
-# Returns a timestamped temporary file path.
 make_tmp_file() {
   local suffix="$1"
-  local timestamp
-  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  printf '%s\n' "${TMPDIR:-/tmp}/${PROG}-${timestamp}-${RANDOM}-${suffix}"
+  mktemp "${sync_work_dir}/${suffix}-XXXXXX"
 }
 
 # harness_output_dir HARNESS
 # Returns the output directory for a given harness.
 harness_output_dir() {
   local harness="$1"
+  if [[ -n "${sync_output_root}" ]]; then
+    printf '%s/%s\n' "${sync_output_root}" "${harness}"
+    return
+  fi
   case "${harness}" in
-    claude-code) echo "${HOME}/.claude/agents" ;;
-    opencode) echo "${XDG_CONFIG_HOME:-${HOME}/.config}/opencode/agents" ;;
-    codex) echo "${HOME}/.codex/agents" ;;
-    *) fatal "unknown harness: ${harness}" ;;
+  claude-code) echo "${HOME}/.claude/agents" ;;
+  opencode) echo "${XDG_CONFIG_HOME:-${HOME}/.config}/opencode/agents" ;;
+  codex) echo "${HOME}/.codex/agents" ;;
+  *) fatal "unknown harness: ${harness}" ;;
   esac
 }
 
@@ -79,7 +93,7 @@ extract_frontmatter() {
 
     fm_count == 1 { print }
     fm_count >= 2 { exit }
-  ' "${source_file}" > "${out_file}"
+  ' "${source_file}" >"${out_file}"
 }
 
 # extract_body SOURCE_FILE OUT_FILE
@@ -103,7 +117,7 @@ extract_body() {
     }
 
     { print }
-  ' "${source_file}" > "${out_file}"
+  ' "${source_file}" >"${out_file}"
 }
 
 # yaml_read YAML_FILE FILTER
@@ -121,7 +135,7 @@ yaml_has() {
   local yaml_file="$1"
   local filter="$2"
 
-  yq -e "${filter} != null" "${yaml_file}" > /dev/null
+  yq -e "${filter} != null" "${yaml_file}" >/dev/null
 }
 
 # write_generated_file OUTPUT_FILE TMP_FILE
@@ -148,7 +162,7 @@ generate_markdown_agent() {
   basename="$(basename "${source_file}")"
 
   local out_dir
-  out_dir="$(harness_output_dir "${harness}")"
+  out_dir="${sync_work_dir}/generated/${harness}"
   local out_file="${out_dir}/${basename}"
 
   local content
@@ -213,13 +227,12 @@ generate_markdown_agent() {
   ' "${source_file}")"
 
   if [[ -z "${content}" ]]; then
-    warn "$(basename "${source_file}"): generation produced empty output; skipping"
-    return 0
+    fatal "${source_file}: generation produced empty output"
   fi
 
   local tmp_file
   tmp_file="$(make_tmp_file "${harness}.md")"
-  printf '%s\n' "${content}" > "${tmp_file}"
+  printf '%s\n' "${content}" >"${tmp_file}"
   write_generated_file "${out_file}" "${tmp_file}"
 }
 
@@ -231,7 +244,7 @@ generate_codex_agent() {
   basename="$(basename "${source_file}" .md)"
 
   local out_dir
-  out_dir="$(harness_output_dir "codex")"
+  out_dir="${sync_work_dir}/generated/codex"
   local out_file="${out_dir}/${basename}.toml"
 
   local frontmatter_file
@@ -247,6 +260,7 @@ generate_codex_agent() {
   local name
   name="$(yaml_read "${frontmatter_file}" '.name')"
   [[ -n "${name}" ]] || fatal "${source_file}: missing frontmatter field 'name'"
+  [[ "${name}" == "${basename}" ]] || fatal "${source_file}: name must match filename"
 
   local description
   description="$(yaml_read "${frontmatter_file}" '.description')"
@@ -286,9 +300,9 @@ generate_codex_agent() {
     | if $model_reasoning_effort != "" then . + {model_reasoning_effort: $model_reasoning_effort} else . end
     | if $model_verbosity != "" then . + {model_verbosity: $model_verbosity} else . end
     | if $sandbox_mode != "" then . + {sandbox_mode: $sandbox_mode} else . end' \
-    > "${tmp_file}"
+    >"${tmp_file}"
 
-  tomlq '.' "${tmp_file}" > /dev/null || fatal "${source_file}: generated invalid Codex TOML"
+  tomlq '.' "${tmp_file}" >/dev/null || fatal "${source_file}: generated invalid Codex TOML"
 
   write_generated_file "${out_file}" "${tmp_file}"
 
@@ -302,9 +316,118 @@ generate_agent() {
   local harness="$2"
 
   case "${harness}" in
-    codex) generate_codex_agent "${source_file}" ;;
-    *) generate_markdown_agent "${source_file}" "${harness}" ;;
+  codex) generate_codex_agent "${source_file}" ;;
+  *) generate_markdown_agent "${source_file}" "${harness}" ;;
   esac
+}
+
+file_hash() {
+  local result
+  result="$(sha256sum -- "$1")"
+  printf '%s\n' "${result%% *}"
+}
+
+# Preflight all destinations before publishing or removing any generated file.
+prepare_manifest() {
+  local harness="$1"
+  local source_dir="$2"
+  local out_dir
+  out_dir="$(harness_output_dir "${harness}")"
+  local ancestor="${out_dir}"
+  while [[ ! -e "${ancestor}" && ! -L "${ancestor}" ]]; do
+    ancestor="$(dirname -- "${ancestor}")"
+  done
+  [[ -d "${ancestor}" && -w "${ancestor}" && -x "${ancestor}" ]] ||
+    fatal "destination ancestor is not a writable directory: ${ancestor}"
+  local previous="${sync_work_dir}/previous-${harness}.json"
+  local manifest="${sync_work_dir}/next-${harness}.json"
+  local suffix="md"
+  [[ "${harness}" != codex ]] || suffix="toml"
+
+  if [[ -e "${out_dir}/.sync-agents.json" || -L "${out_dir}/.sync-agents.json" ]]; then
+    [[ -f "${out_dir}/.sync-agents.json" && ! -L "${out_dir}/.sync-agents.json" ]] ||
+      fatal "invalid ownership manifest: ${out_dir}/.sync-agents.json"
+    cp -- "${out_dir}/.sync-agents.json" "${previous}"
+    jq -e --arg source "${source_dir}" --arg suffix "${suffix}" '
+      .version == 1 and .source_dir == $source
+      and (.files | type == "object")
+      and all(.files | to_entries[];
+        (.key | test("^[a-z0-9][a-z0-9_-]*\\." + $suffix + "$"))
+        and (.value | type == "string" and test("^[a-f0-9]{64}$")))
+    ' "${previous}" >/dev/null ||
+      fatal "invalid ownership manifest or different source directory: ${out_dir}/.sync-agents.json"
+  else
+    jq -n --arg source "${source_dir}" \
+      '{version: 1, source_dir: $source, files: {}}' >"${previous}"
+  fi
+
+  jq '.files = {}' "${previous}" >"${manifest}"
+  local generated filename checksum next_file
+  for generated in "${sync_work_dir}/generated/${harness}"/*."${suffix}"; do
+    [[ -f "${generated}" ]] || continue
+    filename="${generated##*/}"
+    checksum="$(file_hash "${generated}")"
+    next_file="$(make_tmp_file manifest)"
+    jq --arg name "${filename}" --arg hash "${checksum}" \
+      '.files[$name] = $hash' "${manifest}" >"${next_file}"
+    mv -- "${next_file}" "${manifest}"
+    if [[ -e "${out_dir}/${filename}" || -L "${out_dir}/${filename}" ]]; then
+      [[ -f "${out_dir}/${filename}" && ! -L "${out_dir}/${filename}" ]] ||
+        fatal "refusing to replace non-regular agent file: ${out_dir}/${filename}"
+      if ! jq -e --arg name "${filename}" '.files | has($name)' "${previous}" >/dev/null &&
+        ! cmp -s "${out_dir}/${filename}" "${generated}"; then
+        if [[ "${sync_adopt_existing}" == true ]]; then
+          warn "adopting legacy file as requested: ${out_dir}/${filename}"
+        else
+          fatal "unowned agent differs from generated content: ${out_dir}/${filename}; use --adopt-existing only for verified legacy generated copies"
+        fi
+      fi
+    fi
+  done
+
+  local entries="${sync_work_dir}/entries-${harness}"
+  jq -r '.files | to_entries[] | [.key, .value] | @tsv' "${previous}" >"${entries}"
+  while IFS=$'\t' read -r filename checksum; do
+    [[ -e "${out_dir}/${filename}" || -L "${out_dir}/${filename}" ]] || continue
+    [[ -f "${out_dir}/${filename}" && ! -L "${out_dir}/${filename}" ]] ||
+      fatal "refusing to replace non-regular managed file: ${out_dir}/${filename}"
+    if [[ "$(file_hash "${out_dir}/${filename}")" != "${checksum}" ]]; then
+      if [[ -f "${sync_work_dir}/generated/${harness}/${filename}" ]] &&
+        cmp -s "${out_dir}/${filename}" "${sync_work_dir}/generated/${harness}/${filename}"; then
+        continue
+      fi
+      fatal "modified managed file; preserve its changes before syncing: ${out_dir}/${filename}"
+    fi
+  done <"${entries}"
+}
+
+publish_harness() {
+  local harness="$1"
+  local out_dir
+  out_dir="$(harness_output_dir "${harness}")"
+  local manifest="${sync_work_dir}/next-${harness}.json"
+  local filename checksum
+  while IFS=$'\t' read -r filename checksum; do
+    if [[ ! -f "${sync_work_dir}/generated/${harness}/${filename}" && -f "${out_dir}/${filename}" ]]; then
+      rm -- "${out_dir}/${filename}"
+      log "removed retired generated agent: ${out_dir}/${filename}"
+    fi
+  done <"${sync_work_dir}/entries-${harness}"
+
+  local generated
+  for generated in "${sync_work_dir}/generated/${harness}"/*; do
+    [[ -f "${generated}" ]] || continue
+    write_generated_file "${out_dir}/${generated##*/}" "${generated}"
+  done
+  write_generated_file "${out_dir}/.sync-agents.json" "${manifest}"
+
+  for generated in "${out_dir}"/*.md "${out_dir}"/*.toml; do
+    [[ -f "${generated}" ]] || continue
+    if ! jq -e --arg name "${generated##*/}" '.files | has($name)' \
+      "${out_dir}/.sync-agents.json" >/dev/null; then
+      warn "preserved unmanaged agent without a current source: ${generated}"
+    fi
+  done
 }
 
 main() {
@@ -313,39 +436,61 @@ main() {
 
   local source_dir="${root}/config/agents/agents"
 
-  command -v yq > /dev/null 2>&1 || fatal "yq is required"
-  command -v tomlq > /dev/null 2>&1 || fatal "tomlq is required"
+  command -v yq >/dev/null 2>&1 || fatal "yq is required"
+  command -v tomlq >/dev/null 2>&1 || fatal "tomlq is required"
+  command -v jq >/dev/null 2>&1 || fatal "jq is required"
+  command -v sha256sum >/dev/null 2>&1 || fatal "sha256sum is required"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      --source)
-        [[ $# -lt 2 ]] && fatal "--source requires an argument" 2
-        source_dir="$2"
-        shift 2
-        ;;
-      --source=*)
-        source_dir="${1#*=}"
-        shift
-        ;;
-      --)
-        shift
-        break
-        ;;
-      -*) fatal "unknown option: $1" 2 ;;
-      *) break ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --source)
+      [[ $# -lt 2 ]] && fatal "--source requires an argument" 2
+      source_dir="$2"
+      shift 2
+      ;;
+    --source=*)
+      source_dir="${1#*=}"
+      shift
+      ;;
+    --output-root)
+      [[ $# -lt 2 || -z "$2" ]] && fatal "--output-root requires a directory" 2
+      sync_output_root="$2"
+      shift 2
+      ;;
+    --output-root=*)
+      sync_output_root="${1#*=}"
+      [[ -n "${sync_output_root}" ]] || fatal "--output-root requires a directory" 2
+      shift
+      ;;
+    --adopt-existing)
+      sync_adopt_existing=true
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*) fatal "unknown option: $1" 2 ;;
+    *) break ;;
     esac
   done
 
+  [[ $# -eq 0 ]] || fatal "unexpected argument: $1" 2
   [[ -d "${source_dir}" ]] || fatal "source directory not found: ${source_dir}"
+  source_dir="$(realpath -- "${source_dir}")"
+  sync_work_dir="$(mktemp -d --tmpdir "${PROG}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+  trap 'rm -rf -- "${sync_work_dir}"' EXIT
 
   local count=0
   local source_file
   for source_file in "${source_dir}"/*.md; do
     [[ -f "${source_file}" ]] || continue
+    [[ "${source_file##*/}" =~ ^[a-z0-9][a-z0-9_-]*\.md$ ]] ||
+      fatal "invalid agent filename: ${source_file}"
 
     local harness
     for harness in "${HARNESSES[@]}"; do
@@ -356,8 +501,16 @@ main() {
   done
 
   if [[ "${count}" -eq 0 ]]; then
-    warn "no agent source files found in ${source_dir}"
+    fatal "no agent source files found in ${source_dir}; existing outputs preserved"
   fi
+
+  local harness
+  for harness in "${HARNESSES[@]}"; do
+    prepare_manifest "${harness}" "${source_dir}"
+  done
+  for harness in "${HARNESSES[@]}"; do
+    publish_harness "${harness}"
+  done
 
   log "sync complete (${count} source agents processed)"
 }
