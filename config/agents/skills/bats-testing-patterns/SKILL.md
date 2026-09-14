@@ -7,33 +7,23 @@ description: >-
 
 # Bats testing
 
-Treat CLI output, exit status, files, and external effects as observable
-behavior. Inspect the project's runner, tags, helpers, fixtures, and installed
+Load [testing](../testing/SKILL.md) first for test-level selection and coverage.
+Inspect the project's runner, tags, helpers, fixtures, and installed
 Bats libraries before adding a pattern.
 
 ## Inspect the suite
 
 Look for:
 
-- project test targets and containerized runners;
-- the supported Bats version;
-- `setup_suite.bash`, shared helpers, and assertion libraries;
-- file and test tags;
-- input and expected-output fixture conventions;
+- project test targets and containerized runners
+- the supported Bats version
+- `setup_suite.bash`, shared helpers, and assertion libraries
+- file and test tags
+- input and expected-output fixture conventions
 - local rules for unit, integration, and end-to-end tests.
 
 Use the project target when it sets build flags, dependencies, credentials, or
 containers. Do not replace its test selection with custom environment flags.
-
-## Choose the test boundary
-
-- Use Bats for shell code and observable CLI workflows.
-- Use the implementation language's test framework for internal functions.
-- Keep unit tests deterministic and offline.
-- Mark tests that need services, credentials, or mutable remote state. Run them
-  only through the project's authorized integration or end-to-end path.
-- Use a pseudo-terminal (PTY) only when TTY detection or terminal interaction is
-  part of the behavior.
 
 ## File structure
 
@@ -142,17 +132,14 @@ assert_yaml_equal() {
 Use the repository-selected yq implementation. Python yq and mikefarah yq have
 different flags and output.
 
-## Test design
+## CLI test cases
 
-- Name tests for user-visible conditions and outcomes.
-- Cover success, invalid input, dependency failure, and cleanup where relevant.
 - Test aliases or flag variants in a loop only when their expected behavior is
   identical.
-- Keep complete workflow tests small enough that one failure identifies the
-  broken step.
+- Use a pseudo-terminal (PTY) only when TTY detection or terminal interaction is
+  part of the behavior.
 - Pin terminal width, `TERM`, color mode, and locale for terminal output.
 - Use local fixture servers instead of live APIs in deterministic tests.
-- Do not assert implementation details that users cannot observe.
 
 ## Verify
 

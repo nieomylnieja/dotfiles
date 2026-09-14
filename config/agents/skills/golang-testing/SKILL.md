@@ -7,6 +7,7 @@ description: >-
 
 # Go testing
 
+Load [testing](../testing/SKILL.md) first for test-level selection and coverage.
 Use the owning module's Go version and the repository's test conventions.
 Load [golang](../golang/SKILL.md) for Go code and
 [bats-testing-patterns](../bats-testing-patterns/SKILL.md) when the behavior
@@ -20,7 +21,6 @@ Before editing:
 2. Read its `go` and optional `toolchain` directives.
 3. Inspect nearby tests, build tags, shared helpers, and dependencies.
 4. Find project test targets and CI commands.
-5. Identify the smallest observable behavior that detects the regression.
 
 Do not infer the version from the most common `go.mod` in a multi-module
 repository. Do not add Testify, GoMock, or another test dependency unless the
@@ -28,8 +28,6 @@ module already uses it or the user accepts the dependency.
 
 ## Test design
 
-- Test behavior and contracts, not private implementation steps.
-- Keep a focused regression test for each changed failure mode.
 - Use a table when cases share setup and assertions. Use separate tests when a
   table would need many optional fields or branches.
 - Give each table case or subtest a short, descriptive name.
