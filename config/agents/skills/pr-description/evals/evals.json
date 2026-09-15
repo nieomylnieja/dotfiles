@@ -1,0 +1,42 @@
+{
+  "skill_name": "pr-description",
+  "evals": [
+    {
+      "id": 1,
+      "name": "work-log-content",
+      "prompt": "Review the supplied PR description for publication against the fixture evidence. Report required corrections separately from optional suggestions. Do not edit files or publish anything.",
+      "expected_output": "Require removal of work history and routine check logs while preserving the feature summary, rollout dependency, focused tests, and unverified live path.",
+      "expectations": [
+        "Requires removal of merge/conflict and setup history.",
+        "Requires removal of routine checks and obsolete failure.",
+        "Preserves rollout dependency, focused test coverage, and untested live-path caveat.",
+        "Independently identifies the reviewed body and exact base/head."
+      ],
+      "files": ["evals/files/work-log.md", "evals/files/evidence.md"]
+    },
+    {
+      "id": 2,
+      "name": "body-changed-after-review",
+      "prompt": "A previous review approved the clean description. The candidate now appends the sentence 'Rebased onto the latest main.' to its Summary, but the base and head revisions are unchanged. Review the current candidate and state whether the previous approval can authorize publication. Do not edit files or publish anything.",
+      "expected_output": "Review the current body, reject reuse of the old body approval, and require removal of the new work-log sentence.",
+      "expectations": [
+        "Rejects reuse of the prior approval after a body-only change.",
+        "Requires removal of the new rebase-history sentence.",
+        "Independently identifies the current body and exact base/head."
+      ],
+      "files": ["evals/files/stale-body.md", "evals/files/clean.md", "evals/files/evidence.md"]
+    },
+    {
+      "id": 3,
+      "name": "relevant-rollout-constraint",
+      "prompt": "Review the supplied concise description for publication. The fixture evidence is complete. Do not invent corrections merely to produce findings. Do not edit files or publish anything.",
+      "expected_output": "Approve the exact body, preserving the schema-version rollout dependency and the untested live-path caveat.",
+      "expectations": [
+        "Approves the body without inventing required corrections.",
+        "Preserves the schema-version rollout dependency and live-path caveat.",
+        "Independently identifies the reviewed body and exact base/head."
+      ],
+      "files": ["evals/files/clean.md", "evals/files/evidence.md"]
+    }
+  ]
+}

@@ -61,3 +61,6 @@ args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
 [tui]
 theme = "nord"
 vim_mode_default = true
+
+[tui.keymap.editor]
+insert_newline = "shift-enter"

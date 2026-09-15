@@ -1,10 +1,10 @@
 ---
 name: pr-description
 description: |
-  Use when writing, rewriting, or updating a pull request description.
+  Use when writing, reviewing, or updating a pull request description.
   Explain the supplied reason, keep only reviewer-relevant sections, and include only
   change-specific validation in Testing. Omit unsupported motivation and ask after PR creation.
-  Writing to GitHub requires an explicit create or update request.
+  Require independent review of the exact body before an authorized GitHub write.
 ---
 
 # PR description
@@ -75,6 +75,9 @@ Add no extra section unless it improves review or the user requests it.
 - Keep the body as short as the review context permits.
 - Use completed tense for changes and validation.
 - Do not list files or narrate the diff.
+- Describe the resulting change, not the implementation session. Keep merge and
+  conflict-resolution history, setup progress, and routine check logs in the handoff.
+  Keep a revision, dependency, or validation limit when it explains a review risk.
 - Do not invent product rationale, benefits, risks, or follow-up work.
 - Keep each prose paragraph and ordinary list item on one physical line
   because GitHub issue fields render single newlines as visible breaks.
@@ -93,11 +96,45 @@ If no change-specific claim remains, remove `## Testing`.
 
 Report routine verification in the implementation handoff instead.
 
+## Publication gate
+
+Complete this gate before each authorized PR creation or description update,
+including body-only edits and motivation follow-ups. A draft-only request permits
+local text, not publication. Mark drafts that have not passed this gate as unreviewed.
+
+1. Save the complete proposed body to a file and compute its SHA-256 digest.
+   Record the repository, base and head revisions, and the existing remote body for an update.
+2. Dispatch a fresh, read-only `docs-analyzer` in PR-description mode.
+   Give it the body file and digest, exact diff, user requirements and their sources,
+   repository visibility and template, and relevant verification evidence.
+   Provide the absolute path to this skill and its
+   [description-review contract](references/description-review.md).
+   Exclude the implementation conversation and the author's assessment of the draft.
+3. Apply supported required corrections and submit the revised body for review.
+   Publish only after an `approved` result matches the final body digest and both revisions.
+   If the reviewer cannot compute a digest, hash its returned `reviewed_body` and compare
+   that result with the file digest. An echoed input digest is not independent verification.
+   If review is unavailable or incomplete, retain the draft and report the blocked write.
+   Self-review is not a substitute. Do not repeat reviews merely to obtain approval.
+4. Immediately before writing, compare the file digest and current revisions with the review.
+   For an update, also confirm that the remote body has not changed since inspection.
+   Reconcile concurrent edits before review. Any change to the candidate body or reviewed
+   revisions requires another review, even when the PR head SHA stays unchanged.
+5. Publish the reviewed file with `--body-file` through the authorized create or update command.
+   Read the remote body back and verify it against that file before reporting success.
+   Treat a terminal newline added by the hosting service as transport formatting only.
+
+The reviewer uses this skill's content rules and the linked review contract.
+It does not execute the publication gate, edit files, or dispatch another reviewer.
+Description approval covers only the supplied text and evidence. It does not authorize
+GitHub writes, approve the code, or bypass PR review requirements.
+
 ## Final check
 
 - The reason comes from an allowed source.
   Otherwise, omit the section. Also omit it when the user requests this.
 - Each section helps the reviewer.
 - Testing contains behavior and coverage, not a command log.
+- The exact body and reviewed revisions passed the publication gate before a GitHub write.
 - Prose has no accidental source wrapping.
 - Updating GitHub is within the user's stated authority.

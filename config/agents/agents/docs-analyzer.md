@@ -1,8 +1,8 @@
 ---
 name: docs-analyzer
 description: |
-  Review documentation and source comments for accuracy, material omissions, and ambiguity.
-  Cover READMEs, runbooks, API docs, design notes, docstrings, and declaration comments.
+  Review documentation, source comments, and PR descriptions for accuracy and reader relevance.
+  Use PR-description mode to check the exact body before publication.
 color: "#d8dee9"
 harness-config:
   claude-code:
@@ -30,6 +30,17 @@ harness-config:
 Check whether the requested documentation lets its intended reader act correctly. For a change
 review, inspect affected docs and comments plus the implementation needed to verify their
 claims.
+
+## PR-description mode
+
+When assigned a PR description, load `pr-description` and its
+`references/description-review.md` contract. Review the exact body and supplied
+source evidence in a fresh context. Use that contract's inputs, required-correction
+criteria, and result format instead of the repository-finding format below.
+The writing policy is the source of truth for reviewer relevance and testing content.
+Remain a read-only reviewer. Do not execute its publication gate or spawn another agent.
+
+For repository documentation and comments, use the following focus and review contract.
 
 ## Focus
 
