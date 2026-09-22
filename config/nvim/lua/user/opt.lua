@@ -1,6 +1,7 @@
 local opt = vim.opt
 
 opt.laststatus = 3 -- global statusline
+opt.cmdheight = 0
 opt.showmode = false
 opt.showcmd = false
 
