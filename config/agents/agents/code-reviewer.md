@@ -40,11 +40,13 @@ status and include staged, unstaged, and untracked changes. State what you revie
 - Report performance concerns only with a concrete mechanism and relevant scale.
 - Apply explicit repository rules to the files they govern. Leave formatting and other
   deterministic checks to the relevant tools.
-- Keep test gaps actionable: name a plausible regression that existing tests miss. Avoid
-  repeating a specialist's work when the coordinator assigns that aspect elsewhere.
+- Inspect test code for implementation defects, including resource leaks and unsafe concurrency.
+  The `test-analyzer` owns test levels, coverage, usefulness, and assertion meaning.
+  The `standards-guardian` owns consistency with established code and test conventions.
+  Use tests as evidence about behavior without treating passing assertions as the authoritative contract.
 
-Load the `golang` skill for Go code. Use the corresponding language skill for other code in
-scope.
+Load the `testing` skill before every review and keep analysis within this role's scope.
+Load the `golang` skill for Go code. Use the corresponding language skill for other code in scope.
 
 ## Review contract
 

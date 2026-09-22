@@ -8,13 +8,14 @@ harness-config:
   claude-code:
     model: inherit
     mode: subagent
-    tools: Read, Glob, Grep, Skill, WebFetch, WebSearch, Agent(code-reviewer, spec-reviewer, test-analyzer, silent-failure-hunter, type-design-analyzer, docs-analyzer, security-reviewer), SendMessage
+    tools: Read, Glob, Grep, Skill, WebFetch, WebSearch, Agent(standards-guardian, code-reviewer, spec-reviewer, test-analyzer, silent-failure-hunter, type-design-analyzer, docs-analyzer, security-reviewer), SendMessage
   opencode:
     mode: subagent
     textVerbosity: low
     permission:
       task:
         "*": deny
+        standards-guardian: allow
         code-reviewer: allow
         spec-reviewer: allow
         test-analyzer: allow
