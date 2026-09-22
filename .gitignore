@@ -10,3 +10,4 @@ build
 .VimballRecord
 config/wallpapers/*.jpg
 log.json
+/config/agents/skills/**/*.backup

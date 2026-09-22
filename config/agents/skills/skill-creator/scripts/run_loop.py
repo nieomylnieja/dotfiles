@@ -17,7 +17,8 @@ from pathlib import Path
 
 from scripts.generate_report import generate_html
 from scripts.improve_description import improve_description
-from scripts.run_eval import find_project_root, run_eval
+from scripts.run_eval import run_eval, validate_eval_set
+from scripts.runner import add_runner_arguments
 from scripts.utils import parse_skill_md
 
 
@@ -34,8 +35,8 @@ def split_eval_set(eval_set: list[dict], holdout: float, seed: int = 42) -> tupl
     random.shuffle(no_trigger)
 
     # Calculate split points
-    n_trigger_test = max(1, int(len(trigger) * holdout))
-    n_no_trigger_test = max(1, int(len(no_trigger) * holdout))
+    n_trigger_test = min(max(1, int(len(trigger) * holdout)), max(0, len(trigger) - 1))
+    n_no_trigger_test = min(max(1, int(len(no_trigger) * holdout)), max(0, len(no_trigger) - 1))
 
     # Split
     test_set = trigger[:n_trigger_test] + no_trigger[:n_no_trigger_test]
@@ -54,13 +55,17 @@ def run_loop(
     runs_per_query: int,
     trigger_threshold: float,
     holdout: float,
-    model: str,
+    model: str | None,
     verbose: bool,
+    runner: list[str],
+    project_root: Path,
     live_report_path: Path | None = None,
     log_dir: Path | None = None,
 ) -> dict:
     """Run the eval + improvement loop."""
-    project_root = find_project_root()
+    validate_eval_set(eval_set)
+    if max_iterations < 1 or not 0 <= holdout < 1:
+        raise ValueError("max iterations must be positive and holdout must be in [0, 1)")
     name, original_description, content = parse_skill_md(skill_path)
     current_description = description_override or original_description
 
@@ -96,6 +101,8 @@ def run_loop(
             runs_per_query=runs_per_query,
             trigger_threshold=trigger_threshold,
             model=model,
+            runner=runner,
+            skill_path=skill_path,
         )
         eval_elapsed = time.time() - t0
 
@@ -203,6 +210,8 @@ def run_loop(
             eval_results=train_results,
             history=blinded_history,
             model=model,
+            runner=runner,
+            project_root=project_root,
             log_dir=log_dir,
             iteration=iteration,
         )
@@ -247,19 +256,19 @@ def main():
     parser.add_argument("--skill-path", required=True, help="Path to skill directory")
     parser.add_argument("--description", default=None, help="Override starting description")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of parallel workers")
-    parser.add_argument("--timeout", type=int, default=30, help="Timeout per query in seconds")
+    parser.add_argument("--timeout", type=float, default=30, help="Timeout per query in seconds")
     parser.add_argument("--max-iterations", type=int, default=5, help="Max improvement iterations")
     parser.add_argument("--runs-per-query", type=int, default=3, help="Number of runs per query")
     parser.add_argument("--trigger-threshold", type=float, default=0.5, help="Trigger rate threshold")
     parser.add_argument("--holdout", type=float, default=0.4, help="Fraction of eval set to hold out for testing (0 to disable)")
-    parser.add_argument("--model", required=True, help="Model for improvement")
+    add_runner_arguments(parser)
     parser.add_argument("--verbose", action="store_true", help="Print progress to stderr")
     parser.add_argument("--report", default="auto", help="Generate HTML report at this path (default: 'auto' for temp file, 'none' to disable)")
     parser.add_argument("--results-dir", default=None, help="Save all outputs (results.json, report.html, log.txt) to a timestamped subdirectory here")
     args = parser.parse_args()
 
     eval_set = json.loads(Path(args.eval_set).read_text())
-    skill_path = Path(args.skill_path)
+    skill_path = Path(args.skill_path).resolve()
 
     if not (skill_path / "SKILL.md").exists():
         print(f"Error: No SKILL.md found at {skill_path}", file=sys.stderr)
@@ -302,6 +311,8 @@ def main():
         holdout=args.holdout,
         model=args.model,
         verbose=args.verbose,
+        runner=args.runner,
+        project_root=args.project_root.resolve(),
         live_report_path=live_report_path,
         log_dir=log_dir,
     )

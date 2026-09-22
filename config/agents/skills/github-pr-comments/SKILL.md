@@ -25,10 +25,16 @@ Default to address-only mode: inspect and implement, but do not reply or resolve
 ## GitHub writes
 
 A local edit does not authorize a reply or resolution.
-Before any write, require both:
+Require explicit user intent for every reply or resolution.
+Before writing, refresh the PR head and thread state and verify the proposed response against them.
 
-- explicit user intent to reply or resolve; and
-- a commit visible at the current PR head that contains the relevant change.
+When a reply or resolution relies on an implemented fix, check the current PR head.
+It must include a commit with the relevant change.
+A local or unpushed edit does not satisfy this requirement.
+
+An authorized reply can explain rejected feedback, existing behavior, or a question
+without a new change commit. Support the response with the relevant code or thread evidence.
+An explicitly retracted thread can be resolved without a change commit when resolution is authorized.
 
 Reply with a concise description of what reviewers can inspect.
 Resolve only threads verified as addressed or explicitly retracted.

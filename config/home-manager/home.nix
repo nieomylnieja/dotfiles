@@ -294,7 +294,20 @@ in
 
   home.file = {
     ".bash_logout".source = ../bash/bash_logout;
-  };
+  } // lib.mapAttrs'
+    (name: _: lib.nameValuePair ".claude/skills/${name}" {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/config/agents/skills/${name}";
+      # Recursive links can follow existing skill links and overwrite repository files.
+      recursive = false;
+    })
+    (lib.filterAttrs (_: type: type == "directory") (builtins.readDir ../agents/skills));
+
+  assertions = [
+    {
+      assertion = config.programs.claude-code.skills == { };
+      message = "Use writable directory links in home.file for Claude skills. Recursive programs.claude-code.skills deployment can overwrite repository files.";
+    }
+  ];
 
   programs.bash = {
     enable = true;
@@ -563,7 +576,6 @@ in
   programs.claude-code = {
     enable = true;
     enableMcpIntegration = true;
-    skills = ../agents/skills;
     settings = builtins.fromJSON (builtins.readFile ../claude/settings.json);
     context = ../agents/AGENTS.md;
   };

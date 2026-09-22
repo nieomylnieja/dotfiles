@@ -17,6 +17,7 @@ setup() {
   cp -- "${BATS_TEST_DIRNAME}/../../agents/"*.md "${source_dir}/"
   run_sync
   [[ "${status}" -eq 0 ]]
+  [[ -f "${output_root}/codex/standards-guardian.toml" ]]
 
   local source name harness generated header
   for source in "${source_dir}/"*.md; do
@@ -60,11 +61,11 @@ setup() {
       "${output_root}/${harness}/review-coordinator.md" >"${header}"
     if [[ "${harness}" == claude-code ]]; then
       yq -e '.effort == null and .model == "inherit" and
-        (.tools | contains("Agent(code-reviewer, spec-reviewer, test-analyzer, silent-failure-hunter, type-design-analyzer, docs-analyzer, security-reviewer)"))' \
+        (.tools | contains("Agent(standards-guardian, code-reviewer, spec-reviewer, test-analyzer, silent-failure-hunter, type-design-analyzer, docs-analyzer, security-reviewer)"))' \
         "${header}"
     else
       yq -e '.model == null and .reasoningEffort == null and .permission.task == {
-        "*": "deny", "code-reviewer": "allow", "spec-reviewer": "allow",
+        "*": "deny", "standards-guardian": "allow", "code-reviewer": "allow", "spec-reviewer": "allow",
         "test-analyzer": "allow", "silent-failure-hunter": "allow",
         "type-design-analyzer": "allow", "docs-analyzer": "allow", "security-reviewer": "allow"
       }' "${header}"
