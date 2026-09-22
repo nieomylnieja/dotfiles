@@ -37,6 +37,7 @@ requires a combined deliverable.
 1. Confirm that the requested asset belongs to the Manim domain above. Route
    terminal and CLI recordings to VHS GIF Creator.
 2. Pin down what the animation must show: elements, labels, motion, duration.
+   Budget reading pauses with [Scene Timing](#scene-timing).
 3. Write the scene in a scratch directory, using the dark Nord default below
    unless the user or subject requires another palette.
 4. Render a low-quality draft GIF.
@@ -103,7 +104,7 @@ class Diagram(Scene):
             "queue", color=NORD["nord6"], font_size=36
         ).next_to(box, DOWN)
         self.play(Create(box), Write(label))
-        self.wait(1.1)
+        self.wait(2)
 ```
 
 ### Visual Defaults
@@ -123,6 +124,24 @@ or domain convention from the user.
 When deviating from Nord without an explicit user request,
 state the concrete readability or semantic reason.
 
+### Scene Timing
+
+Set scene durations so viewers can read the text and understand the visual
+without rushing. A simple animation can fit in 2-6 s, but text or complex
+diagrams can need longer.
+GIF duration = sum of `run_time` (default 1 s per `self.play`)
+plus `self.wait()` calls.
+
+- Add a reading pause with `self.wait(...)` after text is fully visible
+  and motion has settled. Reveal and transition time do not replace this pause.
+- As a starting estimate, allow at least 2 s, or 1 s plus one second per three
+  words, whichever is longer. Add time for formulas, unfamiliar terms, or
+  diagrams that viewers must interpret alongside the text.
+- Keep text visible throughout its reading pause. Budget another pause when
+  new text appears, and hold the final result before the loop restarts.
+- If a strict duration leaves too little reading time, simplify the text or
+  scene. If that would omit required information, ask which constraint can change.
+
 ### Correctness Rules
 
 - The frame is 8 units tall and ~14.2 wide, centered on the origin.
@@ -130,8 +149,6 @@ state the concrete readability or semantic reason.
   and verify nothing is clipped or overlapping.
 - `MathTex`/`Tex` require a LaTeX toolchain.
   Check `command -v latex` first. When absent, use `Text`.
-- GIF duration = sum of `run_time` (default 1 s per `self.play`)
-  plus `self.wait()` calls. Keep it 2-6 s.
 - GIFs loop infinitely by default.
   For a seamless loop, the final visual state must match the first frame.
   a wait does not repair a mismatched transition.
@@ -147,12 +164,14 @@ state the concrete readability or semantic reason.
 Mandatory before claiming completion.
 
 1. Verify that Manim exits successfully and prints the output GIF path.
-2. Open the rendered GIF directly and inspect the complete animation.
+2. Open the rendered GIF directly and inspect the complete animation at normal speed.
 3. Confirm:
 
    - every requested element is present and labeled as asked
    - nothing is clipped by the frame edge or overlapping illegibly
    - the motion matches the requested behavior
+   - all text can be read comfortably on the first pass, without pausing or
+     waiting for another loop
    - the start and end connect if the loop should be seamless
 
 4. Report the resolution and frame rate selected through Manim,
@@ -175,8 +194,9 @@ state that limitation instead of silently switching pipelines.
 
 Dimensions, duration, and frame rate dominate GIF size.
 When the file is too large, in order:
-shorten the animation, lower the Manim frame rate,
+remove unnecessary motion or repetition, lower the Manim frame rate,
 then render at a lower resolution with `-r`.
+Preserve the reading pauses from Scene Timing.
 Do not shrink past the point where labels stop being readable.
 
 ## Opt-in Source Persistence

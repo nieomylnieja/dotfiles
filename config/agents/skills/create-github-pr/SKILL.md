@@ -40,7 +40,8 @@ Honor explicit limits such as committed changes only or a draft pull request.
 11. Run the helper again. Require the branch, base, `HEAD`, and clean-state
     decision to match the metadata used for the title and body.
 12. Write the body to a timestamped temporary file and push without force.
-    Run `gh pr create --base BASE --head HEAD --title TITLE --body-file FILE`.
+    Complete steps 1–4 of the `pr-description` publication gate for that body and revision pair.
+    For its publication step, run `gh pr create --base BASE --head HEAD --title TITLE --body-file FILE` once.
     Use `--draft` when the user or repository policy requires it.
     Otherwise, create a ready pull request.
 13. Verify creation and report the URL, exact base and head, title, and draft state.

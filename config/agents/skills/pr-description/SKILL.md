@@ -96,6 +96,13 @@ If no change-specific claim remains, remove `## Testing`.
 
 Report routine verification in the implementation handoff instead.
 
+## Screenshots and attachments
+
+Use GitHub-hosted attachments for images that only support the PR description.
+Keep them outside the source tree unless the user requests repository assets.
+When adding or migrating images, read the
+[attachment workflow](references/attachments.md) before the publication gate.
+
 ## Publication gate
 
 Complete this gate before each authorized PR creation or description update,

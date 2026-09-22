@@ -1,15 +1,18 @@
 ---
 name: testing
 description: >-
-  Use when choosing a test level, designing or reviewing test coverage, or
-  deciding whether a behavior needs a new test. Owns shared testing policy
-  across languages and frameworks.
+  Mandatory for code reviews, including reviews with no test-file changes.
+  Also use when choosing a test level, designing test coverage, or deciding
+  whether a behavior needs a new test. Owns shared testing policy across
+  languages and frameworks.
 ---
 
 # Testing
 
 Choose the test boundary and coverage before selecting language or framework
 patterns. Use the repository's established test suites and conventions.
+Load this skill before review analysis, even when test files are unchanged.
+Apply its test-review checks within the assigned scope.
 
 ## Choose the test level
 
@@ -31,6 +34,8 @@ Use a lower-level test when the higher level cannot exercise a relevant case
 reliably. State the concrete constraint before adding it. Examples include
 unexposed parser edge cases, controlled transport failures, or internal batch
 boundaries that the public response cannot reveal.
+When an integration test can cover the same behavior reliably, prefer it to
+a unit test of the implementation. Convenience alone does not justify a lower level.
 
 After choosing the boundary, load the relevant language or framework skill
 for implementation conventions.
@@ -47,6 +52,31 @@ for implementation conventions.
   Avoid repeating the same contract through both public and internal entrypoints.
 - Use test doubles at dependency boundaries when controlled responses are
   necessary. Preserve the real path through the behavior under test.
+
+## Review tests
+
+Judge tests against the required behavior, not only the current implementation.
+For each relevant behavior and its existing or proposed coverage:
+
+1. Establish the expected outcome from user requirements, documented contracts,
+   or other independent evidence. If the contract is unclear, report the question.
+2. Check the test level against the public entrypoint and available integration suites.
+   Identify any concrete constraint that requires a lower level.
+3. Name a plausible regression that the test detects. Flag redundant tests,
+   assertions that repeat the implementation, and mocks that bypass the behavior.
+   Recommend consolidation or removal when a test adds no meaningful protection.
+4. Compare assertions with the expected outcome. A passing test that encodes a
+   known defect needs a corrected expectation, even if that makes the test fail.
+   For a regression test, check that it fails for the defect and passes for the correction.
+   Distinguish executed evidence from reasoning when a safe failure check is unavailable.
+5. Check repository conventions for suites, helpers, fixtures, assertions, naming,
+   isolation, and test doubles. Accept departures only within an explicitly authorized
+   change, such as a test-suite refactor.
+
+Recommend a focused scenario at the highest practical level. Existing coverage
+can be sufficient. Avoid tests for trivial behavior, duplicate contracts, or
+exhaustive combinations without a concrete risk. A missing test alone does not
+prove a production defect, and a passing suite does not prove the contract is correct.
 
 ## Separate test design from execution limits
 

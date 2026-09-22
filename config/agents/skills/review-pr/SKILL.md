@@ -3,14 +3,16 @@ name: review-pr
 description: |
   Run a read-only review through a coordinator and independent specialist agents.
   Use when asked to review a PR, assess merge risk, or review selected code, test,
-  error-handling, security, type, documentation, comment, or specification aspects.
+  error-handling, security, type, documentation, comment, specification, or standards aspects.
 allowed-tools: Bash(*scripts/gather-requirements.sh*) Bash(*scripts/review-meta.sh*) Bash(jira issue view*) Bash(mkdir -p */agents/pr-review/*) Edit(**/agents/pr-review/*/*.json) Write(**/agents/pr-review/*/*.json)
 ---
 
 # Pull request review
 
+Load [testing](../testing/SKILL.md) before review analysis, including reviews with no test-file changes.
 The main session prepares the target and launches one `review-coordinator`. The coordinator
-owns specialist selection, optional adversarial review, verification, and the final verdict.
+owns specialist selection, the required `standards-guardian` pass, optional adversarial review,
+verification, and the final verdict.
 If you are already that coordinator, read [the coordinator workflow](references/coordinator.md)
 and start there. A specialist follows its assignment without dispatching another review.
 
