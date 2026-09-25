@@ -18,12 +18,13 @@
       "id": 2,
       "name": "custom-rule-metadata",
       "prompt": "Create package validation with `type Contact struct { Email string }` and a reusable govy.Validator[Contact] named ContactValidator. Email is required. Add a custom rule accepting only the exact example.com domain, case-insensitively; subdomains and suffix lookalikes are invalid. Give this rule error code email_domain, a useful plan description, and a valid example. A rejected address must appear in its runtime message. Required on the property owns the empty-value failure. Include govytest tests and verify the generated plan. Save compilable .go files and a brief explanation.",
-      "expected_output": "A custom domain rule with correct runtime errors, required-value handling, and observable plan metadata.",
+      "expected_output": "A readable custom domain rule with correct runtime errors, required-value handling, and observable plan metadata.",
       "expectations": [
         "The output compiles and its tests pass against the pinned govy checkout.",
         "The contract tests accept example.com and EXAMPLE.COM, reject different domains and lookalikes, and report only required for an empty email.",
         "The email_domain failure includes the actual rejected address, not a function value or a construction-time placeholder.",
-        "The generated email plan contains a nonempty description, a valid example, and error code email_domain."
+        "The generated email plan contains a nonempty description, a valid example, and error code email_domain.",
+        "Property builder methods and rule metadata use separate lines with indentation that makes their scope clear; custom validation logic leaves the property list easy to scan."
       ],
       "files": []
     },
@@ -43,11 +44,12 @@
     {
       "id": 4,
       "name": "paths-and-optional-data",
-      "prompt": "Explain WithName, WithPath, and path inference in govy in at most 250 words. Also create compilable package validation with `type Details struct { Name string }` and `type Profile struct { Code string; Details *Details }`. Export a govy.Validator[Profile] named ProfileValidator. A blank Code must fail at the synthetic path settings.code (two path segments). Details is optional; when present, its Name is required and must fail at details.name. Use explicit paths for this new validator. Include tests for nil Details and both failing paths. Save the .go files and explanation.md.",
+      "prompt": "Explain WithName, WithPath, and path inference in govy in at most 250 words. Also create compilable package validation with `type Details struct { Name string }` and `type Profile struct { Code string; Details *Details }`. Export a govy.Validator[Profile] named ProfileValidator. A blank Code must fail at the synthetic path settings.code (two path segments). Details is optional; when present, its Name is required and must fail at details.name. Use explicit paths for this new validator. Assign ID details-name to the Name property. Export ProfileWithoutNameValidator by removing that ID from ProfileValidator. Preserve Code validation and the original validator. Include tests for nil Details, both failing paths, and the derived validator. Save the .go files and explanation.md.",
       "expected_output": "A concise, correct path explanation plus executable synthetic-path and optional-nested-object examples.",
       "expectations": [
         "The output compiles and its tests pass against the pinned govy checkout.",
         "The contract tests distinguish settings.code from a single property named settings.code, and verify details.name and nil skipping.",
+        "The derived validator removes the nested Name check by ID, preserves Code validation, and leaves ProfileValidator unchanged.",
         "The explanation correctly distinguishes one segment, multiple segments, and inferred paths.",
         "The explanation stays within 250 words and the examples use real govy APIs."
       ],
@@ -102,6 +104,34 @@
         "The contract tests distinguish UUID version and variant, canonical language tags and aliases, and required versus optional values.",
         "The contract tests reject padded or standard-alphabet payloads, whitespace, and nonzero trailing bits while accepting valid unpadded URL-safe input.",
         "The validator uses existing govy format rules and accepts absolute paths without requiring file-system existence; independent errors retain complete lower-camel paths."
+      ],
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "plain-language-composition",
+      "prompt": "Create package validation with `type Address struct { City string }` and `type Registration struct { Username string; DisplayName string; Address *Address }`. Use govy to expose ValidateRegistration, assignable to func(Registration) error. Both names are required and must contain 3-20 ASCII letters or digits. Share their common checks and build the validation once for reuse across calls. Address is optional; when present, City is required. Error paths are username, displayName, and address.city. Return all independent field failures. Include table tests for valid boundaries, invalid characters, missing values, optional addresses, and independent failures. Save compilable .go files and a brief explanation.",
+      "expected_output": "Reusable scalar checks and nested validation chosen from plain requirements, with correct boundaries and complete property paths.",
+      "expectations": [
+        "The output compiles, its tests pass, and ValidateRegistration is assignable to func(Registration) error.",
+        "The contract tests accept ASCII letters and digits at lengths 3/20, reject lengths 2/21 and invalid characters, and reject missing names.",
+        "The contract tests accept a nil address, require city on a present address, and preserve all independent failures at username, displayName, and address.city.",
+        "The implementation shares the scalar checks between separate named properties, composes nested validation, and constructs reusable validation outside the callback.",
+        "The generated table tests exercise valid boundaries, invalid characters, missing names, optional addresses, and independent field failures."
+      ],
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "explain-building-blocks",
+      "prompt": "I am new to govy. Username and displayName need the same length and character checks. An optional address has its own fields to check. Explain what I should reuse, what connects a check to a field and its error path, and what combines the checks for the whole input. Where would I put a constraint that compares two fields? Name the relevant Govy types and construction functions, and explain how an address failure gets a path such as address.city. Keep the explanation within 200 words. Save explanation.md; no Go implementation is needed.",
+      "expected_output": "A concise explanation that applies Govy's building blocks to scalar reuse, nested composition, cross-field checks, and error paths.",
+      "expectations": [
+        "Distinguishes Rule/NewRule from RuleSet/NewRuleSet and reuses value checks across the two name properties without assigning paths to the shared rules.",
+        "Explains that PropertyRules/For connects a getter and property path to checks, while Validator/New combines property validation for an input type.",
+        "Uses a reusable nested validator with Include and describes optional pointer handling and parent/child path composition into address.city.",
+        "Places a cross-field constraint in a rule with access to the relevant fields, such as a whole-input rule attached through GetSelf, rather than restricting every rule to a scalar field.",
+        "The explanation stays within 200 words and uses real Govy APIs with task-relevant reference selection."
       ],
       "files": []
     }
