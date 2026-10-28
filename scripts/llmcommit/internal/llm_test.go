@@ -83,39 +83,6 @@ func Test_OpenCodeClientCallOpenCode_requiresSemanticSubject(t *testing.T) {
 	}
 }
 
-func Test_opencodeArgs(t *testing.T) {
-	t.Parallel()
-
-	got := opencodeArgs("openai/gpt-5.4", "/tmp/prompt.md")
-	want := []string{
-		"run",
-		"--pure",
-		"--model",
-		"openai/gpt-5.4",
-		"--variant",
-		"low",
-		opencodeRunMessage,
-		"--file",
-		"/tmp/prompt.md",
-	}
-	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
-		t.Fatalf("opencodeArgs = %#v, want %#v", got, want)
-	}
-
-	got = opencodeArgs("gpt-5.4-fast", "/tmp/prompt.md")
-	want[3] = "gpt-5.4-fast"
-	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
-		t.Fatalf("opencodeArgs = %#v, want %#v", got, want)
-	}
-
-	got = opencodeArgs("anthropic/claude-sonnet-4-5", "/tmp/prompt.md")
-	for _, arg := range got {
-		if arg == "--variant" {
-			t.Fatalf("expected no variant for non-OpenAI GPT-5 model, got %#v", got)
-		}
-	}
-}
-
 func Test_OpenCodeClientCallOpenCode_usesDirectOpencodeInvocation(t *testing.T) {
 	tempDir := t.TempDir()
 	binDir := filepath.Join(tempDir, "bin")
@@ -127,6 +94,11 @@ func Test_OpenCodeClientCallOpenCode_usesDirectOpencodeInvocation(t *testing.T) 
 	envPath := filepath.Join(tempDir, "env")
 	script := strings.Join([]string{
 		"#!/bin/sh",
+		`for arg in "$@"; do`,
+		`  case "$arg" in`,
+		`    --pure|--variant) printf 'Unrecognized flag: %s\n' "$arg" >&2; exit 1 ;;`,
+		`  esac`,
+		`done`,
 		`printf '%s\n' "$@" > "$LLMCOMMIT_CAPTURE_ARGS"`,
 		`env > "$LLMCOMMIT_CAPTURE_ENV"`,
 		`printf 'chore: direct opencode path\n'`,
@@ -142,47 +114,55 @@ func Test_OpenCodeClientCallOpenCode_usesDirectOpencodeInvocation(t *testing.T) 
 	t.Setenv("OPENCODE_MODELS_PATH", "")
 	t.Setenv("OPENCODE_TEST_HOME", "")
 
-	client := &OpenCodeClient{model: defaultOpenCodeModel}
-	got, err := client.callOpenCode(t.Context(), "prompt")
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name      string
+		model     string
+		wantModel string
+	}{
+		{name: "default model", model: defaultOpenCodeModel, wantModel: defaultOpenCodeModel + "#low"},
+		{name: "qualified model", model: "openai/gpt-5.4", wantModel: "openai/gpt-5.4#low"},
+		{name: "unqualified model", model: "gpt-5.4-fast", wantModel: "gpt-5.4-fast#low"},
+		{name: "explicit variant", model: "openai/gpt-5.4#high", wantModel: "openai/gpt-5.4#high"},
+		{name: "other provider", model: "anthropic/claude-sonnet-4-5", wantModel: "anthropic/claude-sonnet-4-5"},
 	}
-	if got != "chore: direct opencode path" {
-		t.Fatalf("callOpenCode() = %q, want %q", got, "chore: direct opencode path")
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &OpenCodeClient{model: tt.model}
+			got, err := client.callOpenCode(t.Context(), "prompt")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != "chore: direct opencode path" {
+				t.Fatalf("callOpenCode() = %q, want %q", got, "chore: direct opencode path")
+			}
 
-	content, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := strings.Split(strings.TrimSpace(string(content)), "\n")
-	model, ok := argAfter(args, "--model")
-	if !ok {
-		t.Fatalf("expected --model arg, got %#v", args)
-	}
-	if model != defaultOpenCodeModel {
-		t.Fatalf("--model = %q, want %q", model, defaultOpenCodeModel)
-	}
-	variant, ok := argAfter(args, "--variant")
-	if !ok {
-		t.Fatalf("expected --variant arg, got %#v", args)
-	}
-	if variant != defaultOpenCodeReasoningEffort {
-		t.Fatalf("--variant = %q, want %q", variant, defaultOpenCodeReasoningEffort)
-	}
+			content, err := os.ReadFile(argsPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := strings.Split(strings.TrimSpace(string(content)), "\n")
+			model, ok := argAfter(args, "--model")
+			if !ok {
+				t.Fatalf("expected --model arg, got %#v", args)
+			}
+			if model != tt.wantModel {
+				t.Fatalf("--model = %q, want %q", model, tt.wantModel)
+			}
 
-	env, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, unwanted := range []string{
-		"OPENCODE_DISABLE_PROJECT_CONFIG=1",
-		"OPENCODE_MODELS_PATH=" + tempDir,
-		"OPENCODE_TEST_HOME=" + tempDir,
-	} {
-		if strings.Contains(string(env), unwanted) {
-			t.Fatalf("callOpenCode set unwanted env %q in:\n%s", unwanted, env)
-		}
+			env, err := os.ReadFile(envPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, unwanted := range []string{
+				"OPENCODE_DISABLE_PROJECT_CONFIG=1",
+				"OPENCODE_MODELS_PATH=" + tempDir,
+				"OPENCODE_TEST_HOME=" + tempDir,
+			} {
+				if strings.Contains(string(env), unwanted) {
+					t.Fatalf("callOpenCode set unwanted env %q in:\n%s", unwanted, env)
+				}
+			}
+		})
 	}
 }
 

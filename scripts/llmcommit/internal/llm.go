@@ -59,7 +59,7 @@ func (c *OpenCodeClient) ModelName() string {
 	return fmt.Sprintf("opencode (%s)", c.model)
 }
 
-// GenerateCommitMessage creates a commit message using opencode in bare mode.
+// GenerateCommitMessage creates a commit message using opencode.
 func (c *OpenCodeClient) GenerateCommitMessage(
 	ctx context.Context,
 	diff string,
@@ -207,17 +207,18 @@ func isOpenAIGPT5Model(model string) bool {
 }
 
 func opencodeArgs(model string, promptPath string) []string {
-	args := []string{
-		"run",
-		"--pure",
-		"--model",
-		model,
-	}
-	if isOpenAIGPT5Model(model) {
-		args = append(args, "--variant", defaultOpenCodeReasoningEffort)
+	if isOpenAIGPT5Model(model) && !strings.Contains(model, "#") {
+		model += "#" + defaultOpenCodeReasoningEffort
 	}
 
-	return append(args, opencodeRunMessage, "--file", promptPath)
+	return []string{
+		"run",
+		"--model",
+		model,
+		opencodeRunMessage,
+		"--file",
+		promptPath,
+	}
 }
 
 func formatOpenCodeError(err error, stdout string, stderr string) error {
