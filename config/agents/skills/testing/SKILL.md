@@ -42,7 +42,12 @@ for implementation conventions.
 
 ## Choose coverage and assertions
 
-- Extend existing coverage before adding a separate test path.
+- Place regression cases in the existing suite and file that own the behavior.
+  Extend their tables and helpers when setup and assertions are shared.
+  A new issue, fix, or review finding is not a test-file boundary.
+  Create a test file only when no existing file owns the behavior or the
+  repository requires a distinct boundary, such as a separate test target.
+  Identify that boundary before creating the file.
 - Assert observable outcomes and contracts. Avoid assertions about incidental
   call order, private structure, or implementation steps.
 - Cover relevant success, invalid input, dependency failure, and cleanup paths.
@@ -60,18 +65,23 @@ For each relevant behavior and its existing or proposed coverage:
 
 1. Establish the expected outcome from user requirements, documented contracts,
    or other independent evidence. If the contract is unclear, report the question.
-2. Check the test level against the public entrypoint and available integration suites.
+2. Check the test level against the public entrypoint and available integration
+   suites.
    Identify any concrete constraint that requires a lower level.
 3. Name a plausible regression that the test detects. Flag redundant tests,
    assertions that repeat the implementation, and mocks that bypass the behavior.
    Recommend consolidation or removal when a test adds no meaningful protection.
 4. Compare assertions with the expected outcome. A passing test that encodes a
    known defect needs a corrected expectation, even if that makes the test fail.
-   For a regression test, check that it fails for the defect and passes for the correction.
-   Distinguish executed evidence from reasoning when a safe failure check is unavailable.
-5. Check repository conventions for suites, helpers, fixtures, assertions, naming,
-   isolation, and test doubles. Accept departures only within an explicitly authorized
-   change, such as a test-suite refactor.
+   For a regression test, check that it fails for the defect and passes for the
+   correction. Distinguish executed evidence from reasoning when a safe failure
+   check is unavailable.
+5. Check file placement as well as suites, helpers, fixtures, assertions, naming,
+   isolation, and test doubles. For each new test file, identify the existing
+   owner of that behavior and require a concrete reason for the separate file.
+   Recommend moving cases into the owning suite when no such boundary exists.
+   Accept departures only within an explicitly authorized change, such as a
+   test-suite refactor.
 
 Recommend a focused scenario at the highest practical level. Existing coverage
 can be sufficient. Avoid tests for trivial behavior, duplicate contracts, or

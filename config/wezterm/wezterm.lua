@@ -152,6 +152,7 @@ config.window_padding = {
 config.use_resize_increments = false
 
 config.keys = {
+  { key = 'Space', mods = 'CTRL', action = act.ActivateCopyMode },
   { key = 'L', mods = 'CTRL', action = act.SendString '\x0c' },
   { key = 'O', mods = 'CTRL|SHIFT', action = act.EmitEvent 'open-selected-file-reference' },
   { key = 'PageUp', mods = 'SHIFT', action = act.ScrollByPage(-1) },
@@ -281,33 +282,7 @@ config.key_tables = {
   copy_mode = copy_mode,
 }
 
-local function tmux_current_working_directory(pane)
-  local tty = pane:get_tty_name()
-  if tty == nil then
-    return nil
-  end
-
-  local success, stdout = wezterm.run_child_process {
-    'tmux',
-    'list-clients',
-    '-f',
-    '#{==:#{client_tty},' .. tty .. '}',
-    '-F',
-    '#{pane_current_path}',
-  }
-  if not success then
-    return nil
-  end
-
-  return stdout:match '([^\r\n]+)'
-end
-
 local function current_working_directory(pane)
-  local tmux_cwd = tmux_current_working_directory(pane)
-  if tmux_cwd ~= nil then
-    return tmux_cwd
-  end
-
   local cwd = pane:get_current_working_dir()
   if cwd == nil then
     return nil

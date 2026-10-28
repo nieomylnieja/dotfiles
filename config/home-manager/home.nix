@@ -32,6 +32,18 @@ let
       ./patches/waybar-hyprland-lua-dispatch.patch
     ];
   });
+  vlcWithPrevNext = pkgs.symlinkJoin {
+    name = "vlc-with-prev-next";
+    paths = [ pkgs.vlc ];
+    buildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram "$out/bin/vlc" \
+        --add-flags '--extraintf=luaintf{intf=VlcPrevNext}'
+      rm "$out/share/applications/vlc.desktop"
+      substitute "${pkgs.vlc}/share/applications/vlc.desktop" "$out/share/applications/vlc.desktop" \
+        --replace-fail "${pkgs.vlc}/bin/vlc" "$out/bin/vlc"
+    '';
+  };
   sessionVariables = {
     DOTFILES = "${dotfilesDir}";
     XDG_SESSION_TYPE = "wayland";
@@ -174,13 +186,22 @@ in
     pkgs.stable.lutris
     man
     man-pages
-    manim
+    (manim.overridePythonAttrs (oldAttrs: {
+      # Click 8.4.2 marks optional subcommands as [COMMAND] in help output.
+      postPatch = (oldAttrs.postPatch or "") + ''
+        substituteInPlace tests/interface/test_commands.py \
+          --replace-fail \
+            "Usage: manim init [OPTIONS] COMMAND [ARGS]..." \
+            "Usage: manim init [OPTIONS] [COMMAND] [ARGS]..."
+      '';
+    }))
     mesa
     mirrord
     markdownlint-cli
     markdown-link-check
     moreutils
     nemo-with-extensions
+    ffmpegthumbnailer
     nerd-fonts.mononoki
     neovim
     nixpkgs-fmt
@@ -205,6 +226,7 @@ in
     kubelogin-oidc
     ripgrep
     repomix
+    pkgs.stable.rofi-pass
     rpi-imager
     rpiImagerLauncher
     rustc
@@ -229,7 +251,6 @@ in
     swayimg
     statix
     terraform
-    tmux
     tree
     # Required for new verison of nvim-treesitter to work.
     tree-sitter
@@ -246,7 +267,7 @@ in
     yarn
     yubikey-manager
     yq
-    vlc
+    vlcWithPrevNext
     vivaldi
     pkgs.stable.zoom-us
   ];
@@ -353,10 +374,11 @@ in
     startupNotify = false;
   };
 
+  xdg.dataFile."vlc/lua/intf/VlcPrevNext.lua".source = ../vlc/VlcPrevNext.lua;
+
   xdg.configFile = {
     "git/config".source = ../git/config;
     "starship.toml".source = ../starship/starship.toml;
-    "tmux/tmux.conf".source = ../tmux/tmux.conf;
     "rofi".source = ../rofi;
     # "wezterm".source = ../wezterm;
     "alacritty".source = ../alacritty;
@@ -547,7 +569,6 @@ in
   programs.rofi = {
     enable = true;
     plugins = with pkgs; [ rofi-calc ];
-    pass.enable = true;
   };
 
   # Easily find linked libraries.

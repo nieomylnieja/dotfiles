@@ -4,7 +4,7 @@
 local home = assert(os.getenv("HOME"), "HOME is not set")
 local state_home = os.getenv("XDG_STATE_HOME") or home .. "/.local/state"
 local mod = "SUPER"
-local terminal = "wezterm start -- tmux new-session \\; set-option destroy-unattached on"
+local terminal = "wezterm start"
 
 -- Monitor configuration
 hl.monitor({

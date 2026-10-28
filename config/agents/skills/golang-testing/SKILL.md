@@ -19,7 +19,8 @@ Before editing:
 
 1. Identify the package and owning `go.mod`.
 2. Read its `go` and optional `toolchain` directives.
-3. Inspect nearby tests, build tags, shared helpers, and dependencies.
+3. Identify the existing `_test.go` file and test table that own the behavior.
+   Inspect their build tags, shared helpers, and dependencies.
 4. Find project test targets and CI commands.
 
 Do not infer the version from the most common `go.mod` in a multi-module
@@ -28,6 +29,9 @@ module already uses it or the user accepts the dependency.
 
 ## Test design
 
+- Follow the [shared file-placement rule](../testing/SKILL.md#choose-coverage-and-assertions).
+  Add regression cases to the owning `_test.go` file. When distinct setup needs
+  a separate test function, keep it in that file alongside related tests.
 - Use a table when cases share setup and assertions. Use separate tests when a
   table would need many optional fields or branches.
 - Give each table case or subtest a short, descriptive name.

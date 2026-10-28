@@ -19,10 +19,6 @@
         "fish": {
             "path": "fish"
         },
-        "tmux": {
-            "path": "tmux",
-            "icon": "terminal-tmux"
-        },
         "pwsh": {
             "path": "pwsh",
             "icon": "terminal-powershell"
